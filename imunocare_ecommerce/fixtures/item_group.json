@@ -1,0 +1,56 @@
+[
+ {
+  "doctype": "Item Group",
+  "name": "Loja Imunocare",
+  "item_group_name": "Loja Imunocare",
+  "parent_item_group": "All Item Groups",
+  "is_group": 1,
+  "modified": "2026-07-01 00:00:00.000000",
+  "owner": "Administrator"
+ },
+ {
+  "doctype": "Item Group",
+  "name": "Vitaminas Injetáveis",
+  "item_group_name": "Vitaminas Injetáveis",
+  "parent_item_group": "Loja Imunocare",
+  "is_group": 0,
+  "modified": "2026-07-01 00:00:00.000000",
+  "owner": "Administrator"
+ },
+ {
+  "doctype": "Item Group",
+  "name": "Terapias Injetáveis",
+  "item_group_name": "Terapias Injetáveis",
+  "parent_item_group": "Loja Imunocare",
+  "is_group": 0,
+  "modified": "2026-07-01 00:00:00.000000",
+  "owner": "Administrator"
+ },
+ {
+  "doctype": "Item Group",
+  "name": "Consultas Médicas",
+  "item_group_name": "Consultas Médicas",
+  "parent_item_group": "Loja Imunocare",
+  "is_group": 0,
+  "modified": "2026-07-01 00:00:00.000000",
+  "owner": "Administrator"
+ },
+ {
+  "doctype": "Item Group",
+  "name": "Vale-Presente",
+  "item_group_name": "Vale-Presente",
+  "parent_item_group": "Loja Imunocare",
+  "is_group": 0,
+  "modified": "2026-07-01 00:00:00.000000",
+  "owner": "Administrator"
+ },
+ {
+  "doctype": "Item Group",
+  "name": "Brincos",
+  "item_group_name": "Brincos",
+  "parent_item_group": "Loja Imunocare",
+  "is_group": 0,
+  "modified": "2026-07-01 00:00:00.000000",
+  "owner": "Administrator"
+ }
+]
