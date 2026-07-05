@@ -62,7 +62,13 @@ fixtures = [
 
 # include js, css files in header of web template (loja pública)
 # web_include_css = "/assets/imunocare_ecommerce/css/shop.css"
-# web_include_js = "/assets/imunocare_ecommerce/js/tracking.js"
+# Widget de agendamento (A1.3, botão "Agendar" na página do Website Item) e
+# injeção de JSON-LD (A1.4, SEO/dados estruturados). Ambos site-wide e
+# "no-op" silencioso em páginas sem item agendável/publicado.
+web_include_js = [
+	"/assets/imunocare_ecommerce/js/agendamento.js",
+	"/assets/imunocare_ecommerce/js/seo_jsonld.js",
+]
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "imunocare_ecommerce/public/scss/website"
@@ -125,12 +131,17 @@ after_install = "imunocare_ecommerce.catalogo.setup.setup_catalogo"
 
 # Migrate
 # -------
-# Garante Item Groups/Website Items atualizados e o checkout da loja apontado ao
-# gateway maxiPago (Feature 63 / A3.3) a cada bench migrate. Ambos idempotentes e
-# tolerantes a falha (não interrompem o migrate).
+# Garante Item Groups/Website Items atualizados, o checkout da loja apontado ao
+# gateway maxiPago (Feature 63 / A3.3), os custom fields de agendamento online
+# (Feature 55 / A1.3) e o SEO/disclaimer das landing pages (Feature 55 / A1.4) a
+# cada bench migrate. Todos idempotentes e tolerantes a falha (não interrompem
+# o migrate) — rodam nessa ordem porque landing/agendamento dependem dos
+# Website Items já publicados pelo catalogo.
 after_migrate = [
 	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
+	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
+	"imunocare_ecommerce.landing.setup.setup_landing_pages",
 ]
 
 # Integration Setup

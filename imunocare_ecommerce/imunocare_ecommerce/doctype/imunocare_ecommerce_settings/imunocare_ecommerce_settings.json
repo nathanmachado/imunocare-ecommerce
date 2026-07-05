@@ -1,0 +1,76 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-07-05 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "issingle": 1,
+ "field_order": [
+  "disclaimer_section",
+  "disclaimer_ativo",
+  "texto_disclaimer_padrao",
+  "seo_section",
+  "nome_exibicao_loja",
+  "meta_description_sufixo"
+ ],
+ "fields": [
+  {
+   "fieldname": "disclaimer_section",
+   "fieldtype": "Section Break",
+   "label": "Conformidade de Saúde (disclaimers)"
+  },
+  {
+   "default": "1",
+   "description": "Se marcado, o texto abaixo é anexado automaticamente à descrição das páginas de vacinas/vitaminas/terapias/consultas (Website Item.website_content) a cada bench migrate.",
+   "fieldname": "disclaimer_ativo",
+   "fieldtype": "Check",
+   "label": "Exibir disclaimer nas páginas de saúde"
+  },
+  {
+   "default": "Este conteúdo tem caráter informativo e não substitui uma consulta médica. Procedimentos de imunização, aplicação de vitaminas e terapias injetáveis são realizados mediante avaliação de um profissional de saúde habilitado, que verificará indicações, contraindicações e possíveis interações antes do atendimento. Em caso de reação adversa, procure atendimento médico imediatamente.",
+   "description": "Texto exibido nas páginas de produto/serviço das seções de saúde (Vacinas, Vitaminas Injetáveis, Terapias Injetáveis, Consultas Médicas). Não é exibido em Vale-Presente/Brincos.",
+   "fieldname": "texto_disclaimer_padrao",
+   "fieldtype": "Small Text",
+   "label": "Texto padrão do disclaimer"
+  },
+  {
+   "fieldname": "seo_section",
+   "fieldtype": "Section Break",
+   "label": "SEO / Dados Estruturados"
+  },
+  {
+   "description": "Usado como \"seller\"/\"provider\" nos dados estruturados (schema.org JSON-LD) das páginas de produto/serviço. Se vazio, usa o nome da Company padrão.",
+   "fieldname": "nome_exibicao_loja",
+   "fieldtype": "Data",
+   "label": "Nome de exibição da loja"
+  },
+  {
+   "description": "Sufixo opcional anexado à meta description gerada automaticamente para cada Website Item (ex.: \" | Imunocare\").",
+   "fieldname": "meta_description_sufixo",
+   "fieldtype": "Data",
+   "label": "Sufixo da meta description"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Imunocare Ecommerce",
+ "name": "Imunocare Ecommerce Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
