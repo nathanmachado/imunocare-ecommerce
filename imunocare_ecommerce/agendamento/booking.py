@@ -346,6 +346,7 @@ def criar_agendamento(
 	practitioner: str | None = None,
 	patient: str | None = None,
 	patient_data: dict | str | None = None,
+	session_id: str | None = None,
 ) -> dict:
 	"""Cria o Patient Appointment a partir da loja. Requer login (portal user) —
 	mesmo requisito do Web Form nativo ``patient-appointments`` do Healthcare.
@@ -368,6 +369,8 @@ def criar_agendamento(
 	pa.appointment_time = appointment_time
 	pa.company = company
 	pa.imun_origem_loja = 1
+	if session_id and frappe.get_meta("Patient Appointment").has_field("imun_session_id"):
+		pa.imun_session_id = session_id
 	pa.insert(ignore_permissions=True)
 
 	resultado = {
@@ -381,4 +384,30 @@ def criar_agendamento(
 	if cobranca:
 		resultado.update(cobranca)
 
+	_registrar_conversao_funil(pa, session_id)
+
 	return resultado
+
+
+def _registrar_conversao_funil(pa, session_id: str | None) -> None:
+	"""Alimenta o funil do CRM (Feature 56 / A2.4) — nunca bloqueia o agendamento.
+
+	Identidade (e-mail/telefone) vem do próprio Patient (já garantida pelo login
+	necessário para agendar); o ``session_id`` só enriquece com origem/UTM
+	quando o cliente deu consentimento de rastreio (Feature 56 / A2.2).
+	"""
+	try:
+		from imunocare_ecommerce.rastreio.funil import registrar_conversao
+
+		email = frappe.db.get_value("Patient", pa.patient, "email")
+		mobile = frappe.db.get_value("Patient", pa.patient, "mobile")
+		nome = frappe.db.get_value("Patient", pa.patient, "patient_name")
+		registrar_conversao(
+			tipo_evento="agendamento_confirmado",
+			email=email,
+			phone=mobile,
+			nome=nome,
+			session_id=session_id,
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)

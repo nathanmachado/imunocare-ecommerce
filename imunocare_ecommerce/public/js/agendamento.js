@@ -87,6 +87,9 @@ function imun_abrir_dialogo_agendamento(item_code, info) {
 					appointment_date: values.appointment_date,
 					appointment_time: values.appointment_time,
 					practitioner: info.practitioner,
+					// Rastreio da jornada (Feature 56 / A2.4) — null se o cliente não
+					// consentiu, e o agendamento segue normalmente sem UTM/origem.
+					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
 				},
 				freeze: true,
 				freeze_message: __("Agendando..."),

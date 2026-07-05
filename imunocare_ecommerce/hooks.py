@@ -62,12 +62,15 @@ fixtures = [
 
 # include js, css files in header of web template (loja pública)
 # web_include_css = "/assets/imunocare_ecommerce/css/shop.css"
-# Widget de agendamento (A1.3, botão "Agendar" na página do Website Item) e
-# injeção de JSON-LD (A1.4, SEO/dados estruturados). Ambos site-wide e
-# "no-op" silencioso em páginas sem item agendável/publicado.
+# Widget de agendamento (A1.3, botão "Agendar" na página do Website Item),
+# injeção de JSON-LD (A1.4, SEO/dados estruturados) e a camada de rastreio da
+# jornada first-party (Feature 56 / A2.1 — banner de consentimento LGPD +
+# captura de origem/UTM/navegação/carrinho, nunca antes do aceite). Todos
+# site-wide e "no-op" silencioso quando não se aplicam à página atual.
 web_include_js = [
 	"/assets/imunocare_ecommerce/js/agendamento.js",
 	"/assets/imunocare_ecommerce/js/seo_jsonld.js",
+	"/assets/imunocare_ecommerce/js/rastreio.js",
 ]
 
 # include custom scss in every website theme (without file extension ".scss")
@@ -133,15 +136,18 @@ after_install = "imunocare_ecommerce.catalogo.setup.setup_catalogo"
 # -------
 # Garante Item Groups/Website Items atualizados, o checkout da loja apontado ao
 # gateway maxiPago (Feature 63 / A3.3), os custom fields de agendamento online
-# (Feature 55 / A1.3) e o SEO/disclaimer das landing pages (Feature 55 / A1.4) a
-# cada bench migrate. Todos idempotentes e tolerantes a falha (não interrompem
-# o migrate) — rodam nessa ordem porque landing/agendamento dependem dos
-# Website Items já publicados pelo catalogo.
+# (Feature 55 / A1.3), o SEO/disclaimer das landing pages (Feature 55 / A1.4) e
+# os custom fields do rastreio de jornada -> funil do CRM (Feature 56 / A2.2 e
+# A2.4) a cada bench migrate. Todos idempotentes e tolerantes a falha (não
+# interrompem o migrate) — rodam nessa ordem porque landing/agendamento/rastreio
+# dependem dos Website Items já publicados pelo catalogo, e rastreio depende do
+# custom field imun_origem_loja já criado por agendamento.
 after_migrate = [
 	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
 	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
 	"imunocare_ecommerce.landing.setup.setup_landing_pages",
+	"imunocare_ecommerce.rastreio.setup.setup_rastreio",
 ]
 
 # Integration Setup
@@ -198,26 +204,29 @@ after_migrate = [
 # 	}
 # }
 
+# Feature 56 / A2.4 — pedido concluído no carrinho da loja alimenta o funil do
+# CRM (CRM Lead). No-op silencioso para Sales Orders que não vieram do webshop
+# (order_type != "Shopping Cart"): não interfere em nenhum outro fluxo da
+# clínica (B2B, walk-in, etc.).
+doc_events = {
+	"Sales Order": {
+		"on_submit": "imunocare_ecommerce.rastreio.funil.on_sales_order_submit",
+	},
+}
+
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"imunocare_ecommerce.tasks.all"
-# 	],
-# 	"daily": [
-# 		"imunocare_ecommerce.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"imunocare_ecommerce.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"imunocare_ecommerce.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"imunocare_ecommerce.tasks.monthly"
-# 	],
-# }
+# Feature 56 / A2.3 + A2.4 (carrinho abandonado -> funil) e minimização de
+# dados / retenção (LGPD). Ambos idempotentes e tolerantes a falha.
+scheduler_events = {
+	"hourly": [
+		"imunocare_ecommerce.rastreio.tasks.detectar_carrinhos_abandonados",
+	],
+	"daily": [
+		"imunocare_ecommerce.rastreio.tasks.purgar_dados_antigos",
+	],
+}
 
 # Testing
 # -------

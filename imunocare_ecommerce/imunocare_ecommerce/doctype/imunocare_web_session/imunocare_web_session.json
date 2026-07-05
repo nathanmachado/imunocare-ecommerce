@@ -1,0 +1,265 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:session_id",
+ "creation": "2026-07-05 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "session_id",
+  "visitor_id",
+  "column_break_ids",
+  "primeiro_acesso",
+  "ultimo_acesso",
+  "origem_section",
+  "origem",
+  "landing_page",
+  "referrer",
+  "column_break_utm",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+  "column_break_ads",
+  "gclid",
+  "fbclid",
+  "navegacao_section",
+  "paginas_vistas",
+  "duracao_segundos",
+  "novo_visitante",
+  "consentimento_section",
+  "consentimento_status",
+  "consentimento_em",
+  "conversao_section",
+  "converteu_lead",
+  "lead",
+  "contact_email",
+  "column_break_conversao",
+  "carrinho_abandonado"
+ ],
+ "fields": [
+  {
+   "description": "Identificador de sessão anônimo gerado pelo navegador (sessionStorage) — não é PII.",
+   "fieldname": "session_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "ID de Sessão",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Identificador anônimo persistente do navegador (cookie de longa duração), usado só para distinguir visitante novo x recorrente — não é PII.",
+   "fieldname": "visitor_id",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "ID do Visitante (persistente)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_ids",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "primeiro_acesso",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Primeiro Acesso",
+   "reqd": 1
+  },
+  {
+   "fieldname": "ultimo_acesso",
+   "fieldtype": "Datetime",
+   "label": "Último Acesso",
+   "reqd": 1
+  },
+  {
+   "fieldname": "origem_section",
+   "fieldtype": "Section Break",
+   "label": "Origem / Atribuição (primeiro-toque da sessão)"
+  },
+  {
+   "fieldname": "origem",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Origem",
+   "options": "Google Ads\nMeta Ads\nBusca Orgânica\nReferência\nDireto\nOutra Campanha"
+  },
+  {
+   "fieldname": "landing_page",
+   "fieldtype": "Data",
+   "label": "Página de Entrada"
+  },
+  {
+   "fieldname": "referrer",
+   "fieldtype": "Data",
+   "label": "Referrer"
+  },
+  {
+   "fieldname": "column_break_utm",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "utm_source",
+   "fieldtype": "Data",
+   "label": "utm_source"
+  },
+  {
+   "fieldname": "utm_medium",
+   "fieldtype": "Data",
+   "label": "utm_medium"
+  },
+  {
+   "fieldname": "utm_campaign",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "utm_campaign"
+  },
+  {
+   "fieldname": "utm_term",
+   "fieldtype": "Data",
+   "label": "utm_term"
+  },
+  {
+   "fieldname": "utm_content",
+   "fieldtype": "Data",
+   "label": "utm_content"
+  },
+  {
+   "fieldname": "column_break_ads",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gclid",
+   "fieldtype": "Data",
+   "label": "gclid (Google Ads Click ID)"
+  },
+  {
+   "fieldname": "fbclid",
+   "fieldtype": "Data",
+   "label": "fbclid (Meta Ads Click ID)"
+  },
+  {
+   "fieldname": "navegacao_section",
+   "fieldtype": "Section Break",
+   "label": "Navegação"
+  },
+  {
+   "default": "0",
+   "fieldname": "paginas_vistas",
+   "fieldtype": "Int",
+   "label": "Páginas Vistas"
+  },
+  {
+   "default": "0",
+   "description": "Acumulado via heartbeat do cliente a cada 30s de aba ativa (resolução aproximada, não é cronômetro exato).",
+   "fieldname": "duracao_segundos",
+   "fieldtype": "Int",
+   "label": "Duração (segundos)"
+  },
+  {
+   "default": "0",
+   "fieldname": "novo_visitante",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Novo Visitante (1ª sessão deste visitor_id)"
+  },
+  {
+   "fieldname": "consentimento_section",
+   "fieldtype": "Section Break",
+   "label": "Consentimento (LGPD)"
+  },
+  {
+   "default": "Pendente",
+   "description": "Sessões só são criadas quando o consentimento é Aceito (política first-party, sem rastreio prévio) — campo mantido para auditoria e evolução futura (ex.: revogação de consentimento).",
+   "fieldname": "consentimento_status",
+   "fieldtype": "Select",
+   "label": "Consentimento",
+   "options": "Pendente\nAceito\nRecusado"
+  },
+  {
+   "fieldname": "consentimento_em",
+   "fieldtype": "Datetime",
+   "label": "Consentimento em"
+  },
+  {
+   "fieldname": "conversao_section",
+   "fieldtype": "Section Break",
+   "label": "Conversão / Identidade"
+  },
+  {
+   "default": "0",
+   "fieldname": "converteu_lead",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Converteu em Lead"
+  },
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "label": "CRM Lead",
+   "options": "CRM Lead"
+  },
+  {
+   "description": "Só preenchido após identificação explícita (login/checkout/agendamento/formulário) — nunca capturado antes disso.",
+   "fieldname": "contact_email",
+   "fieldtype": "Data",
+   "label": "E-mail (pós-conversão)",
+   "options": "Email"
+  },
+  {
+   "fieldname": "column_break_conversao",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "carrinho_abandonado",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Carrinho Abandonado"
+  }
+ ],
+ "links": [],
+ "modified": "2026-07-05 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Imunocare Ecommerce",
+ "name": "Imunocare Web Session",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 0
+  },
+  {
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "share": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
