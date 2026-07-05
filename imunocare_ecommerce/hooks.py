@@ -125,8 +125,13 @@ after_install = "imunocare_ecommerce.catalogo.setup.setup_catalogo"
 
 # Migrate
 # -------
-# Garante Item Groups e Website Items atualizados a cada bench migrate.
-after_migrate = ["imunocare_ecommerce.catalogo.setup.setup_catalogo"]
+# Garante Item Groups/Website Items atualizados e o checkout da loja apontado ao
+# gateway maxiPago (Feature 63 / A3.3) a cada bench migrate. Ambos idempotentes e
+# tolerantes a falha (não interrompem o migrate).
+after_migrate = [
+	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
+	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
+]
 
 # Integration Setup
 # ------------------
