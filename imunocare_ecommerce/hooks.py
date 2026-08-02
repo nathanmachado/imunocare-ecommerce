@@ -36,6 +36,13 @@ fixtures = [
 					"Consultas Médicas",
 					"Vale-Presente",
 					"Brincos",
+					"Pacotes",
+					"Exames",
+					# Linha Care (F7):
+					"Cuidado Pessoal",
+					"Filtro Solar",
+					"Serum Facial",
+					"Filtro Solar Infantil",
 				],
 			]
 		],
@@ -62,7 +69,22 @@ fixtures = [
 
 # include js, css files in header of web template (loja pública)
 # web_include_css = "/assets/imunocare_ecommerce/css/shop.css"
-# web_include_js = "/assets/imunocare_ecommerce/js/tracking.js"
+# Widget de agendamento (A1.3, botão "Agendar" na página do Website Item),
+# injeção de JSON-LD (A1.4, SEO/dados estruturados) e a camada de rastreio da
+# jornada first-party (Feature 56 / A2.1 — banner de consentimento LGPD +
+# captura de origem/UTM/navegação/carrinho, nunca antes do aceite). Todos
+# site-wide e "no-op" silencioso quando não se aplicam à página atual.
+web_include_js = [
+	"/assets/imunocare_ecommerce/js/agendamento.js",
+	"/assets/imunocare_ecommerce/js/seo_jsonld.js",
+	"/assets/imunocare_ecommerce/js/rastreio.js",
+	"/assets/imunocare_ecommerce/js/domiciliar_cart.js",
+	# Reestiliza o card nativo do webshop (grid all-products/categoria) para o
+	# DESIGN_ALVO_v1 — monkey-patch de webshop.ProductGrid, ver comentário no
+	# próprio arquivo. Precisa carregar DEPOIS do "web.bundle.js" do webshop
+	# (garantido pela ordem de instalação dos apps — webshop antes deste).
+	"/assets/imunocare_ecommerce/js/product_grid_style.js",
+]
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "imunocare_ecommerce/public/scss/website"
@@ -106,16 +128,34 @@ fixtures = [
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "imunocare_ecommerce.utils.jinja_methods",
-# 	"filters": "imunocare_ecommerce.utils.jinja_filters"
-# }
+# F7: usados por templates/generators/item_group.html (override) para
+# categorias sem produto publicado (Consultas/Exames/Terapias/Linha Care)
+# não "sumirem silenciosamente" — mostram copy + CTA em vez do grid vazio.
+jinja = {
+	"methods": [
+		"imunocare_ecommerce.catalogo.jinja_utils.contagem_produtos_publicados",
+		"imunocare_ecommerce.catalogo.jinja_utils.info_categoria_vazia",
+	]
+}
 
 # Installation
 # ------------
 
 # before_install = "imunocare_ecommerce.install.before_install"
-after_install = "imunocare_ecommerce.catalogo.setup.setup_catalogo"
+# Mesma sequência do after_migrate (abaixo) — garante que uma instalação nova
+# (bench install-app) já nasça com identidade/catálogo/loja configurados, sem
+# depender de um migrate manual em seguida.
+after_install = [
+	"imunocare_ecommerce.identidade.setup.setup_identidade",
+	"imunocare_ecommerce.catalogo.importar_prod.importar_catalogo_prod",
+	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
+	"imunocare_ecommerce.loja.setup.setup_webshop_settings",
+	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
+	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
+	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
+	"imunocare_ecommerce.landing.setup.setup_landing_pages",
+	"imunocare_ecommerce.rastreio.setup.setup_rastreio",
+]
 
 # Uninstallation
 # ------------
@@ -125,12 +165,28 @@ after_install = "imunocare_ecommerce.catalogo.setup.setup_catalogo"
 
 # Migrate
 # -------
-# Garante Item Groups/Website Items atualizados e o checkout da loja apontado ao
-# gateway maxiPago (Feature 63 / A3.3) a cada bench migrate. Ambos idempotentes e
-# tolerantes a falha (não interrompem o migrate).
+# Garante a identidade visual (Website Theme/Settings — Feature 55 / A1.1), o
+# catálogo REAL com preços (importar_prod, a partir de catalogo_prod.json) +
+# Item Groups/Website Items atualizados, a loja LIGADA (Webshop Settings —
+# Feature 55 / A1.6), o checkout apontado ao gateway maxiPago (Feature 63 /
+# A3.3), os custom fields de agendamento online + modalidade domiciliar
+# (Feature 55 / A1.3 e A1.5), o SEO/disclaimer das landing pages (Feature 55 /
+# A1.4) e os custom fields do rastreio de jornada -> funil do CRM (Feature 56 /
+# A2.2 e A2.4) a cada bench migrate. Todos idempotentes e tolerantes a falha
+# (não interrompem o migrate) — a ordem importa: importar_prod cria os Items
+# reais ANTES de setup_catalogo publicá-los; landing/agendamento/rastreio
+# dependem dos Website Items já publicados; rastreio depende do custom field
+# imun_origem_loja já criado por agendamento.
 after_migrate = [
+	"imunocare_ecommerce.identidade.setup.setup_identidade",
+	"imunocare_ecommerce.catalogo.importar_prod.importar_catalogo_prod",
 	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
+	"imunocare_ecommerce.loja.setup.setup_webshop_settings",
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
+	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
+	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
+	"imunocare_ecommerce.landing.setup.setup_landing_pages",
+	"imunocare_ecommerce.rastreio.setup.setup_rastreio",
 ]
 
 # Integration Setup
@@ -187,26 +243,29 @@ after_migrate = [
 # 	}
 # }
 
+# Feature 56 / A2.4 — pedido concluído no carrinho da loja alimenta o funil do
+# CRM (CRM Lead). No-op silencioso para Sales Orders que não vieram do webshop
+# (order_type != "Shopping Cart"): não interfere em nenhum outro fluxo da
+# clínica (B2B, walk-in, etc.).
+doc_events = {
+	"Sales Order": {
+		"on_submit": "imunocare_ecommerce.rastreio.funil.on_sales_order_submit",
+	},
+}
+
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"imunocare_ecommerce.tasks.all"
-# 	],
-# 	"daily": [
-# 		"imunocare_ecommerce.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"imunocare_ecommerce.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"imunocare_ecommerce.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"imunocare_ecommerce.tasks.monthly"
-# 	],
-# }
+# Feature 56 / A2.3 + A2.4 (carrinho abandonado -> funil) e minimização de
+# dados / retenção (LGPD). Ambos idempotentes e tolerantes a falha.
+scheduler_events = {
+	"hourly": [
+		"imunocare_ecommerce.rastreio.tasks.detectar_carrinhos_abandonados",
+	],
+	"daily": [
+		"imunocare_ecommerce.rastreio.tasks.purgar_dados_antigos",
+	],
+}
 
 # Testing
 # -------

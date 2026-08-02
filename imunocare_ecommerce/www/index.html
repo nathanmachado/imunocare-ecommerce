@@ -1,0 +1,167 @@
+{% extends "templates/web.html" %}
+{% from "templates/includes/imun_icons.html" import imun_icone %}
+
+{#- F1 (inventário 2026-08-02): fonte única do título — usa context.title
+	(www/index.py), em vez de duplicar o texto aqui (as duas fontes podiam
+	divergir silenciosamente). -#}
+{% block title %}{{ title }}{% endblock %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block header %}{% endblock %}
+
+{% block page_content %}
+<div class="imun-home">
+
+	<!-- Hero: kicker genérico -> H1 tagline -> sub -> CTAs -> trust row
+	     (F6 — hierarquia revisada, sem o kicker domiciliar, ver F3). -->
+	<section class="imun-hero">
+		<span class="imun-hero-kicker">Clínica de Vacinas Particulares em Uberlândia</span>
+		<h1 class="imun-hero-tagline">Você <span class="imun-accent">mais forte!</span></h1>
+		<p class="imun-hero-sub">
+			A Imunocare é uma clínica de vacinas particulares em Uberlândia. Cuidamos da
+			sua saúde e da sua evolução pessoal com vacinação, vitaminas injetáveis e
+			terapias aplicadas por profissionais de saúde habilitados — para você seguir
+			mais forte em cada fase da vida.
+		</p>
+		<div class="imun-hero-cta">
+			<a class="btn imun-cta" href="/all-products">Ver todos os produtos</a>
+			<a class="btn-ghost-light" href="/vacinas">Ver vacinas disponíveis</a>
+		</div>
+		<div class="imun-trust">
+			<span><b>&#10003;</b> Enfermagem especializada</span>
+			<span><b>&#10003;</b> Agende e pague online</span>
+			<span><b>&#10003;</b> Aplicação por profissional de saúde habilitado</span>
+		</div>
+	</section>
+
+	<!-- Catálogo: duas linhas de navegação, Imuno | Care (F5/F7) — ecoam o
+	     wordmark (imuno em petróleo / care em tom distinto). -->
+	<section class="imun-section" style="border-top:none; padding-top:0;">
+		<span class="imun-eyebrow">Catálogo</span>
+		<h2 class="imun-section-title h4">O que você encontra na Imunocare</h2>
+		<p class="text-muted" style="max-width:64ch;">
+			Vacinas, vitaminas injetáveis, terapias injetáveis, consultas médicas,
+			vale-presente e brincos — todo item pode ser aplicado na clínica ou em casa.
+		</p>
+
+		{% if nav_imuno %}
+		<div class="imun-linha-nav">
+			<span class="imun-linha-tag imun-linha-tag-imuno">Imuno</span>
+			<div class="imun-catnav">
+				{% for cat in nav_imuno %}
+				<a class="imun-chip" href="/{{ cat.route }}">{{ imun_icone(cat.nome) }}{{ cat.nome }}</a>
+				{% endfor %}
+			</div>
+		</div>
+		{% endif %}
+
+		{% if nav_care %}
+		<div class="imun-linha-nav mt-2">
+			<span class="imun-linha-tag imun-linha-tag-care">Care</span>
+			<div class="imun-catnav">
+				{% for cat in nav_care %}
+				<a class="imun-chip imun-chip-care" href="/{{ cat.route }}">{{ imun_icone(cat.nome) }}{{ cat.nome }}</a>
+				{% endfor %}
+			</div>
+		</div>
+		{% endif %}
+	</section>
+
+	{% if secoes %}
+		{% for secao in secoes %}
+		<section class="imun-section" id="{{ secao.route or '' }}">
+			<div class="d-flex justify-content-between align-items-center mb-2">
+				<h2 class="imun-section-title h4 mb-0 imun-section-title-icon">
+					{{ imun_icone(secao.nome, 22) }}{{ secao.nome }}
+				</h2>
+				{% if secao.route %}
+				<a href="/{{ secao.route }}" class="small">Ver todos &rarr;</a>
+				{% endif %}
+			</div>
+			<div class="imun-grid">
+				{% for item in secao.itens %}
+				<a href="/{{ item.route }}" class="imun-card">
+					{% if item.imagem %}
+					<img
+						src="{{ item.imagem }}"
+						alt="{{ item.nome }}"
+						class="imun-card-img"
+						loading="lazy">
+					{% else %}
+					<div class="imun-card-img imun-card-ph" aria-hidden="true">
+						{{ imun_icone(secao.nome, 34) }}
+					</div>
+					{% endif %}
+					<div class="imun-card-body">
+						<span class="imun-pill imun-pill-brand" style="align-self:flex-start;">{{ secao.nome }}</span>
+						<div class="imun-card-nm">{{ item.nome }}</div>
+						{% if item.descricao %}
+						<div class="imun-card-ds">{{ item.descricao }}</div>
+						{% endif %}
+						<div class="imun-card-foot">
+							{% if item.preco_fmt %}
+							<span class="imun-price">{{ item.preco_fmt }}</span>
+							{% else %}
+							<span class="imun-pill imun-pill-accent">Sob consulta</span>
+							{% endif %}
+							<span class="btn imun-cta imun-btn-sm">Ver detalhes</span>
+						</div>
+					</div>
+				</a>
+				{% endfor %}
+			</div>
+		</section>
+		{% endfor %}
+	{% else %}
+		<div class="alert alert-info">
+			Catálogo em preparação — volte em breve.
+		</div>
+	{% endif %}
+
+	<!-- Linha Care (F7): teaser "em breve" — produtos ainda não cadastrados
+	     pelo dono; cada chip leva à página de categoria informativa. -->
+	{% if nav_care %}
+	<section class="imun-section imun-section-care">
+		<span class="imun-eyebrow">Linha Care</span>
+		<h2 class="imun-section-title h4">Cuidado pessoal, em breve</h2>
+		<p class="text-muted" style="max-width:64ch;">
+			A Linha Care Imunocare chega com filtro solar, sérum facial e filtro solar
+			infantil — a mesma confiança da Linha Imuno, agora no cuidado do dia a dia.
+		</p>
+		<div class="imun-grid imun-grid-care">
+			{% for cat in nav_care %}
+			<a href="/{{ cat.route }}" class="imun-card">
+				<div class="imun-card-img imun-card-ph" aria-hidden="true">
+					{{ imun_icone(cat.nome, 34) }}
+				</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">{{ cat.nome }}</div>
+					<div class="imun-card-ds">Em breve na Imunocare.</div>
+					<div class="imun-card-foot">
+						<span class="imun-pill imun-pill-accent">Em breve</span>
+						<span class="btn imun-cta imun-btn-sm">Quero saber mais</span>
+					</div>
+				</div>
+			</a>
+			{% endfor %}
+		</div>
+	</section>
+	{% endif %}
+
+	<!-- Domiciliar: opção discreta, não é manchete (F3 — brief item 4) -->
+	{% if domiciliar_ativo %}
+	<p class="text-muted small mt-2">
+		Atendimento domiciliar disponível como opção (com taxa adicional) ao agendar
+		ou finalizar sua compra.
+	</p>
+	{% endif %}
+
+	<section class="text-center py-4">
+		<p class="text-muted small mb-1">
+			Este site tem caráter informativo e não substitui uma consulta médica.
+			Procedimentos de imunização, vitaminas e terapias injetáveis são realizados
+			mediante avaliação de um profissional de saúde habilitado.
+		</p>
+	</section>
+</div>
+{% endblock %}

@@ -1,0 +1,805 @@
+"""Identidade visual da loja — Website Theme + Website Settings
+(``BRIEF_LOJA.md`` item 1).
+
+Reuso primeiro: usa os mecanismos NATIVOS do Frappe para tema/marca, sem tocar
+upstream —
+
+  - ``Website Theme`` (custom=1): campo ``custom_scss`` (seção "Stylesheet"),
+    exatamente o ponto de extensão pensado pelo framework para overrides de
+    tema. O framework já compila isso para CSS (``generate_bootstrap_theme.js``)
+    a cada ``doc.save()`` — não precisamos de ``bench build`` para o CSS do
+    tema em si (só para os ASSETS estáticos: fontes/imagens/favicons, que
+    entram no bundle padrão do app).
+  - ``Website Settings.brand_html``: campo já existente, renderizado cru (sem
+    escape) no navbar nativo (``primary_navbar.html``) — é o lugar certo para
+    o wordmark "imuno+care", sem precisar de template próprio de navbar.
+  - ``Website Settings.favicon`` + ``head_html``: mecanismos nativos para
+    favicon/ícones adicionais.
+  - ``Website Settings.home_page``: aponta a raiz do site ("/") para a nossa
+    home custom (``www/index.html``) — sem essa configuração, visitantes
+    anônimos caem em "/login" (comportamento padrão do Frappe quando não há
+    home_page configurado).
+
+Idempotente: seguro para rodar em todo ``bench migrate``. Não sobrescreve
+``brand_html``/``favicon``/``head_html``/``home_page`` se algum operador já
+tiver customizado manualmente um valor DIFERENTE do nosso (heurística: só
+grava se o campo estiver vazio OU já contiver nosso marcador/valor esperado).
+"""
+
+from __future__ import annotations
+
+import frappe
+
+_LOG_TITLE = "imunocare_ecommerce.identidade.setup"
+
+_WEBSITE_THEME_NOME = "Imunocare"
+
+# Cores oficiais + acento (BRIEF_LOJA.md item 1)
+_CIANO = "#00B8DE"
+_PETROLEO = "#003B49"
+_OFFWHITE = "#F7F7F7"
+_TINTA = "#10292F"
+_LARANJA = "#FB6D51"
+_LARANJA_HOVER = "#E24A2D"
+
+_FONT_BASE = "/assets/imunocare_ecommerce/fonts/lexend"
+
+_CUSTOM_SCSS = f"""
+// ==== Imunocare — identidade visual (Feature 55 / A1.1) ====
+// Lexend self-hosted. F6 (revisão de design — inventário 2026-08-02):
+// woff2 como formato PRINCIPAL (critical path/Lighthouse — ~62% menor que
+// TTF; convertido localmente com fonttools, arquivos em
+// public/fonts/lexend/*.woff2) com fallback ttf (navegadores muito antigos
+// sem suporte a woff2, praticamente inexistentes hoje, mas custa 0 manter
+// o fallback via src list).
+@font-face {{
+	font-family: 'Lexend';
+	src: url('{_FONT_BASE}/Lexend-Light.woff2') format('woff2'),
+	     url('{_FONT_BASE}/Lexend-Light.ttf') format('truetype');
+	font-weight: 300; font-style: normal; font-display: swap;
+}}
+@font-face {{
+	font-family: 'Lexend';
+	src: url('{_FONT_BASE}/Lexend-Regular.woff2') format('woff2'),
+	     url('{_FONT_BASE}/Lexend-Regular.ttf') format('truetype');
+	font-weight: 400; font-style: normal; font-display: swap;
+}}
+@font-face {{
+	font-family: 'Lexend';
+	src: url('{_FONT_BASE}/Lexend-Medium.woff2') format('woff2'),
+	     url('{_FONT_BASE}/Lexend-Medium.ttf') format('truetype');
+	font-weight: 500; font-style: normal; font-display: swap;
+}}
+@font-face {{
+	font-family: 'Lexend';
+	src: url('{_FONT_BASE}/Lexend-SemiBold.woff2') format('woff2'),
+	     url('{_FONT_BASE}/Lexend-SemiBold.ttf') format('truetype');
+	font-weight: 600; font-style: normal; font-display: swap;
+}}
+@font-face {{
+	font-family: 'Lexend';
+	src: url('{_FONT_BASE}/Lexend-Bold.woff2') format('woff2'),
+	     url('{_FONT_BASE}/Lexend-Bold.ttf') format('truetype');
+	font-weight: 700; font-style: normal; font-display: swap;
+}}
+@font-face {{
+	font-family: 'Lexend';
+	src: url('{_FONT_BASE}/Lexend-ExtraBold.woff2') format('woff2'),
+	     url('{_FONT_BASE}/Lexend-ExtraBold.ttf') format('truetype');
+	font-weight: 800; font-style: normal; font-display: swap;
+}}
+
+:root {{
+	--font-stack: 'Lexend', -apple-system, BlinkMacSystemFont, sans-serif !important;
+	--imun-ciano: {_CIANO};
+	--imun-petroleo: {_PETROLEO};
+	--imun-offwhite: {_OFFWHITE};
+	--imun-tinta: {_TINTA};
+	--imun-laranja: {_LARANJA};
+	--imun-laranja-hover: {_LARANJA_HOVER};
+}}
+
+body, h1, h2, h3, h4, h5, h6, .navbar, .btn, input, textarea, select, .navbar-brand {{
+	font-family: 'Lexend', -apple-system, BlinkMacSystemFont, sans-serif;
+}}
+
+body {{
+	background-color: var(--imun-offwhite);
+	color: var(--imun-tinta);
+}}
+
+a {{ color: var(--imun-petroleo); }}
+a:hover {{ color: var(--imun-laranja); }}
+
+// Laranja só em CTA/destaque (nunca fundo inteiro) — brief item 1
+.btn-primary, .btn.btn-primary, a.imun-cta, .imun-cta {{
+	background-color: var(--imun-laranja) !important;
+	border-color: var(--imun-laranja) !important;
+	color: #fff !important;
+}}
+.btn-primary:hover, .btn.btn-primary:hover, a.imun-cta:hover, .imun-cta:hover {{
+	background-color: var(--imun-laranja-hover) !important;
+	border-color: var(--imun-laranja-hover) !important;
+}}
+
+// Wordmark "imuno care" (Website Settings.brand_html) — Lexend, sem imagem.
+// F5 (2026-08-02, pedido do dono): separação SUTIL "imuno" x "care" (cada
+// metade = 1 linha de produtos, F7), SEM mudança drástica. Reabre o tema
+// (estava desativado — dono tinha voltado pro PNG) com escopo menor que a
+// tentativa anterior ("imuno+care" com "+" laranja, ver histórico abaixo).
+.imun-wordmark {{
+	font-family: 'Lexend', sans-serif;
+	font-size: 1.5rem;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+	display: inline-flex;
+	align-items: baseline;
+}}
+// -- Variante A: "care" em ciano/teal (mesma estrutura de sempre) --------
+.imun-wordmark-a .imun-w-imuno {{ font-weight: 800; color: var(--imun-petroleo); }}
+.imun-wordmark-a .imun-w-care {{ font-weight: 500; color: var(--imun-ciano); }}
+// -- Variante B: mesma cor, separação só por peso + hairline (aplicada
+//    como padrão provisório — ver _WORDMARK_VARIANTE em identidade/setup.py;
+//    troca definitiva é decisão do dono na validação) ---------------------
+.imun-wordmark-b .imun-w-imuno {{ font-weight: 800; color: var(--imun-petroleo); }}
+.imun-wordmark-b .imun-w-care-b {{ font-weight: 500; color: var(--imun-petroleo); margin-left: .34em; }}
+.imun-wordmark-b .imun-w-hairline {{
+	display: inline-block;
+	width: 1px;
+	height: .78em;
+	margin-left: .34em;
+	background: currentColor;
+	opacity: .35;
+	vertical-align: -.05em;
+}}
+// Fundo escuro (preview em .imun-bp-bg-escuro) — mesma estrutura, cor clara.
+.imun-wordmark-inv .imun-w-imuno,
+.imun-wordmark-inv .imun-w-care,
+.imun-wordmark-inv .imun-w-care-b {{ color: #F0F7F7 !important; }}
+.imun-wordmark-inv.imun-wordmark-a .imun-w-care {{ color: var(--imun-ciano) !important; }}
+
+// Histórico (não usado hoje, mantido pra referência): tentativa anterior
+// "imuno+care" com "+" laranja — dono voltou pro PNG antes desta atividade.
+.imun-wordmark .imun-w-plus {{ font-weight: 800; color: var(--imun-laranja); padding: 0 1px; }}
+
+// -- /brand-preview (F5) — página interna noindex de comparação ----------
+.imun-brand-preview {{ max-width: 860px; margin: 0 auto; padding: 8px 0 40px; }}
+.imun-bp-secao {{ margin-bottom: 34px; }}
+.imun-bp-row {{ display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }}
+.imun-bp-bg {{
+	flex: 1;
+	min-width: 260px;
+	border-radius: var(--imun-radius-sm);
+	padding: 34px 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}}
+.imun-bp-bg-claro {{ background: #fff; border: 1px solid var(--imun-line); }}
+.imun-bp-bg-escuro {{ background: var(--imun-petroleo); }}
+.imun-bp-bg img.imun-topbar-logo {{ height: 44px; }}
+
+// Home — seções (ver www/index.html). F1 (inventário 2026-08-02): removidos
+// os blocos MORTOS/duplicados ".imun-hero"/".imun-hero-tagline"/".imun-card"
+// que existiam aqui (versão simples, nunca aplicada) — as versões que
+// REALMENTE valem (cascata CSS = a última declarada) são as do ajuste do
+// dono 2026-07, mais abaixo (".imun-hero" com gradiente, ".imun-card" com
+// grid/shadow). Ficam só os seletores que não são redefinidos depois.
+.imun-section-title {{
+	color: var(--imun-petroleo);
+	font-weight: 700;
+}}
+.imun-price {{
+	color: var(--imun-petroleo);
+	font-weight: 700;
+}}
+// Opção domiciliar no carrinho (public/js/domiciliar_cart.js) — visualmente
+// discreta de propósito (brief item 4: "reduzir MUITO o destaque visual").
+.imun-modalidade-toggle {{
+	font-size: .85rem;
+	border-top: 1px solid rgba(0,0,0,.06);
+	padding-top: .5rem;
+}}
+
+// ==== Ajuste do dono (2026-07): layout fiel ao DESIGN_ALVO_v1 ============
+// Sistema visual (tokens + componentes) replicado do mockup aprovado
+// (catalogo/DESIGN_ALVO_v1.html / _identidade.html), mas com as CORES
+// OFICIAIS já em produção (--imun-ciano/--imun-petroleo/--imun-laranja) no
+// lugar dos tons de teste do mockup. Tudo com seletores prefixados
+// ``.imun-`` (ou escopados às classes nativas do webshop) — nada de tag
+// solta (section/h1/p) para não vazar em outras páginas do site.
+:root {{
+	--imun-line: #DCE7E9;
+	--imun-surface-2: #E9F6FA;
+	--imun-ink-soft: #4C646B;
+	--imun-radius: 16px;
+	--imun-radius-sm: 10px;
+	--imun-shadow: 0 1px 2px rgba(0,59,73,.06), 0 12px 30px -18px rgba(0,59,73,.32);
+}}
+
+// ---- Header/rodapé: logo oficial (troca o wordmark, ver item 2) --------
+.imun-topbar-logo {{
+	height: 36px;
+	width: auto;
+	display: block;
+}}
+.web-footer .footer-logo, .web-footer img.footer-logo {{
+	max-height: 34px;
+	width: auto;
+}}
+
+// ---- Hero (home) ---------------------------------------------------------
+.imun-hero {{
+	background:
+		radial-gradient(120% 140% at 100% -20%, color-mix(in srgb, var(--imun-ciano) 30%, var(--imun-petroleo)) 0%, transparent 46%),
+		radial-gradient(90% 90% at -10% 120%, color-mix(in srgb, var(--imun-laranja) 22%, var(--imun-petroleo)) 0%, transparent 42%),
+		var(--imun-petroleo);
+	color: #F0F7F7;
+	border-radius: var(--imun-radius);
+	padding: 56px 36px;
+	margin-bottom: 2.75rem;
+	overflow: hidden;
+	position: relative;
+}}
+.imun-hero-kicker {{
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: .78rem;
+	font-weight: 700;
+	letter-spacing: .02em;
+	color: #fff;
+	background: color-mix(in srgb, var(--imun-laranja) 90%, #000);
+	padding: 6px 14px;
+	border-radius: 999px;
+	margin-bottom: 20px;
+}}
+.imun-hero-tagline {{
+	font-weight: 800;
+	font-size: clamp(2rem, 5vw, 3.4rem);
+	line-height: 1.05;
+	letter-spacing: -.01em;
+	margin: 0 0 14px;
+}}
+.imun-hero-tagline .imun-accent {{ color: var(--imun-laranja); }}
+.imun-hero-sub {{
+	color: #BFE0E6;
+	max-width: 58ch;
+	font-size: 1.08rem;
+	margin: 0;
+}}
+.imun-hero-cta {{
+	display: flex;
+	gap: 13px;
+	flex-wrap: wrap;
+	margin-top: 28px;
+}}
+.imun-hero-cta .btn-ghost-light {{
+	background: transparent;
+	border: 1.5px solid rgba(255,255,255,.4);
+	color: #fff !important;
+	border-radius: 999px;
+	padding: 12px 22px;
+	font-weight: 650;
+	text-decoration: none;
+	display: inline-flex;
+	align-items: center;
+}}
+.imun-hero-cta .btn-ghost-light:hover {{ background: rgba(255,255,255,.1); }}
+.imun-trust {{
+	display: flex;
+	gap: 22px;
+	flex-wrap: wrap;
+	margin-top: 28px;
+	color: #BFE0E6;
+	font-size: .88rem;
+}}
+.imun-trust b {{ color: #fff; }}
+
+// ---- Eyebrow / cabeçalho de seção ---------------------------------------
+.imun-eyebrow {{
+	display: block;
+	font-size: .72rem;
+	font-weight: 700;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+	color: var(--imun-ciano);
+	margin: 0 0 8px;
+}}
+
+// ---- Navegação por categorias (chips) -----------------------------------
+.imun-catnav {{
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	margin: 8px 0 6px;
+}}
+.imun-chip {{
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	font-size: .88rem;
+	font-weight: 600;
+	color: var(--imun-petroleo);
+	background: #fff;
+	border: 1px solid var(--imun-line);
+	border-radius: 999px;
+	padding: 8px 15px;
+	text-decoration: none;
+	transition: border-color .15s ease, color .15s ease;
+}}
+.imun-chip:hover {{ border-color: var(--imun-ciano); color: var(--imun-ciano); }}
+
+// ---- Seções da home -------------------------------------------------------
+.imun-section {{
+	padding: 44px 0;
+	border-top: 1px solid var(--imun-line);
+}}
+.imun-section:first-of-type {{ border-top: none; padding-top: 0; }}
+
+// ---- Cards de produto (home — dados 100% nossos, catalogo/setup.py) -----
+.imun-grid {{
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 18px;
+	margin-top: 20px;
+}}
+.imun-card {{
+	background: #fff;
+	border: 1px solid var(--imun-line);
+	border-radius: var(--imun-radius);
+	box-shadow: var(--imun-shadow);
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	transition: transform .15s ease, box-shadow .15s ease;
+	text-decoration: none;
+	color: inherit;
+}}
+.imun-card:hover {{
+	transform: translateY(-3px);
+	box-shadow: 0 16px 30px -16px rgba(0,59,73,.32);
+}}
+.imun-card .imun-card-img {{
+	height: 140px;
+	width: 100%;
+	object-fit: cover;
+	background: var(--imun-surface-2);
+}}
+.imun-card .imun-card-body {{
+	padding: 15px 17px;
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	flex: 1;
+}}
+.imun-card .imun-card-nm {{ font-weight: 700; font-size: .98rem; color: var(--imun-tinta); }}
+.imun-card .imun-card-ds {{ font-size: .84rem; color: var(--imun-ink-soft); flex: 1; }}
+.imun-card .imun-card-foot {{
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin-top: 4px;
+}}
+
+// ---- Pills (status/categoria) --------------------------------------------
+.imun-pill {{
+	font-size: .72rem;
+	font-weight: 650;
+	padding: 4px 10px;
+	border-radius: 999px;
+	white-space: nowrap;
+	display: inline-block;
+}}
+.imun-pill-brand {{
+	background: color-mix(in srgb, var(--imun-ciano) 14%, transparent);
+	color: var(--imun-petroleo);
+	border: 1px solid color-mix(in srgb, var(--imun-ciano) 30%, transparent);
+}}
+.imun-pill-accent {{
+	background: color-mix(in srgb, var(--imun-laranja) 16%, transparent);
+	color: var(--imun-laranja-hover);
+	border: 1px solid color-mix(in srgb, var(--imun-laranja) 32%, transparent);
+}}
+.imun-btn-sm {{ padding: 8px 16px !important; font-size: .86rem !important; }}
+
+// ---- Grid/página nativa do webshop (categoria + all-products) -----------
+// Reestiliza o card JÁ renderizado pelo webshop (grid.js/list.js, upstream,
+// não alterado) — reuso total do markup/lógica de carrinho, só troca o
+// visual via seletores escopados às classes do próprio webshop.
+.item-card .card {{
+	border-radius: var(--imun-radius) !important;
+	border: 1px solid var(--imun-line) !important;
+	box-shadow: var(--imun-shadow);
+	overflow: hidden;
+	transition: transform .15s ease, box-shadow .15s ease;
+}}
+.item-card .card:hover {{ transform: translateY(-3px); }}
+.item-card .card-img-container img.card-img {{
+	height: 150px;
+	object-fit: cover;
+}}
+.item-card .product-title {{
+	font-weight: 700;
+	font-size: 1rem;
+	color: var(--imun-tinta);
+	margin-top: 2px;
+}}
+.item-card .product-category {{
+	display: inline-block;
+	font-size: .68rem;
+	font-weight: 650;
+	letter-spacing: .02em;
+	text-transform: uppercase;
+	color: var(--imun-petroleo);
+	background: color-mix(in srgb, var(--imun-ciano) 14%, transparent);
+	border: 1px solid color-mix(in srgb, var(--imun-ciano) 30%, transparent);
+	border-radius: 999px;
+	padding: 3px 10px;
+	margin: 6px 0;
+}}
+.item-card .imun-card-desc {{
+	font-size: .85rem;
+	color: var(--imun-ink-soft);
+	margin: 2px 0 8px;
+}}
+.item-card .product-price {{ font-weight: 700; color: var(--imun-petroleo); }}
+.item-card .btn-add-to-cart-list,
+.item-card .btn-explore-variants {{
+	border-radius: 999px !important;
+	font-weight: 650;
+}}
+
+// ---- Página de produto (templates/generators/item/item.html, override) --
+.imun-product-page {{
+	background: #fff;
+	border: 1px solid var(--imun-line);
+	border-radius: var(--imun-radius);
+	box-shadow: var(--imun-shadow);
+	padding: 30px 32px;
+	margin: 10px 0 32px;
+}}
+.imun-product-page .product-title {{
+	font-size: clamp(1.4rem, 3vw, 1.9rem);
+	font-weight: 800;
+	color: var(--imun-tinta);
+}}
+.imun-product-page .product-item-group,
+.imun-product-page .product-code {{
+	color: var(--imun-ink-soft);
+}}
+.imun-product-page .btn-add-to-cart,
+.imun-product-page .btn-primary {{ border-radius: 999px !important; }}
+
+// ---- Página de categoria (templates/generators/item_group.html override) -
+.imun-category-hero {{
+	margin-bottom: 8px;
+}}
+.imun-category-hero h1 {{
+	font-weight: 800;
+	color: var(--imun-tinta);
+	font-size: clamp(1.5rem, 3vw, 2.1rem);
+	margin: 0 0 6px;
+}}
+.imun-category-hero p {{ color: var(--imun-ink-soft); max-width: 64ch; }}
+
+// ---- F7 (duas linhas Imuno x Care) — nav agrupada por linha, ecoa o
+//      wordmark (F5): "imuno" em petróleo / "care" em tom distinto. ------
+.imun-linha-nav {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }}
+.imun-linha-tag {{
+	font-family: 'Lexend', sans-serif;
+	font-size: .78rem;
+	font-weight: 800;
+	letter-spacing: .04em;
+	text-transform: uppercase;
+	min-width: 52px;
+}}
+.imun-linha-tag-imuno {{ color: var(--imun-petroleo); }}
+.imun-linha-tag-care {{ color: var(--imun-ciano); }}
+.imun-chip svg {{ width: 15px; height: 15px; flex: none; }}
+.imun-chip-care:hover {{ border-color: var(--imun-ciano); color: var(--imun-ciano); }}
+
+// ---- F6 (revisão de design) — ícones de traço no lugar de foto genérica -
+.imun-card-ph {{
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--imun-ciano);
+}}
+.imun-section-title-icon {{ display: inline-flex; align-items: center; gap: 9px; }}
+.imun-section-title-icon svg {{ color: var(--imun-ciano); flex: none; }}
+
+// ---- F7 — categoria sem produto publicado ainda (informativa + CTA) ----
+.imun-categoria-vazia {{
+	background: #fff;
+	border: 1px solid var(--imun-line);
+	border-radius: var(--imun-radius);
+	box-shadow: var(--imun-shadow);
+	padding: 34px 30px;
+	max-width: 62ch;
+	margin: 12px 0 40px;
+}}
+.imun-categoria-vazia p {{ color: var(--imun-ink-soft); margin-bottom: 18px; }}
+
+// ---- Linha Care — teaser "em breve" na home (F7) ------------------------
+.imun-section-care {{ }}
+.imun-grid-care {{ grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }}
+
+// ---- F6 — mobile (≤768px / ≤400px): grid de cards, catnav com scroll
+//      horizontal, clamp do hero já cobre a tipografia (ver .imun-hero-
+//      tagline acima, clamp()). ------------------------------------------
+@media (max-width: 768px) {{
+	.imun-hero {{ padding: 40px 22px; }}
+	.imun-catnav {{
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		padding-bottom: 4px;
+		scrollbar-width: thin;
+	}}
+	.imun-catnav .imun-chip {{ flex: none; }}
+	.imun-linha-nav {{ align-items: flex-start; }}
+	.imun-grid {{ grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }}
+	.imun-product-page {{ padding: 20px 16px; }}
+}}
+@media (max-width: 400px) {{
+	.imun-hero-cta {{ flex-direction: column; align-items: stretch; }}
+	.imun-hero-cta .btn, .imun-hero-cta .btn-ghost-light {{ text-align: center; }}
+	.imun-grid {{ grid-template-columns: 1fr 1fr; gap: 10px; }}
+	.imun-card .imun-card-img {{ height: 110px; }}
+	.imun-trust {{ flex-direction: column; gap: 8px; }}
+	.imun-grid-institucional {{ grid-template-columns: 1fr; }}
+}}
+
+// ---- F8/F9 — landings institucionais (Parceria Médicos / Protocolo de
+//      Emagrecimento) ------------------------------------------------------
+.imun-hero-institucional .imun-hero-tagline {{ font-size: clamp(1.7rem, 4vw, 2.6rem); }}
+.imun-grid-institucional {{
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 16px;
+	margin-top: 18px;
+}}
+.imun-card-institucional {{
+	background: #fff;
+	border: 1px solid var(--imun-line);
+	border-radius: var(--imun-radius);
+	box-shadow: var(--imun-shadow);
+	padding: 22px 20px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}}
+.imun-card-institucional .imun-card-ph {{ width: 48px; height: 48px; border-radius: 50%; background: var(--imun-surface-2); }}
+
+// ---- Formulários (F8/F9) --------------------------------------------------
+.imun-form-row {{ margin-bottom: 14px; }}
+.imun-form-row label {{ display: block; font-weight: 650; font-size: .88rem; color: var(--imun-tinta); margin-bottom: 4px; }}
+.imun-form-row input, .imun-form-row textarea {{
+	width: 100%;
+	border: 1px solid var(--imun-line);
+	border-radius: var(--imun-radius-sm);
+	padding: 9px 12px;
+	font-family: 'Lexend', sans-serif;
+	font-size: .92rem;
+}}
+.imun-form-row input:focus, .imun-form-row textarea:focus {{ outline: none; border-color: var(--imun-ciano); }}
+.imun-form-row-2col {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }}
+@media (max-width: 480px) {{ .imun-form-row-2col {{ grid-template-columns: 1fr; }} }}
+
+// ---- FAQ (F9) --------------------------------------------------------------
+.imun-faq {{ max-width: 66ch; }}
+.imun-faq-item {{
+	border-bottom: 1px solid var(--imun-line);
+	padding: 14px 0;
+}}
+.imun-faq-item summary {{
+	font-weight: 650;
+	color: var(--imun-tinta);
+	cursor: pointer;
+}}
+.imun-faq-item p {{ color: var(--imun-ink-soft); margin: 10px 0 0; }}
+"""
+
+# Logo OFICIAL (o dono voltou atrás do wordmark "imuno+care" no ajuste
+# 2026-07 anterior). Fica em public/logo/ (petróleo+ciano, para fundo claro
+# do header).
+_LOGO_PATH = "/assets/imunocare_ecommerce/logo/imunocare-logo.png"
+_LOGO_BRANCO_PATH = "/assets/imunocare_ecommerce/logo/imunocare-logo-branco.png"
+
+# F5 (2026-08-02): "1 linha/variável fácil de alternar" pedida pelo dono —
+# troque este valor e rode `bench migrate` (ou aguarde o próximo migrate) pra
+# aplicar. Opções: "logo" (PNG oficial, como estava antes desta atividade),
+# "a" (wordmark, "care" em ciano), "b" (wordmark, mesma cor + hairline).
+# Aplicado hoje: "b" — a mais sutil tecnicamente viável (variante C do
+# relatório do dev-ecommerce exigiria arquivo de logo em camadas, que não
+# existe neste app). A escolha DEFINITIVA é do dono, na validação da 1ª
+# etapa — ver /brand-preview.
+_WORDMARK_VARIANTE = "b"
+
+_WORDMARK_A_HTML = (
+	'<span class="imun-wordmark imun-wordmark-a">'
+	'<span class="imun-w-imuno">imuno</span><span class="imun-w-care">care</span>'
+	"</span>"
+)
+_WORDMARK_B_HTML = (
+	'<span class="imun-wordmark imun-wordmark-b">'
+	'<span class="imun-w-imuno">imuno</span><span class="imun-w-hairline"></span>'
+	'<span class="imun-w-care-b">care</span>'
+	"</span>"
+)
+_LOGO_HTML = f'<img src="{_LOGO_PATH}" alt="Imunocare" class="imun-topbar-logo">'
+
+_BRAND_HTML = {"a": _WORDMARK_A_HTML, "b": _WORDMARK_B_HTML}.get(_WORDMARK_VARIANTE, _LOGO_HTML)
+
+_HEAD_HTML_MARCADOR_INICIO = "<!-- imun:favicons:inicio -->"
+_HEAD_HTML_MARCADOR_FIM = "<!-- imun:favicons:fim -->"
+_HEAD_HTML = (
+	f"{_HEAD_HTML_MARCADOR_INICIO}\n"
+	'<link rel="icon" type="image/png" sizes="32x32" '
+	'href="/assets/imunocare_ecommerce/favicon/favicon-32x32.png">\n'
+	'<link rel="icon" type="image/png" sizes="16x16" '
+	'href="/assets/imunocare_ecommerce/favicon/favicon-16x16.png">\n'
+	'<link rel="apple-touch-icon" sizes="180x180" '
+	'href="/assets/imunocare_ecommerce/favicon/apple-touch-icon.png">\n'
+	'<link rel="manifest" href="/assets/imunocare_ecommerce/favicon/site.webmanifest">\n'
+	f"{_HEAD_HTML_MARCADOR_FIM}"
+)
+
+_FAVICON_PATH = "/assets/imunocare_ecommerce/favicon/favicon.ico"
+_HOME_ROUTE = "index"
+
+
+def setup_identidade() -> None:
+	"""Entry-point idempotente (after_migrate). Nunca interrompe o migrate."""
+	try:
+		_ensure_website_theme()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+	try:
+		_ensure_website_settings()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+	try:
+		_ensure_ecommerce_settings_defaults()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+def _ensure_ecommerce_settings_defaults() -> None:
+	"""F4 (validação — inventário 2026-08-02): materializa em ``tabSingles``
+	o valor DEFAULT de todo campo de ``Imunocare Ecommerce Settings`` cuja
+	linha ainda não existe (armadilha documentada: o Single foi salvo pela
+	1ª vez em 2026-07-05, antes de campos como ``disclaimer_ativo``/
+	``rastreio_ativo``/``carrinho_abandonado_horas``/``retencao_*_dias``
+	existirem no DocType — sem linha em ``tabSingles``,
+	``get_single()``/``get_single_value()`` NÃO aplicam o ``default`` do
+	JSON, leem como 0/vazio até alguém abrir e salvar o Single manualmente
+	pelo Desk).
+
+	IMPORTANTE: cobre TODOS os fieldtypes com default (não só Check) — um
+	``Document.save()`` de Single grava o valor atual de TODOS os campos em
+	``tabSingles``, então corrigir só os campos Check e depois salvar
+	acabaria também congelando os Int/Data ainda ausentes com o valor
+	"vazio" errado lido em memória (foi exatamente o que aconteceu na 1ª
+	versão deste fix, pego na própria validação F4).
+
+	Roda ANTES dos demais módulos (rastreio/landing) no ``after_migrate``,
+	para que eles já leiam o valor correto na mesma execução. Nunca
+	sobrescreve uma linha que já existe (preserva valor gravado
+	intencionalmente por um operador, incluindo um "0"/vazio deliberado)."""
+	if not frappe.db.exists("DocType", "Imunocare Ecommerce Settings"):
+		return
+
+	meta = frappe.get_meta("Imunocare Ecommerce Settings")
+	settings = frappe.get_single("Imunocare Ecommerce Settings")
+	mudou = False
+
+	linhas_existentes = {
+		row.field
+		for row in frappe.db.sql(
+			"select field from `tabSingles` where doctype=%s",
+			("Imunocare Ecommerce Settings",),
+			as_dict=True,
+		)
+	}
+
+	for df in meta.fields:
+		if df.default in (None, "") or df.fieldname in linhas_existentes:
+			continue
+		valor = frappe.utils.cint(df.default) if df.fieldtype in ("Check", "Int") else df.default
+		settings.set(df.fieldname, valor)
+		mudou = True
+
+	if mudou:
+		settings.flags.ignore_permissions = True
+		settings.save(ignore_permissions=True)
+		frappe.logger(_LOG_TITLE).info(
+			"Imunocare Ecommerce Settings: defaults de campo materializados em tabSingles."
+		)
+
+
+def _ensure_website_theme() -> None:
+	if not frappe.db.exists("DocType", "Website Theme"):
+		return
+
+	if frappe.db.exists("Website Theme", _WEBSITE_THEME_NOME):
+		doc = frappe.get_doc("Website Theme", _WEBSITE_THEME_NOME)
+	else:
+		doc = frappe.new_doc("Website Theme")
+		doc.theme = _WEBSITE_THEME_NOME
+		doc.module = "Website"
+		doc.custom = 1
+
+	if doc.custom_scss == _CUSTOM_SCSS:
+		return  # nada mudou — evita recompilar (subprocess node) à toa
+
+	doc.custom_scss = _CUSTOM_SCSS
+	doc.flags.ignore_permissions = True
+	if doc.is_new():
+		doc.insert(ignore_permissions=True)
+	else:
+		doc.save(ignore_permissions=True)
+	frappe.logger(_LOG_TITLE).info(f"Website Theme '{_WEBSITE_THEME_NOME}' atualizado/criado.")
+
+
+def _ensure_website_settings() -> None:
+	if not frappe.db.exists("DocType", "Website Settings"):
+		return
+	settings = frappe.get_single("Website Settings")
+	mudou = False
+
+	if frappe.db.exists("Website Theme", _WEBSITE_THEME_NOME) and settings.website_theme != _WEBSITE_THEME_NOME:
+		settings.website_theme = _WEBSITE_THEME_NOME
+		mudou = True
+
+	if settings.brand_html != _BRAND_HTML:
+		settings.brand_html = _BRAND_HTML
+		mudou = True
+
+	if not settings.app_name:
+		settings.app_name = "Imunocare"
+		mudou = True
+
+	if settings.favicon != _FAVICON_PATH:
+		settings.favicon = _FAVICON_PATH
+		mudou = True
+
+	# Logo oficial no rodapé — SEMPRE o PNG, independente de
+	# ``_WORDMARK_VARIANTE`` (F5): o campo nativo ``footer_logo``
+	# (``templates/includes/footer/footer_logo_extension.html``, upstream)
+	# só aceita URL de imagem — sempre renderiza `<img src="...">`, não tem
+	# como injetar HTML/texto ali sem tocar o template upstream. O "Standard
+	# Footer" nativo do Frappe usa fundo CLARO por padrão (``--fg-color:
+	# white``), então usa a MESMA variante clara da navbar. A variante branca
+	# (``_LOGO_BRANCO_PATH``) fica disponível para qualquer fundo escuro que
+	# vier a existir.
+	if settings.footer_logo != _LOGO_PATH:
+		settings.footer_logo = _LOGO_PATH
+		mudou = True
+
+	head_html = settings.head_html or ""
+	if _HEAD_HTML_MARCADOR_INICIO not in head_html:
+		settings.head_html = (head_html + ("\n" if head_html else "") + _HEAD_HTML).strip()
+		mudou = True
+
+	# F1 (inventário 2026-08-02): antes só gravava se vazio — em site JÁ
+	# configurado (home_page apontando para outra rota, ex. "login" ou algo
+	# manual) a loja nunca virava a home. Agora força "index" sempre,
+	# registrando o overwrite em log (auditável, mas não bloqueia o migrate).
+	if settings.home_page != _HOME_ROUTE:
+		if settings.home_page:
+			frappe.logger(_LOG_TITLE).info(
+				f"Website Settings.home_page sobrescrito: '{settings.home_page}' -> '{_HOME_ROUTE}'."
+			)
+		settings.home_page = _HOME_ROUTE
+		mudou = True
+
+	if mudou:
+		settings.flags.ignore_permissions = True
+		settings.ignore_validate = True
+		settings.save(ignore_permissions=True)
+		frappe.logger(_LOG_TITLE).info("Website Settings atualizado (identidade Imunocare).")
