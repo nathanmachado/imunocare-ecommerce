@@ -54,32 +54,66 @@ function imun_render_botao_agendar(item_code, info) {
 }
 
 function imun_abrir_dialogo_agendamento(item_code, info) {
+	// F3: modalidade "Na clínica x Domiciliar" — consome o endpoint
+	// info_domiciliar() (já pronto, ver agendamento/domiciliar.py) para
+	// decidir se mostra a opção e o texto da taxa. Antes desta atividade o
+	// diálogo não enviava "modalidade" nenhuma ao backend (parâmetro morto).
+	frappe.call({
+		method: "imunocare_ecommerce.agendamento.domiciliar.info_domiciliar",
+		callback: function (r) {
+			imun_montar_dialogo_agendamento(item_code, info, r.message || {});
+		},
+	});
+}
+
+function imun_montar_dialogo_agendamento(item_code, info, domiciliar_info) {
+	var fields = [
+		{
+			fieldname: "appointment_date",
+			label: __("Data"),
+			fieldtype: "Date",
+			reqd: 1,
+		},
+		{
+			fieldname: "horarios_html",
+			fieldtype: "HTML",
+		},
+		{
+			fieldname: "appointment_time",
+			label: __("Horário selecionado"),
+			fieldtype: "Data",
+			read_only: 1,
+		},
+	];
+
+	if (domiciliar_info.ativo) {
+		fields.push({
+			fieldname: "modalidade_sb",
+			fieldtype: "Section Break",
+		});
+		fields.push({
+			fieldname: "modalidade",
+			label: __("Atendimento"),
+			fieldtype: "Select",
+			options: __("Na clínica") + "\n" + __("Domiciliar (+ taxa)"),
+			default: __("Na clínica"),
+			description: __(
+				"No atendimento domiciliar, a taxa de {0} é confirmada e cobrada pela recepção — ainda não é cobrada automaticamente neste agendamento online.",
+				[domiciliar_info.taxa_fmt]
+			),
+		});
+	}
+
 	var d = new frappe.ui.Dialog({
 		title: __("Agendar Consulta"),
-		fields: [
-			{
-				fieldname: "appointment_date",
-				label: __("Data"),
-				fieldtype: "Date",
-				reqd: 1,
-			},
-			{
-				fieldname: "horarios_html",
-				fieldtype: "HTML",
-			},
-			{
-				fieldname: "appointment_time",
-				label: __("Horário selecionado"),
-				fieldtype: "Data",
-				read_only: 1,
-			},
-		],
+		fields: fields,
 		primary_action_label: __("Confirmar Agendamento"),
 		primary_action: function (values) {
 			if (!values.appointment_time) {
 				frappe.msgprint(__("Selecione um horário disponível."));
 				return;
 			}
+			var domiciliar = domiciliar_info.ativo && values.modalidade === __("Domiciliar (+ taxa)");
 			frappe.call({
 				method: "imunocare_ecommerce.agendamento.booking.criar_agendamento",
 				args: {
@@ -87,6 +121,7 @@ function imun_abrir_dialogo_agendamento(item_code, info) {
 					appointment_date: values.appointment_date,
 					appointment_time: values.appointment_time,
 					practitioner: info.practitioner,
+					modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
 					// Rastreio da jornada (Feature 56 / A2.4) — null se o cliente não
 					// consentiu, e o agendamento segue normalmente sem UTM/origem.
 					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
@@ -101,12 +136,16 @@ function imun_abrir_dialogo_agendamento(item_code, info) {
 					if (r.message.payment_url) {
 						window.location.href = r.message.payment_url;
 					} else {
+						var mensagem = __(
+							"Seu agendamento ({0}) foi registrado. Nossa equipe entrará em contato para combinar o pagamento.",
+							[r.message.appointment]
+						);
+						if (r.message.aviso_domiciliar) {
+							mensagem += "<br><br>" + frappe.utils.escape_html(r.message.aviso_domiciliar);
+						}
 						frappe.msgprint({
 							title: __("Agendamento confirmado"),
-							message: __(
-								"Seu agendamento ({0}) foi registrado. Nossa equipe entrará em contato para combinar o pagamento.",
-								[r.message.appointment]
-							),
+							message: mensagem,
 							indicator: "green",
 						});
 					}

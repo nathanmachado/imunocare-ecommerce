@@ -117,6 +117,7 @@ def registrar_conversao(
 	phone: str | None = None,
 	nome: str | None = None,
 	session_id: str | None = None,
+	origem_source: str | None = None,
 ) -> str | None:
 	"""Cria/atualiza o CRM Lead correspondente a uma conversão da loja.
 
@@ -124,6 +125,14 @@ def registrar_conversao(
 	"pedido_confirmado", "carrinho_abandonado", "lead_form_submit"). Retorna o
 	nome do CRM Lead, ou ``None`` se não houver identidade suficiente (nem
 	e-mail nem telefone) ou se o app ``crm`` não estiver instalado.
+
+	``origem_source`` (F8 — Parceria com Médicos): quando informado, tem
+	prioridade sobre a classificação por UTM/referrer (``session.origem``) —
+	usado por funis com fonte de Lead PRÓPRIA e mais específica que o canal
+	de aquisição genérico (ex.: "Parceria Médicos"). Os campos UTM
+	(``imun_utm_*``) continuam carimbados normalmente — só o campo nativo
+	``source`` é que prioriza ``origem_source``. Deve ser um valor de
+	``CRM Lead Source`` já existente (ver ``rastreio.setup.CRM_LEAD_SOURCES``).
 
 	Idempotente: reaproveita o Lead aberto (``converted=0``) já existente com
 	o mesmo e-mail/telefone em vez de duplicar (mesmo critério do
@@ -151,6 +160,9 @@ def registrar_conversao(
 				lead.mobile_no = phone_e164
 				lead.phone = phone_e164
 				dirty = True
+			if origem_source and not lead.get("source"):
+				lead.source = origem_source
+				dirty = True
 			before = lead.as_dict()
 			_carimbar_origem(lead, session)
 			if lead.as_dict() != before:
@@ -177,6 +189,8 @@ def registrar_conversao(
 				# first_name é obrigatório no CRM Lead nativo; sem nome informado,
 				# usa um fallback derivado do e-mail/telefone (nunca bloqueia a conversão).
 				lead.first_name = (email.split("@")[0] if email else phone_e164) or "Cliente"
+			if origem_source:
+				lead.source = origem_source
 			_carimbar_origem(lead, session)
 			if not lead.get("source"):
 				lead.source = "Direto"

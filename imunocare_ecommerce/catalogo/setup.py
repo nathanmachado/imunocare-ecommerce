@@ -40,7 +40,18 @@ import frappe
 # Taxonomia da loja
 # ---------------------------------------------------------------------------
 
-_GRUPO_PAI = "Loja Imunocare"
+# F7 (duas linhas Imuno x Care): "Loja Imunocare" já era, na prática, a
+# "Linha Imuno" (clínica/injetáveis) — mantido o NOME/rota técnica como
+# estava de propósito (F7 avisa: "mover Item Group de pai reflete nas
+# rotas" — renomear/reparentar agora quebraria as rotas já publicadas dos
+# produtos reais). A separação Imuno x Care (F5/F7) é uma decisão de
+# APRESENTAÇÃO (nav do site, ver www/index.html) sobre a MESMA árvore
+# nativa de Item Group — sem duplicar taxonomia nem gerar churn de rota.
+_GRUPO_PAI = "Loja Imunocare"  # = "Linha Imuno" na navegação do site
+
+# Linha Care (F7): novo grupo-pai irmão de "Loja Imunocare", só para
+# produtos de cuidado pessoal (cosmético) — nada de injetável/clínico aqui.
+_GRUPO_PAI_CARE = "Cuidado Pessoal"  # = "Linha Care" na navegação do site
 
 # Ordem importa: o pai deve ser criado antes dos filhos.
 # Tupla: (nome, is_group, parent_item_group)
@@ -52,23 +63,109 @@ _ITEM_GROUPS: list[tuple[str, int, str]] = [
 	("Consultas Médicas", 0, _GRUPO_PAI),
 	("Vale-Presente", 0, _GRUPO_PAI),
 	("Brincos", 0, _GRUPO_PAI),
+	("Pacotes", 0, _GRUPO_PAI),
+	# Exames (F7): novo, sem item hoje — página informativa (ver
+	# templates/generators/item_group.html + catalogo.jinja_utils).
+	("Exames", 0, _GRUPO_PAI),
+]
+
+# Linha Care (F7): estrutura pronta (show_in_website=1, copy SEO), sem
+# produtos ainda — o dono cadastra a lista real depois (ver
+# catalogo.importar_prod._SECOES_CARE, já pronto para receber). Até lá,
+# cada categoria renderiza com copy "em breve" + captura de interesse (via
+# templates/generators/item_group.html, mesmo tratamento de categoria vazia
+# usado em Consultas/Exames/Terapias).
+_ITEM_GROUPS_CARE: list[tuple[str, int, str]] = [
+	(_GRUPO_PAI_CARE, 1, "All Item Groups"),
+	("Filtro Solar", 0, _GRUPO_PAI_CARE),
+	("Serum Facial", 0, _GRUPO_PAI_CARE),
+	("Filtro Solar Infantil", 0, _GRUPO_PAI_CARE),
 ]
 
 # Mapeamento item_group real → seção da loja.
 # A chave é substring (lower) do item_group do Item no banco.
 # Primeiro match vence — a ordem da lista é relevante.
 _SECTION_MAP: list[tuple[str, str]] = [
+	("pacote", "Pacotes"),
 	("vacina", "Vacinas"),
 	("vitamina", "Vitaminas Injetáveis"),
 	("terapia injetável", "Terapias Injetáveis"),
 	("terapia", "Terapias Injetáveis"),
 	("consulta", "Consultas Médicas"),
 	("médico", "Consultas Médicas"),
+	("exame", "Exames"),
 	("vale", "Vale-Presente"),
 	("brinco", "Brincos"),
+	("filtro solar infantil", "Filtro Solar Infantil"),
+	("filtro solar", "Filtro Solar"),
+	("sérum facial", "Serum Facial"),
+	("serum facial", "Serum Facial"),
 ]
 
+# Copy (SEO) de cada categoria — usada como Item Group.description (aparece na
+# página nativa da categoria, templates/generators/item_group.html, e é
+# reaproveitada por landing.setup como fallback de meta description da rota).
+# Só é gravada se o campo ainda estiver vazio (não sobrescreve edição manual).
+_GROUP_COPY: dict[str, str] = {
+	"Vacinas": (
+		"Clínica de vacinas particulares e clínica de imunização em Uberlândia. Vacinação "
+		"para bebês, crianças, adolescentes, adultos e idosos — vacina da gripe, vacina do "
+		"HPV (preço e idade sob consulta), febre amarela, dengue (Qdenga) e mais, com "
+		"aplicação por profissional de saúde habilitado. Consulte preços de vacinas "
+		"particulares e disponibilidade de vacina a domicílio."
+	),
+	"Vitaminas Injetáveis": (
+		"Aplicação intramuscular de vitaminas e complexos vitamínicos, mediante avaliação "
+		"de um profissional de saúde. Reposição pontual conforme indicação clínica."
+	),
+	"Terapias Injetáveis": (
+		"Aplicação de terapias injetáveis sob prescrição e acompanhamento médico."
+	),
+	"Consultas Médicas": (
+		"Agende consultas médicas na Imunocare, com horários online e atendimento "
+		"presencial na clínica."
+	),
+	"Vale-Presente": ("Vale-presente Imunocare para vacinas, vitaminas e serviços da clínica."),
+	"Brincos": (
+		"Aplicação de brincos (piercing de orelha) infantil e adulto, com material "
+		"esterilizado e procedimento seguro."
+	),
+	"Pacotes": (
+		"Pacotes fechados de doses de vacina com condição especial — ideal para completar "
+		"o esquema vacinal recomendado."
+	),
+	"Exames": (
+		"Agende exames na Imunocare, com coleta/realização presencial na clínica e "
+		"orientação de profissional de saúde habilitado."
+	),
+	# Linha Care (F7) — copy SEO para as categorias ainda sem produto.
+	"Cuidado Pessoal": (
+		"Linha Care Imunocare: cuidado pessoal para o dia a dia, com a mesma confiança da "
+		"Linha Imuno. Filtro solar, sérum facial e filtro solar infantil — em breve."
+	),
+	"Filtro Solar": ("Filtro solar Imunocare para proteção diária da pele — em breve na loja."),
+	"Serum Facial": ("Sérum facial Imunocare para cuidado da pele — em breve na loja."),
+	"Filtro Solar Infantil": (
+		"Filtro solar infantil Imunocare, formulado para a pele sensível das crianças — em "
+		"breve na loja."
+	),
+}
+
 _LOG_TITLE = "imunocare_ecommerce.catalogo.setup"
+
+# F9 (regra inegociável — ver relatório do dev-ecommerce, risco crítico):
+# medicamento nunca é vendido online, em NENHUMA página do site. O item
+# "Terapia Injetável — Controle de Peso" (ex-"ter-tirzepatida", renomeado por
+# compliance em catalogo.importar_prod) chegou a esta atividade JÁ
+# publicado no checkout direto (add-to-cart/pagar online, sem gate de
+# avaliação médica) — despublicamos aqui como correção de segurança. O
+# canal correto para esse interesse é a landing "Protocolo de Emagrecimento"
+# (F9, CTA único "Agende sua avaliação médica"), fora do catálogo de
+# produtos. Item permanece elegível a NF/faturamento manual pela recepção
+# (não desabilitado no ERP, só tirado do checkout self-service da loja).
+_ITEM_CODES_EXCLUIR_LOJA_DIRETA: set[str] = {
+	"ter-terapia-injetavel-para-controle-de-peso",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -103,24 +200,58 @@ def setup_catalogo() -> None:
 
 
 def _setup_item_groups() -> None:
-	"""Garante a existência dos 7 Item Groups da loja (idempotente)."""
+	"""Garante a existência dos Item Groups das duas linhas da loja — Imuno
+	(``_ITEM_GROUPS``) e Care (``_ITEM_GROUPS_CARE``, F7) — idempotente."""
 	if not frappe.db.exists("DocType", "Item Group"):
 		return  # ERPNext não instalado; improvável em produção
 	for name, is_group, parent in _ITEM_GROUPS:
 		_ensure_item_group(name, is_group, parent)
+	for name, is_group, parent in _ITEM_GROUPS_CARE:
+		_ensure_item_group(name, is_group, parent)
+
+
+def ensure_item_groups() -> None:
+	"""Wrapper público de ``_setup_item_groups`` — usado por
+	``catalogo.importar_prod`` para garantir que os Item Groups da loja
+	(inclusive "Pacotes") já existam ANTES de criar os Items reais."""
+	_setup_item_groups()
 
 
 def _ensure_item_group(name: str, is_group: int, parent: str) -> None:
-	"""Cria o Item Group se não existir.
+	"""Cria o Item Group se não existir; se já existir, garante show_in_website=1
+	e a description (copy) da categoria — sem alterar o parent_item_group.
 
-	Se já existir (ex: "Vacinas" criado pelo imunocare_clinic_ext), a função
-	retorna sem alterações — preserva o parent_item_group original para não
-	quebrar a hierarquia de estoque já configurada.
+	Se já existir (ex: "Vacinas" criado pelo imunocare_clinic_ext), preserva o
+	parent_item_group original para não quebrar a hierarquia de estoque já
+	configurada — só liga a visibilidade no site e completa a description.
 
-	O campo show_in_website é um Custom Field adicionado pelo webshop.
-	Só é definido se o webshop já estiver instalado.
+	O campo show_in_website é um Custom Field adicionado pelo webshop. Só é
+	definido se o webshop já estiver instalado (idem para "description", que
+	também é Custom Field do webshop).
 	"""
+	tem_show_in_website = frappe.db.exists(
+		"Custom Field", {"dt": "Item Group", "fieldname": "show_in_website"}
+	)
+	tem_description = frappe.db.exists("Custom Field", {"dt": "Item Group", "fieldname": "description"})
+	copy = _GROUP_COPY.get(name)
+
 	if frappe.db.exists("Item Group", name):
+		doc = frappe.get_doc("Item Group", name)
+		mudou = False
+		if tem_show_in_website and not doc.get("show_in_website"):
+			doc.show_in_website = 1
+			mudou = True
+		# F2 (validação): "Vacinas" já tinha description antes da cobertura de
+		# keywords desta atividade ("clínica de imunização"/"vacina a
+		# domicílio"/"preços") — força a atualização 1x só para esse grupo,
+		# preservando a regra normal (só preenche vazio) para os demais.
+		forcar_descricao = name == "Vacinas"
+		if tem_description and copy and (not doc.get("description") or forcar_descricao):
+			doc.description = copy
+			mudou = True
+		if mudou:
+			doc.flags.ignore_permissions = True
+			doc.save(ignore_permissions=True)
 		return
 
 	doc_data: dict = {
@@ -130,9 +261,10 @@ def _ensure_item_group(name: str, is_group: int, parent: str) -> None:
 		"parent_item_group": parent,
 	}
 
-	# show_in_website é Custom Field do webshop — só existirá após install-app webshop
-	if frappe.db.exists("Custom Field", {"dt": "Item Group", "fieldname": "show_in_website"}):
+	if tem_show_in_website:
 		doc_data["show_in_website"] = 1
+	if tem_description and copy:
+		doc_data["description"] = copy
 
 	frappe.get_doc(doc_data).insert(ignore_permissions=True)
 
@@ -172,8 +304,13 @@ def _publish_website_items() -> None:
 
 	publicados = 0
 	ignorados = 0
+	excluidos = 0
 
 	for item in items:
+		if item.item_code in _ITEM_CODES_EXCLUIR_LOJA_DIRETA:
+			_despublicar_se_necessario(item.item_code)
+			excluidos += 1
+			continue
 		section = _resolve_section(item.item_group)
 		if not section:
 			ignorados += 1
@@ -183,8 +320,23 @@ def _publish_website_items() -> None:
 
 	frappe.logger(_LOG_TITLE).info(
 		f"setup_catalogo: {publicados} Website Item(s) publicados, "
-		f"{ignorados} Item(s) ignorados (sem mapeamento de seção)."
+		f"{ignorados} Item(s) ignorados (sem mapeamento de seção), "
+		f"{excluidos} excluído(s) do checkout direto (F9 — compliance)."
 	)
+
+
+def _despublicar_se_necessario(item_code: str) -> None:
+	"""Garante published=0 para itens na lista de exclusão de checkout direto
+	(F9), mesmo que uma execução anterior já os tenha publicado."""
+	existente = frappe.db.get_value("Website Item", {"item_code": item_code}, ["name", "published"])
+	if not existente:
+		return
+	name, published = existente
+	if published:
+		frappe.db.set_value("Website Item", name, "published", 0, update_modified=False)
+		frappe.logger(_LOG_TITLE).info(
+			f"Website Item '{name}' ({item_code}) despublicado (F9 — sem checkout direto)."
+		)
 
 
 def _resolve_section(item_group: str) -> str | None:
@@ -242,3 +394,138 @@ def _ensure_website_item_section(doc: "frappe.Document", section: str) -> None:
 	existing = {row.item_group for row in (doc.get("website_item_groups") or [])}
 	if section not in existing:
 		doc.append("website_item_groups", {"item_group": section})
+
+
+# ---------------------------------------------------------------------------
+# Leitura para a Home (www/index.py) — só consulta, não escreve nada.
+# ---------------------------------------------------------------------------
+
+# Ordem de exibição das seções na home. Seções sem nenhum Website Item
+# publicado são omitidas silenciosamente (ex.: Consultas Médicas/Vale-Presente
+# nesta 1ª versão, sem itens ainda cadastrados).
+SECOES_HOME_ORDEM: list[str] = [
+	"Vacinas",
+	"Vitaminas Injetáveis",
+	"Terapias Injetáveis",
+	"Pacotes",
+	"Brincos",
+	"Consultas Médicas",
+	"Exames",
+	"Vale-Presente",
+	# Linha Care (F7):
+	"Filtro Solar",
+	"Serum Facial",
+	"Filtro Solar Infantil",
+]
+
+# Ordem de navegação (F7 — nav com TODAS as categorias, mesmo vazias).
+_NAV_ORDEM_IMUNO: list[str] = [
+	"Vacinas",
+	"Vitaminas Injetáveis",
+	"Terapias Injetáveis",
+	"Pacotes",
+	"Consultas Médicas",
+	"Exames",
+	"Brincos",
+	"Vale-Presente",
+]
+_NAV_ORDEM_CARE: list[str] = ["Filtro Solar", "Serum Facial", "Filtro Solar Infantil"]
+
+
+def secoes_para_home(limite_por_secao: int = 4) -> list[dict]:
+	"""Seções da loja com Website Items publicados, para a home (Feature 55).
+
+	Cada seção: {"nome", "route" (do Item Group), "itens": [{"nome","route",
+	"preco" (float ou None), "imagem", "descricao" (short_description, para o
+	card do layout aprovado — ajuste 2026-07)]}. Seções sem item publicado
+	são omitidas. Não lança exceção — usada em request de página pública.
+	"""
+	if not frappe.db.exists("DocType", "Website Item"):
+		return []
+
+	price_list = frappe.db.get_single_value("Webshop Settings", "price_list") or "Venda Padrão"
+	secoes: list[dict] = []
+
+	for nome_secao in SECOES_HOME_ORDEM:
+		item_groups = frappe.get_all(
+			"Website Item Group",
+			filters={"item_group": nome_secao, "parenttype": "Website Item"},
+			pluck="parent",
+		)
+		if not item_groups:
+			continue
+
+		website_items = frappe.get_all(
+			"Website Item",
+			filters={"name": ["in", item_groups], "published": 1},
+			fields=[
+				"name",
+				"item_code",
+				"web_item_name",
+				"route",
+				"website_image",
+				"thumbnail",
+				"short_description",
+			],
+			order_by="web_item_name asc",
+			limit_page_length=limite_por_secao,
+		)
+		if not website_items:
+			continue
+
+		precos = {}
+		if website_items:
+			codigos = [wi.item_code for wi in website_items]
+			for row in frappe.get_all(
+				"Item Price",
+				filters={"item_code": ["in", codigos], "price_list": price_list, "selling": 1},
+				fields=["item_code", "price_list_rate"],
+			):
+				precos[row.item_code] = row.price_list_rate
+
+		route = frappe.db.get_value("Item Group", nome_secao, "route")
+		itens = [
+			{
+				"nome": wi.web_item_name or wi.item_code,
+				"route": wi.route,
+				"preco": precos.get(wi.item_code),
+				"imagem": wi.website_image or wi.thumbnail,
+				"descricao": wi.short_description,
+			}
+			for wi in website_items
+		]
+		secoes.append({"nome": nome_secao, "route": route, "itens": itens})
+
+	return secoes
+
+
+def nav_categorias(grupo_pai: str) -> list[dict]:
+	"""Categorias da linha Imuno ("Loja Imunocare") ou Care ("Cuidado
+	Pessoal") para a navegação da home (F7) — TODAS, mesmo as sem produto
+	publicado ainda (essas caem na página de categoria informativa, ver
+	templates/generators/item_group.html). Cada item: {"nome", "route"}.
+
+	Consulta por NOME (``_NAV_ORDEM_IMUNO``/``_NAV_ORDEM_CARE``), não por
+	``parent_item_group`` — "Vacinas" pode ter sido criado antes deste app
+	(pelo imunocare_clinic_ext/seed) com parent "All Item Groups" em vez de
+	"Loja Imunocare" (ver ``_ensure_item_group``, que preserva o parent
+	original); filtrar por parent perderia essa categoria da navegação.
+	Não lança exceção — usada em request de página pública.
+	"""
+	if not frappe.db.exists("DocType", "Item Group"):
+		return []
+
+	ordem = _NAV_ORDEM_IMUNO if grupo_pai == _GRUPO_PAI else _NAV_ORDEM_CARE if grupo_pai == _GRUPO_PAI_CARE else []
+	if not ordem:
+		return []
+
+	grupos = frappe.get_all(
+		"Item Group", filters={"name": ["in", ordem]}, fields=["item_group_name", "route"]
+	)
+	por_nome = {g.item_group_name: g.route for g in grupos}
+
+	return [
+		{"nome": nome, "route": por_nome[nome]}
+		for nome in ordem
+		if por_nome.get(nome)
+	]

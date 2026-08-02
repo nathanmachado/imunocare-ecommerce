@@ -74,6 +74,23 @@ _CUSTOM_FIELDS: list[tuple[str, str, dict]] = [
 			"description": "Marcado automaticamente quando o agendamento nasce do fluxo A1.3 (loja/site).",
 		},
 	),
+	(
+		"Patient Appointment",
+		"imun_modalidade",
+		{
+			"fieldtype": "Select",
+			"options": "Na Clínica\nDomiciliar",
+			"default": "Na Clínica",
+			"label": "Modalidade de Atendimento",
+			"insert_after": "imun_origem_loja",
+			"description": (
+				"Escolhida pelo cliente ao agendar pela loja (BRIEF_LOJA.md item 4). "
+				"A taxa de atendimento domiciliar (Imunocare Ecommerce Settings) ainda não "
+				"é cobrada automaticamente neste fluxo — a recepção confirma/cobra a taxa "
+				"conforme o atendimento."
+			),
+		},
+	),
 ]
 
 

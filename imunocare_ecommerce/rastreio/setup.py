@@ -46,6 +46,14 @@ CRM_LEAD_SOURCES = [
 	"Referência",
 	"Direto",
 	"Outra Campanha",
+	# F8 (Parceria com Médicos): fonte própria, distinta do canal de
+	# aquisição (a origem paga/orgânica continua registrada nos campos UTM,
+	# ver imun_utm_*) — funil de parceiro, não de paciente/cliente final.
+	"Parceria Médicos",
+	# F9 (Protocolo de Emagrecimento): fallback de captura de interesse
+	# quando o CTA "Agende sua avaliação" ainda não tem Appointment Type
+	# configurado (Imunocare Ecommerce Settings) — landing ads-safe.
+	"Protocolo Emagrecimento",
 ]
 
 CRM_LEAD_CUSTOM_FIELDS = {

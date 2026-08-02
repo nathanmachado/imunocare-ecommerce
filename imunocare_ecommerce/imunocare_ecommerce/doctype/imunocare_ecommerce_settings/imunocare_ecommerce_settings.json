@@ -9,6 +9,9 @@
   "disclaimer_section",
   "disclaimer_ativo",
   "texto_disclaimer_padrao",
+  "atendimento_section",
+  "domiciliar_ativo",
+  "taxa_domiciliar",
   "seo_section",
   "nome_exibicao_loja",
   "meta_description_sufixo",
@@ -19,7 +22,9 @@
   "column_break_rastreio",
   "carrinho_abandonado_horas",
   "retencao_eventos_dias",
-  "retencao_sessoes_dias"
+  "retencao_sessoes_dias",
+  "landing_pages_section",
+  "protocolo_emagrecimento_appointment_type"
  ],
  "fields": [
   {
@@ -40,6 +45,26 @@
    "fieldname": "texto_disclaimer_padrao",
    "fieldtype": "Small Text",
    "label": "Texto padrão do disclaimer"
+  },
+  {
+   "fieldname": "atendimento_section",
+   "fieldtype": "Section Break",
+   "label": "Atendimento Clínica x Domiciliar (Feature 55 / A1.5)"
+  },
+  {
+   "default": "0",
+   "description": "Se marcado, o cliente pode escolher \"Atendimento domiciliar\" no carrinho da loja (taxa extra abaixo) e no agendamento online. Desmarcado: só \"Na clínica\" é oferecido.",
+   "fieldname": "domiciliar_ativo",
+   "fieldtype": "Check",
+   "label": "Oferecer atendimento domiciliar"
+  },
+  {
+   "default": "0",
+   "depends_on": "domiciliar_ativo",
+   "description": "Taxa extra cobrada quando o cliente escolhe atendimento domiciliar. No carrinho, é adicionada como uma linha \"Taxa de Atendimento Domiciliar\" ao selecionar a modalidade.",
+   "fieldname": "taxa_domiciliar",
+   "fieldtype": "Currency",
+   "label": "Taxa de atendimento domiciliar (R$)"
   },
   {
    "fieldname": "seo_section",
@@ -107,6 +132,18 @@
    "fieldname": "retencao_sessoes_dias",
    "fieldtype": "Int",
    "label": "Retenção de sessões sem conversão (dias)"
+  },
+  {
+   "fieldname": "landing_pages_section",
+   "fieldtype": "Section Break",
+   "label": "Landing Pages (F9 — Protocolo de Emagrecimento)"
+  },
+  {
+   "description": "Opcional. Appointment Type (Healthcare) usado pelo CTA \"Agende sua avaliação\" da landing /protocolo-de-emagrecimento — reusa o mesmo agendamento online do A1.3, sem precisar de um Website Item de medicamento (F9: medicamento nunca é vendido online). Enquanto vazio, o CTA cai no formulário de contato (fale conosco) em vez do calendário de horários.",
+   "fieldname": "protocolo_emagrecimento_appointment_type",
+   "fieldtype": "Link",
+   "label": "Tipo de Agendamento — Avaliação de Emagrecimento",
+   "options": "Appointment Type"
   }
  ],
  "links": [],

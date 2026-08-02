@@ -1,0 +1,269 @@
+{% extends "templates/web.html" %}
+{% from "templates/includes/imun_icons.html" import imun_icone %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block header %}{% endblock %}
+
+{% block page_content %}
+<div class="imun-landing" data-appointment-type="{{ appointment_type or '' }}">
+
+	<section class="imun-hero imun-hero-institucional">
+		<span class="imun-hero-kicker">Programa de controle de peso</span>
+		<h1 class="imun-hero-tagline">Protocolo de Emagrecimento com Acompanhamento Médico</h1>
+		<p class="imun-hero-sub">
+			Um programa personalizado de controle de peso, conduzido com avaliação
+			médica, exames e acompanhamento contínuo — para você seguir mais forte,
+			com segurança e responsabilidade.
+		</p>
+		<div class="imun-hero-cta">
+			<a href="#imun-avaliacao" class="btn imun-cta">Agende sua avaliação</a>
+		</div>
+	</section>
+
+	<section class="imun-section" style="border-top:none; padding-top:0;">
+		<span class="imun-eyebrow">Como funciona</span>
+		<h2 class="imun-section-title h4">Um programa conduzido por médico, do início ao fim</h2>
+		<div class="imun-grid imun-grid-institucional">
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Consultas Médicas", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Avaliação médica</div>
+					<div class="imun-card-ds">Consulta inicial para entender seu histórico de saúde e objetivos, com um médico responsável pela conduta.</div>
+				</div>
+			</div>
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Exames", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Exames</div>
+					<div class="imun-card-ds">Exames de apoio para orientar a conduta médica com segurança, conforme indicação.</div>
+				</div>
+			</div>
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Terapias Injetáveis", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Plano personalizado</div>
+					<div class="imun-card-ds">Cada plano é individual, definido pelo médico a partir da sua avaliação — não existe protocolo padrão para todos.</div>
+				</div>
+			</div>
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Vacinas", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Acompanhamento contínuo</div>
+					<div class="imun-card-ds">Retornos periódicos para ajustar a conduta e acompanhar sua evolução com segurança.</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="imun-section">
+		<span class="imun-eyebrow">Sobre o tratamento</span>
+		<h2 class="imun-section-title h4">Quando indicado pelo médico</h2>
+		<p class="text-muted" style="max-width:66ch;">
+			Quando indicado pelo médico, o plano pode incluir tratamentos modernos
+			aprovados pela Anvisa, sempre com prescrição individual e acompanhamento
+			profissional. A Imunocare não vende medicamento pela internet — o que você
+			agenda aqui é a avaliação médica; qualquer tratamento é discutido e
+			prescrito na consulta, conforme indicação e histórico de saúde.
+		</p>
+	</section>
+
+	<section class="imun-section" id="imun-avaliacao">
+		<span class="imun-eyebrow">Comece agora</span>
+		<h2 class="imun-section-title h4">Agende sua avaliação médica</h2>
+		<p class="text-muted" style="max-width:64ch;">
+			O primeiro passo é uma avaliação médica. A partir dela, o médico define se
+			e como o protocolo é indicado para o seu caso.
+		</p>
+
+		<div id="imun-avaliacao-widget">
+			<div class="text-muted small">Carregando...</div>
+		</div>
+	</section>
+
+	<section class="imun-section">
+		<span class="imun-eyebrow">Perguntas frequentes</span>
+		<h2 class="imun-section-title h4">Dúvidas sobre o Protocolo de Emagrecimento</h2>
+		<div class="imun-faq">
+			<details class="imun-faq-item">
+				<summary>O tratamento é indicado para todo mundo?</summary>
+				<p>Não. A indicação é individual, definida pelo médico após avaliação — histórico de saúde, exames e objetivos são considerados antes de qualquer conduta.</p>
+			</details>
+			<details class="imun-faq-item">
+				<summary>Como funciona o acompanhamento?</summary>
+				<p>Após a avaliação inicial, o médico define os retornos necessários para acompanhar sua evolução e ajustar a conduta com segurança.</p>
+			</details>
+			<details class="imun-faq-item">
+				<summary>Posso comprar o tratamento diretamente pela loja?</summary>
+				<p>Não. A Imunocare não vende medicamento pela internet. O que você agenda por aqui é a avaliação médica; qualquer prescrição é feita na consulta, pelo médico responsável.</p>
+			</details>
+			<details class="imun-faq-item">
+				<summary>Quais resultados posso esperar?</summary>
+				<p>Resultados variam de pessoa para pessoa e dependem da avaliação, da indicação médica e da adesão ao acompanhamento — não fazemos promessa de resultado.</p>
+			</details>
+		</div>
+	</section>
+
+	<section class="text-center py-4">
+		<p class="text-muted small mb-1">
+			Resultados variam de pessoa para pessoa. Tratamento mediante avaliação e
+			prescrição médica individual — este site tem caráter informativo e não
+			substitui uma consulta médica.
+		</p>
+	</section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+frappe.ready(function () {
+	var appointmentType = $(".imun-landing").data("appointment-type");
+	var $widget = $("#imun-avaliacao-widget");
+
+	function renderFormularioInteresse() {
+		$widget.html(
+			'<form id="imun-form-avaliacao" class="imun-form" style="max-width:480px;">' +
+				'<div class="imun-form-row"><label for="imun-a-nome">Nome *</label>' +
+				'<input type="text" id="imun-a-nome" required></div>' +
+				'<div class="imun-form-row imun-form-row-2col"><div>' +
+				'<label for="imun-a-telefone">Telefone</label><input type="tel" id="imun-a-telefone"></div>' +
+				'<div><label for="imun-a-email">E-mail</label><input type="email" id="imun-a-email"></div></div>' +
+				'<div class="imun-form-row"><label for="imun-a-mensagem">Mensagem (opcional)</label>' +
+				'<textarea id="imun-a-mensagem" rows="2"></textarea></div>' +
+				'<button type="submit" class="btn imun-cta">Quero agendar minha avaliação</button>' +
+				'<div id="imun-form-avaliacao-msg" class="mt-2"></div>' +
+				"</form>"
+		);
+		$("#imun-form-avaliacao").on("submit", function (e) {
+			e.preventDefault();
+			var $btn = $(this).find("button[type=submit]");
+			var $msg = $("#imun-form-avaliacao-msg");
+			$btn.prop("disabled", true);
+			frappe.call({
+				method: "imunocare_ecommerce.landing.protocolo_emagrecimento.enviar_interesse",
+				args: {
+					nome: $("#imun-a-nome").val(),
+					telefone: $("#imun-a-telefone").val(),
+					email: $("#imun-a-email").val(),
+					mensagem: $("#imun-a-mensagem").val(),
+					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
+				},
+				callback: function (r) {
+					$btn.prop("disabled", false);
+					if (r.message && r.message.ok) {
+						$msg.html('<div class="text-success">' + frappe.utils.escape_html(r.message.mensagem) + "</div>");
+						$("#imun-form-avaliacao")[0].reset();
+					} else {
+						$msg.html('<div class="text-danger">' + frappe.utils.escape_html((r.message && r.message.mensagem) || "Não foi possível enviar agora.") + "</div>");
+					}
+				},
+				error: function () {
+					$btn.prop("disabled", false);
+					$msg.html('<div class="text-danger">Não foi possível enviar agora. Tente novamente.</div>');
+				},
+			});
+		});
+	}
+
+	function renderCalendario(info) {
+		$widget.html(
+			'<div class="imun-form" style="max-width:480px;">' +
+				'<div class="imun-form-row"><label for="imun-av-data">Data</label>' +
+				'<input type="date" id="imun-av-data"></div>' +
+				'<div id="imun-av-horarios" class="mt-2"></div>' +
+				'<input type="hidden" id="imun-av-hora">' +
+				'<button type="button" id="imun-av-confirmar" class="btn imun-cta mt-2">Confirmar Agendamento</button>' +
+				'<div id="imun-av-msg" class="mt-2"></div>' +
+				"</div>"
+		);
+		$("#imun-av-data").on("change", function () {
+			var data = $(this).val();
+			if (!data) return;
+			$("#imun-av-horarios").html('<div class="text-muted small">Consultando horários...</div>');
+			$("#imun-av-hora").val("");
+			frappe.call({
+				method: "imunocare_ecommerce.agendamento.booking.get_horarios",
+				args: { appointment_type: appointmentType, data: data, practitioner: info.practitioner },
+				callback: function (r) {
+					var res = r.message || {};
+					if (res.aviso) {
+						$("#imun-av-horarios").html('<div class="text-muted small">' + frappe.utils.escape_html(res.aviso) + "</div>");
+						return;
+					}
+					if (!res.horarios || !res.horarios.length) {
+						$("#imun-av-horarios").html('<div class="text-muted small">Nenhum horário livre nesta data.</div>');
+						return;
+					}
+					var html = res.horarios
+						.map(function (h) {
+							return '<button type="button" class="btn btn-outline-primary btn-sm mr-1 mb-1 imun-av-slot" data-hora="' + h.hora + '">' + h.hora.slice(0, 5) + "</button>";
+						})
+						.join("");
+					$("#imun-av-horarios").html(html);
+				},
+			});
+		});
+		$widget.on("click", ".imun-av-slot", function () {
+			$widget.find(".imun-av-slot").removeClass("btn-primary").addClass("btn-outline-primary");
+			$(this).removeClass("btn-outline-primary").addClass("btn-primary");
+			$("#imun-av-hora").val($(this).data("hora"));
+		});
+		$("#imun-av-confirmar").on("click", function () {
+			if (!frappe.session.user || frappe.session.user === "Guest") {
+				window.location.href = "/login?redirect-to=" + encodeURIComponent(window.location.pathname + "#imun-avaliacao");
+				return;
+			}
+			var data = $("#imun-av-data").val();
+			var hora = $("#imun-av-hora").val();
+			if (!data || !hora) {
+				frappe.msgprint("Selecione uma data e um horário disponível.");
+				return;
+			}
+			frappe.call({
+				method: "imunocare_ecommerce.agendamento.booking.criar_agendamento",
+				args: {
+					appointment_type: appointmentType,
+					appointment_date: data,
+					appointment_time: hora,
+					practitioner: info.practitioner,
+					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
+				},
+				freeze: true,
+				freeze_message: "Agendando...",
+				callback: function (r) {
+					if (!r.message) return;
+					$("#imun-av-msg").html(
+						'<div class="text-success">Avaliação agendada (' + frappe.utils.escape_html(r.message.appointment) + "). Nossa equipe entrará em contato para confirmar.</div>"
+					);
+				},
+			});
+		});
+	}
+
+	if (!appointmentType) {
+		renderFormularioInteresse();
+		return;
+	}
+
+	frappe.call({
+		method: "imunocare_ecommerce.landing.protocolo_emagrecimento.info_avaliacao",
+		callback: function (r) {
+			var info = r.message || {};
+			if (!info.agendavel) {
+				renderFormularioInteresse();
+				return;
+			}
+			if (frappe.session.user === "Guest") {
+				$widget.html(
+					'<a class="btn imun-cta" href="/login?redirect-to=' +
+						encodeURIComponent(window.location.pathname + "#imun-avaliacao") +
+						'">Fazer login e agendar</a>'
+				);
+				return;
+			}
+			renderCalendario(info);
+		},
+	});
+});
+</script>
+{% endblock %}

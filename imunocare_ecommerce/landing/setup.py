@@ -40,7 +40,13 @@ import frappe
 _LOG_TITLE = "imunocare_ecommerce.landing.setup"
 
 # Seções "de saúde" (recebem disclaimer) vs. as demais seções da loja.
-_SECOES_SAUDE = {"Vacinas", "Vitaminas Injetáveis", "Terapias Injetáveis", "Consultas Médicas"}
+_SECOES_SAUDE = {
+	"Vacinas",
+	"Vitaminas Injetáveis",
+	"Terapias Injetáveis",
+	"Consultas Médicas",
+	"Pacotes",
+}
 
 _DISCLAIMER_INICIO = "<!-- imun:disclaimer:inicio -->"
 _DISCLAIMER_FIM = "<!-- imun:disclaimer:fim -->"
@@ -56,14 +62,46 @@ _DISCLAIMER_PADRAO = (
 def setup_landing_pages() -> None:
 	"""Entry-point idempotente (after_migrate). Nunca interrompe o migrate."""
 	try:
+		_meta_paginas_estaticas()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+	try:
 		if not frappe.db.exists("DocType", "Website Item"):
 			frappe.logger(_LOG_TITLE).warning("webshop ainda não instalado — landing SEO adiado.")
 			return
+		_ensure_custom_field_meta_title()
 		_meta_website_items()
 		_meta_item_groups()
 		_disclaimers_website_items()
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+# ---------------------------------------------------------------------------
+# Website Route Meta — páginas estáticas (F8/F9): mesmo mecanismo nativo
+# usado para Website Item/Item Group acima, reaproveitado (``_ensure_route_meta``)
+# para as landing pages que não são Generator (www/*.html comuns).
+# ---------------------------------------------------------------------------
+
+_META_PAGINAS_ESTATICAS: dict[str, str] = {
+	"parceria-com-medicos": (
+		"Parceria com médicos: encaminhamento de pacientes e aplicação segura de "
+		"injetáveis prescritos, com estrutura clínica e protocolos supervisionados. "
+		"Fale com a Imunocare."
+	),
+	"protocolo-de-emagrecimento": (
+		"Protocolo de Emagrecimento com Acompanhamento Médico na Imunocare: avaliação "
+		"médica, exames e plano personalizado. Agende sua avaliação."
+	),
+}
+
+
+def _meta_paginas_estaticas() -> None:
+	for rota, descricao in _META_PAGINAS_ESTATICAS.items():
+		try:
+			_ensure_route_meta(rota, descricao, og_type="website")
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +151,34 @@ def _ensure_route_meta(route: str, description: str, og_type: str = "product") -
 		doc.insert(ignore_permissions=True)
 	else:
 		doc.save(ignore_permissions=True)
+
+
+# ---------------------------------------------------------------------------
+# Custom field imun_meta_title (F2 — <title>/H1 por produto)
+# ---------------------------------------------------------------------------
+
+
+def _ensure_custom_field_meta_title() -> None:
+	"""``Website Item.imun_meta_title`` (F2): título/H1 específico por
+	produto, opcional — cai para ``web_item_name``/``item_name`` quando
+	vazio (ver override ``templates/generators/item/item.html``, blocos
+	``title``/``h1.sr-only``). Idempotente (não duplica em re-execuções)."""
+	if frappe.db.exists("Custom Field", {"dt": "Website Item", "fieldname": "imun_meta_title"}):
+		return
+	frappe.get_doc(
+		{
+			"doctype": "Custom Field",
+			"dt": "Website Item",
+			"fieldname": "imun_meta_title",
+			"fieldtype": "Data",
+			"label": "Título SEO (opcional)",
+			"insert_after": "web_item_name",
+			"description": (
+				"Usado no <title> e no H1 (oculto visualmente, mas indexável) da página do "
+				"produto. Se vazio, usa o nome de exibição da loja (Nome do Website Item)."
+			),
+		}
+	).insert(ignore_permissions=True)
 
 
 def _meta_website_items() -> None:
@@ -167,12 +233,32 @@ def _meta_item_groups() -> None:
 
 
 def _texto_disclaimer() -> str | None:
-	if frappe.db.exists("DocType", "Imunocare Ecommerce Settings"):
-		settings = frappe.get_single("Imunocare Ecommerce Settings")
-		if not settings.get("disclaimer_ativo", 1):
-			return None
-		return settings.get("texto_disclaimer_padrao") or _DISCLAIMER_PADRAO
-	return _DISCLAIMER_PADRAO
+	if not frappe.db.exists("DocType", "Imunocare Ecommerce Settings"):
+		return _DISCLAIMER_PADRAO
+
+	# F4 (validação — inventário 2026-08-02): Check novo em Single lido como
+	# 0 ANTES do 1º save — o Single "Imunocare Ecommerce Settings" foi salvo
+	# antes do campo "disclaimer_ativo" existir, então nunca há uma linha em
+	# ``tabSingles`` para ele. ``get_single()``/``get_single_value()`` não
+	# aplicam o default do DocType nesse caso: ``get_single_value`` faz
+	# ``cast_fieldtype("Check", None)`` -> ``0`` (não ``None``) — então NEM
+	# comparar o retorno com ``None`` resolve; é preciso checar a AUSÊNCIA da
+	# linha crua antes de confiar no valor. Ausente = default "1" (ligado);
+	# só um "0" EXPLICITAMENTE gravado desliga.
+	linha_existe = frappe.db.sql(
+		"select 1 from `tabSingles` where doctype=%s and field=%s limit 1",
+		("Imunocare Ecommerce Settings", "disclaimer_ativo"),
+	)
+	ativo = (
+		True
+		if not linha_existe
+		else bool(frappe.db.get_single_value("Imunocare Ecommerce Settings", "disclaimer_ativo", cache=False))
+	)
+	if not ativo:
+		return None
+
+	settings = frappe.get_single("Imunocare Ecommerce Settings")
+	return settings.get("texto_disclaimer_padrao") or _DISCLAIMER_PADRAO
 
 
 def _bloco_disclaimer(texto: str) -> str:

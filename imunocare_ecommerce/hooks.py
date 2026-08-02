@@ -36,6 +36,13 @@ fixtures = [
 					"Consultas Médicas",
 					"Vale-Presente",
 					"Brincos",
+					"Pacotes",
+					"Exames",
+					# Linha Care (F7):
+					"Cuidado Pessoal",
+					"Filtro Solar",
+					"Serum Facial",
+					"Filtro Solar Infantil",
 				],
 			]
 		],
@@ -71,6 +78,12 @@ web_include_js = [
 	"/assets/imunocare_ecommerce/js/agendamento.js",
 	"/assets/imunocare_ecommerce/js/seo_jsonld.js",
 	"/assets/imunocare_ecommerce/js/rastreio.js",
+	"/assets/imunocare_ecommerce/js/domiciliar_cart.js",
+	# Reestiliza o card nativo do webshop (grid all-products/categoria) para o
+	# DESIGN_ALVO_v1 — monkey-patch de webshop.ProductGrid, ver comentário no
+	# próprio arquivo. Precisa carregar DEPOIS do "web.bundle.js" do webshop
+	# (garantido pela ordem de instalação dos apps — webshop antes deste).
+	"/assets/imunocare_ecommerce/js/product_grid_style.js",
 ]
 
 # include custom scss in every website theme (without file extension ".scss")
@@ -115,16 +128,34 @@ web_include_js = [
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "imunocare_ecommerce.utils.jinja_methods",
-# 	"filters": "imunocare_ecommerce.utils.jinja_filters"
-# }
+# F7: usados por templates/generators/item_group.html (override) para
+# categorias sem produto publicado (Consultas/Exames/Terapias/Linha Care)
+# não "sumirem silenciosamente" — mostram copy + CTA em vez do grid vazio.
+jinja = {
+	"methods": [
+		"imunocare_ecommerce.catalogo.jinja_utils.contagem_produtos_publicados",
+		"imunocare_ecommerce.catalogo.jinja_utils.info_categoria_vazia",
+	]
+}
 
 # Installation
 # ------------
 
 # before_install = "imunocare_ecommerce.install.before_install"
-after_install = "imunocare_ecommerce.catalogo.setup.setup_catalogo"
+# Mesma sequência do after_migrate (abaixo) — garante que uma instalação nova
+# (bench install-app) já nasça com identidade/catálogo/loja configurados, sem
+# depender de um migrate manual em seguida.
+after_install = [
+	"imunocare_ecommerce.identidade.setup.setup_identidade",
+	"imunocare_ecommerce.catalogo.importar_prod.importar_catalogo_prod",
+	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
+	"imunocare_ecommerce.loja.setup.setup_webshop_settings",
+	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
+	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
+	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
+	"imunocare_ecommerce.landing.setup.setup_landing_pages",
+	"imunocare_ecommerce.rastreio.setup.setup_rastreio",
+]
 
 # Uninstallation
 # ------------
@@ -134,18 +165,26 @@ after_install = "imunocare_ecommerce.catalogo.setup.setup_catalogo"
 
 # Migrate
 # -------
-# Garante Item Groups/Website Items atualizados, o checkout da loja apontado ao
-# gateway maxiPago (Feature 63 / A3.3), os custom fields de agendamento online
-# (Feature 55 / A1.3), o SEO/disclaimer das landing pages (Feature 55 / A1.4) e
-# os custom fields do rastreio de jornada -> funil do CRM (Feature 56 / A2.2 e
-# A2.4) a cada bench migrate. Todos idempotentes e tolerantes a falha (não
-# interrompem o migrate) — rodam nessa ordem porque landing/agendamento/rastreio
-# dependem dos Website Items já publicados pelo catalogo, e rastreio depende do
-# custom field imun_origem_loja já criado por agendamento.
+# Garante a identidade visual (Website Theme/Settings — Feature 55 / A1.1), o
+# catálogo REAL com preços (importar_prod, a partir de catalogo_prod.json) +
+# Item Groups/Website Items atualizados, a loja LIGADA (Webshop Settings —
+# Feature 55 / A1.6), o checkout apontado ao gateway maxiPago (Feature 63 /
+# A3.3), os custom fields de agendamento online + modalidade domiciliar
+# (Feature 55 / A1.3 e A1.5), o SEO/disclaimer das landing pages (Feature 55 /
+# A1.4) e os custom fields do rastreio de jornada -> funil do CRM (Feature 56 /
+# A2.2 e A2.4) a cada bench migrate. Todos idempotentes e tolerantes a falha
+# (não interrompem o migrate) — a ordem importa: importar_prod cria os Items
+# reais ANTES de setup_catalogo publicá-los; landing/agendamento/rastreio
+# dependem dos Website Items já publicados; rastreio depende do custom field
+# imun_origem_loja já criado por agendamento.
 after_migrate = [
+	"imunocare_ecommerce.identidade.setup.setup_identidade",
+	"imunocare_ecommerce.catalogo.importar_prod.importar_catalogo_prod",
 	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
+	"imunocare_ecommerce.loja.setup.setup_webshop_settings",
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
 	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
+	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
 	"imunocare_ecommerce.landing.setup.setup_landing_pages",
 	"imunocare_ecommerce.rastreio.setup.setup_rastreio",
 ]

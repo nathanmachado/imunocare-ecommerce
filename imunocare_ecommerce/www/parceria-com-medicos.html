@@ -1,0 +1,142 @@
+{% extends "templates/web.html" %}
+{% from "templates/includes/imun_icons.html" import imun_icone %}
+
+{% block title %}{{ title }}{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+{% block header %}{% endblock %}
+
+{% block page_content %}
+<div class="imun-landing">
+
+	<section class="imun-hero imun-hero-institucional">
+		<span class="imun-hero-kicker">Para médicos parceiros</span>
+		<h1 class="imun-hero-tagline">Parceria com Médicos</h1>
+		<p class="imun-hero-sub">
+			Encaminhe seus pacientes para vacinação, vitaminas e terapias injetáveis com a
+			segurança de uma clínica estruturada — aplicação por profissionais de saúde
+			habilitados, protocolos supervisionados e retorno de acompanhamento.
+		</p>
+	</section>
+
+	<section class="imun-section" style="border-top:none; padding-top:0;">
+		<span class="imun-eyebrow">Por que ser parceiro Imunocare</span>
+		<h2 class="imun-section-title h4">O que a Imunocare oferece ao médico parceiro</h2>
+		<div class="imun-grid imun-grid-institucional">
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Consultas Médicas", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Encaminhamento de pacientes</div>
+					<div class="imun-card-ds">Seu paciente é recebido e acompanhado com o mesmo cuidado da sua indicação.</div>
+				</div>
+			</div>
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Terapias Injetáveis", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Aplicação segura de injetáveis prescritos</div>
+					<div class="imun-card-ds">Estrutura clínica, técnica asséptica e enfermagem especializada para a aplicação do que você prescreveu.</div>
+				</div>
+			</div>
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Exames", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Protocolos supervisionados</div>
+					<div class="imun-card-ds">Procedimentos seguem protocolos clínicos definidos, com registro e rastreabilidade de cada atendimento.</div>
+				</div>
+			</div>
+			<div class="imun-card imun-card-institucional">
+				<div class="imun-card-ph">{{ imun_icone("Vacinas", 30) }}</div>
+				<div class="imun-card-body">
+					<div class="imun-card-nm">Relacionamento contínuo</div>
+					<div class="imun-card-ds">Canal direto com a clínica para acompanhar a evolução do seu paciente e alinhar conduta.</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section class="imun-section">
+		<span class="imun-eyebrow">Fale com a gente</span>
+		<h2 class="imun-section-title h4">Quero ser parceiro Imunocare</h2>
+		<p class="text-muted" style="max-width:64ch;">
+			Preencha seus dados abaixo. Nossa equipe entra em contato para apresentar a
+			estrutura da clínica e combinar o fluxo de encaminhamento.
+		</p>
+
+		<form id="imun-form-parceria" class="imun-form" style="max-width:520px;">
+			<div class="imun-form-row">
+				<label for="imun-p-nome">Nome completo *</label>
+				<input type="text" id="imun-p-nome" name="nome" required>
+			</div>
+			<div class="imun-form-row imun-form-row-2col">
+				<div>
+					<label for="imun-p-crm">CRM/UF *</label>
+					<input type="text" id="imun-p-crm" name="crm_uf" placeholder="Ex.: 12345/MG" required>
+				</div>
+				<div>
+					<label for="imun-p-especialidade">Especialidade</label>
+					<input type="text" id="imun-p-especialidade" name="especialidade">
+				</div>
+			</div>
+			<div class="imun-form-row imun-form-row-2col">
+				<div>
+					<label for="imun-p-telefone">Telefone</label>
+					<input type="tel" id="imun-p-telefone" name="telefone">
+				</div>
+				<div>
+					<label for="imun-p-email">E-mail</label>
+					<input type="email" id="imun-p-email" name="email">
+				</div>
+			</div>
+			<div class="imun-form-row">
+				<label for="imun-p-mensagem">Mensagem</label>
+				<textarea id="imun-p-mensagem" name="mensagem" rows="3"></textarea>
+			</div>
+			<button type="submit" class="btn imun-cta">Enviar contato</button>
+			<div id="imun-form-parceria-msg" class="mt-2"></div>
+		</form>
+	</section>
+</div>
+{% endblock %}
+
+{% block script %}
+<script>
+frappe.ready(function () {
+	var $form = $("#imun-form-parceria");
+	var $msg = $("#imun-form-parceria-msg");
+	$form.on("submit", function (e) {
+		e.preventDefault();
+		var $btn = $form.find("button[type=submit]");
+		$btn.prop("disabled", true);
+		$msg.html("");
+		frappe.call({
+			method: "imunocare_ecommerce.landing.parceria_medicos.enviar_parceria",
+			args: {
+				nome: $("#imun-p-nome").val(),
+				crm_uf: $("#imun-p-crm").val(),
+				especialidade: $("#imun-p-especialidade").val(),
+				telefone: $("#imun-p-telefone").val(),
+				email: $("#imun-p-email").val(),
+				mensagem: $("#imun-p-mensagem").val(),
+				session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
+			},
+			callback: function (r) {
+				$btn.prop("disabled", false);
+				if (r.message && r.message.ok) {
+					$msg.html('<div class="text-success">' + frappe.utils.escape_html(r.message.mensagem) + "</div>");
+					$form[0].reset();
+				} else {
+					$msg.html(
+						'<div class="text-danger">' +
+							frappe.utils.escape_html((r.message && r.message.mensagem) || "Não foi possível enviar agora.") +
+							"</div>"
+					);
+				}
+			},
+			error: function () {
+				$btn.prop("disabled", false);
+				$msg.html('<div class="text-danger">Não foi possível enviar agora. Tente novamente.</div>');
+			},
+		});
+	});
+});
+</script>
+{% endblock %}

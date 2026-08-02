@@ -7,3 +7,5 @@ tags
 node_modules
 .venv
 .idea/
+# catálogo real extraído de produção — contém PREÇOS (dado de negócio, nunca versionar)
+imunocare_ecommerce/catalogo/catalogo_prod.json

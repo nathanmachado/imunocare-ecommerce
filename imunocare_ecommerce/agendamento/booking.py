@@ -80,6 +80,33 @@ def _item_agendavel(item_code: str) -> tuple["frappe._dict", str]:
 	return wi, wi.imun_appointment_type
 
 
+def _tipo_agendavel_direto(appointment_type: str) -> tuple["frappe._dict", str]:
+	"""Mesma validação de ``_item_agendavel``, mas para agendamento SEM
+	Website Item (F9 — landing "Protocolo de Emagrecimento": "Fora do
+	catálogo de produtos, sem Website Item de medicamento"). Usada quando o
+	agendamento vem de ``Imunocare Ecommerce Settings.<...>_appointment_type``
+	em vez do campo ``imun_appointment_type`` de um Website Item."""
+	if not frappe.db.exists("Appointment Type", appointment_type):
+		frappe.throw(_("O Tipo de Agendamento configurado ({0}) não existe mais.").format(appointment_type))
+	allow_booking_for = frappe.db.get_value("Appointment Type", appointment_type, "allow_booking_for")
+	if allow_booking_for and allow_booking_for != "Practitioner":
+		frappe.throw(_("Este serviço não é agendado por profissional; contate a clínica para agendar."))
+	# _dict "vazio" no formato esperado por _resolver_practitioner — sem
+	# profissional padrão fixo (a landing pode ter 1 ou nenhum configurado).
+	return frappe._dict({"imun_practitioner": None}), appointment_type
+
+
+def _resolver_agendavel(item_code: str | None, appointment_type: str | None) -> tuple["frappe._dict", str]:
+	"""Ponto único de resolução (item da loja OU tipo direto — F9). Reusado
+	por ``get_horarios``/``info_agendamento``/``criar_agendamento`` para não
+	duplicar a lógica de validação em cada endpoint."""
+	if appointment_type:
+		return _tipo_agendavel_direto(appointment_type)
+	if item_code:
+		return _item_agendavel(item_code)
+	frappe.throw(_("Informe o item ou o tipo de agendamento."))
+
+
 def _resolver_practitioner(wi: "frappe._dict", informado: str | None = None) -> str:
 	if wi.imun_practitioner:
 		if informado and informado != wi.imun_practitioner:
@@ -146,10 +173,16 @@ def _slots_livres(slot_details: list[dict], data, duracao: int) -> list[dict]:
 
 
 @frappe.whitelist(allow_guest=True)
-def get_horarios(item_code: str, data: str, practitioner: str | None = None) -> dict:
-	"""Horários livres de um item agendável em uma data. Nunca lança 500 —
-	falhas de configuração viram ``{"horarios": [], "aviso": "..."}``."""
-	wi, appointment_type = _item_agendavel(item_code)
+def get_horarios(
+	data: str,
+	item_code: str | None = None,
+	practitioner: str | None = None,
+	appointment_type: str | None = None,
+) -> dict:
+	"""Horários livres de um item agendável (ou de um ``appointment_type``
+	direto — F9) em uma data. Nunca lança 500 — falhas de configuração viram
+	``{"horarios": [], "aviso": "..."}``."""
+	wi, appointment_type = _resolver_agendavel(item_code, appointment_type)
 	prof = _resolver_practitioner(wi, practitioner)
 	duracao = frappe.db.get_value("Appointment Type", appointment_type, "default_duration") or 30
 
@@ -184,6 +217,28 @@ def info_agendamento(item_code: str) -> dict:
 		return {"agendavel": False}
 	try:
 		_wi, appointment_type = _item_agendavel(item_code)
+		practitioner = _resolver_practitioner(wi)
+	except frappe.exceptions.ValidationError:
+		return {"agendavel": False}
+
+	return {
+		"agendavel": True,
+		"appointment_type": appointment_type,
+		"practitioner": practitioner,
+		"logged_in": frappe.session.user != "Guest",
+	}
+
+
+@frappe.whitelist(allow_guest=True)
+def info_agendamento_tipo(appointment_type: str) -> dict:
+	"""Equivalente a ``info_agendamento``, mas para agendamento SEM Website
+	Item (F9 — landing "Protocolo de Emagrecimento"). O chamador passa o
+	``appointment_type`` diretamente (ex.: vindo de
+	``Imunocare Ecommerce Settings``)."""
+	if not appointment_type or not frappe.db.exists("Appointment Type", appointment_type):
+		return {"agendavel": False}
+	try:
+		wi, appointment_type = _tipo_agendavel_direto(appointment_type)
 		practitioner = _resolver_practitioner(wi)
 	except frappe.exceptions.ValidationError:
 		return {"agendavel": False}
@@ -340,23 +395,28 @@ def _empresa_padrao() -> str:
 
 @frappe.whitelist()
 def criar_agendamento(
-	item_code: str,
 	appointment_date: str,
 	appointment_time: str,
+	item_code: str | None = None,
 	practitioner: str | None = None,
 	patient: str | None = None,
 	patient_data: dict | str | None = None,
 	session_id: str | None = None,
+	modalidade: str | None = None,
+	appointment_type: str | None = None,
 ) -> dict:
 	"""Cria o Patient Appointment a partir da loja. Requer login (portal user) —
 	mesmo requisito do Web Form nativo ``patient-appointments`` do Healthcare.
-	"""
+
+	Aceita ``item_code`` (fluxo normal — Website Item com
+	``imun_appointment_type``) OU ``appointment_type`` direto (F9 — landing
+	"Protocolo de Emagrecimento", sem Website Item de medicamento)."""
 	if frappe.session.user == "Guest":
 		frappe.throw(
 			_("Faça login para agendar sua consulta."), frappe.PermissionError, title=_("Login necessário")
 		)
 
-	wi, appointment_type = _item_agendavel(item_code)
+	wi, appointment_type = _resolver_agendavel(item_code, appointment_type)
 	prof = _resolver_practitioner(wi, practitioner)
 	patient_name = _resolver_paciente(patient, patient_data)
 	company = _empresa_padrao()
@@ -369,8 +429,16 @@ def criar_agendamento(
 	pa.appointment_time = appointment_time
 	pa.company = company
 	pa.imun_origem_loja = 1
-	if session_id and frappe.get_meta("Patient Appointment").has_field("imun_session_id"):
+
+	# F1 (inventário 2026-08-02): get_meta("Patient Appointment") chamado 1x só
+	# (antes era chamado 2x na mesma função) e reaproveitado nas duas checagens.
+	meta_pa = frappe.get_meta("Patient Appointment")
+	if session_id and meta_pa.has_field("imun_session_id"):
 		pa.imun_session_id = session_id
+
+	modalidade_domiciliar = (modalidade or "").strip().lower() in ("domiciliar", "domicilio", "domicílio")
+	if meta_pa.has_field("imun_modalidade"):
+		pa.imun_modalidade = "Domiciliar" if modalidade_domiciliar else "Na Clínica"
 	pa.insert(ignore_permissions=True)
 
 	resultado = {
@@ -378,7 +446,13 @@ def criar_agendamento(
 		"status": pa.status,
 		"faturado": False,
 		"payment_url": None,
+		"modalidade": "Domiciliar" if modalidade_domiciliar else "Na Clínica",
 	}
+	if modalidade_domiciliar:
+		resultado["aviso_domiciliar"] = _(
+			"Atendimento domiciliar selecionado. A taxa de atendimento domiciliar será "
+			"confirmada pela recepção antes da visita."
+		)
 
 	cobranca = _tentar_faturar_e_cobrar(pa)
 	if cobranca:

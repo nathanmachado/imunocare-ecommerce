@@ -1,0 +1,425 @@
+<title>Imunocare · Identidade da Loja</title>
+<style>
+  :root {
+    /* ---- Paleta (tema claro) ---- */
+    --ground:#F4F8F8; --surface:#FFFFFF; --surface-2:#EAF1F1;
+    --ink:#10292F; --ink-soft:#4C646B; --line:#D9E5E5;
+    --brand:#0C5566; --brand-deep:#063A47; --brand-bright:#12A2BE;
+    --accent:#FB6D51; --accent-deep:#E24A2D; --on-accent:#FFFFFF;
+    --good:#2FA36B; --warn:#E19A34;
+    --hero-ground:#083E4B; --hero-ink:#F0F7F7; --hero-soft:#A9C7CC;
+    --radius:16px; --radius-sm:10px;
+    --shadow:0 1px 2px rgba(8,40,48,.05), 0 12px 30px -18px rgba(8,40,48,.28);
+    --maxw:1100px;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,"Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#061E24; --surface:#0B2A31; --surface-2:#10373F;
+      --ink:#E7F1F1; --ink-soft:#93ABB1; --line:#1B3A42;
+      --brand:#39BCD4; --brand-deep:#0B333C; --brand-bright:#33B4D0;
+      --accent:#FF7D63; --accent-deep:#FF9179; --on-accent:#12292E;
+      --good:#43BE85; --warn:#EAB05A;
+      --hero-ground:#052A33; --hero-ink:#EAF4F5; --hero-soft:#8FB4BB;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 16px 34px -20px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#F4F8F8; --surface:#FFFFFF; --surface-2:#EAF1F1;
+    --ink:#10292F; --ink-soft:#4C646B; --line:#D9E5E5;
+    --brand:#0C5566; --brand-deep:#063A47; --brand-bright:#12A2BE;
+    --accent:#FB6D51; --accent-deep:#E24A2D; --on-accent:#FFFFFF;
+    --good:#2FA36B; --warn:#E19A34;
+    --hero-ground:#083E4B; --hero-ink:#F0F7F7; --hero-soft:#A9C7CC;
+    --shadow:0 1px 2px rgba(8,40,48,.05), 0 12px 30px -18px rgba(8,40,48,.28);
+  }
+  :root[data-theme="dark"]{
+    --ground:#061E24; --surface:#0B2A31; --surface-2:#10373F;
+    --ink:#E7F1F1; --ink-soft:#93ABB1; --line:#1B3A42;
+    --brand:#39BCD4; --brand-deep:#0B333C; --brand-bright:#33B4D0;
+    --accent:#FF7D63; --accent-deep:#FF9179; --on-accent:#12292E;
+    --good:#43BE85; --warn:#EAB05A;
+    --hero-ground:#052A33; --hero-ink:#EAF4F5; --hero-soft:#8FB4BB;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 16px 34px -20px rgba(0,0,0,.6);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);
+    font-size:17px;line-height:1.65;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  section{padding:64px 0;border-top:1px solid var(--line)}
+  h2{font-family:var(--serif);font-weight:600;font-size:clamp(1.55rem,3.2vw,2.15rem);
+    line-height:1.15;margin:0 0 6px;text-wrap:balance;letter-spacing:-.01em}
+  h3{font-size:1.05rem;margin:0 0 4px;letter-spacing:-.01em}
+  p{margin:0 0 14px;max-width:62ch;color:var(--ink-soft)}
+  .lead{color:var(--ink);font-size:1.075rem}
+  .eyebrow{font-size:.72rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--brand-bright);margin:0 0 14px}
+  .muted{color:var(--ink-soft)}
+  a{color:var(--brand-bright)}
+
+  /* ---- Wordmark ---- */
+  .mark{display:inline-flex;align-items:baseline;gap:.02em;font-weight:800;
+    letter-spacing:-.02em;line-height:1}
+  .mark .m1{color:currentColor}
+  .mark .plus{color:var(--accent);font-weight:800;transform:translateY(-.04em)}
+  .mark .m2{color:currentColor;font-weight:500}
+
+  /* ---- Top bar ---- */
+  .topbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--ground) 88%,transparent);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  .topbar .mark{font-size:1.28rem;color:var(--ink)}
+  .badge{font-size:.72rem;font-weight:600;letter-spacing:.02em;color:var(--ink-soft);
+    border:1px solid var(--line);border-radius:999px;padding:5px 12px;background:var(--surface)}
+
+  /* ---- Hero ---- */
+  .hero{background:
+      radial-gradient(120% 120% at 100% -10%, color-mix(in srgb,var(--brand-bright) 34%, var(--hero-ground)) 0%, transparent 46%),
+      radial-gradient(90% 90% at -10% 110%, color-mix(in srgb,var(--accent) 26%, var(--hero-ground)) 0%, transparent 42%),
+      var(--hero-ground);
+    color:var(--hero-ink);border-top:none;position:relative;overflow:hidden}
+  .hero .wrap{padding-top:82px;padding-bottom:88px;position:relative;z-index:1}
+  .hero .mark{font-size:clamp(2.2rem,7vw,4rem);color:var(--hero-ink)}
+  .hero .tagline{font-family:var(--serif);font-style:italic;font-weight:600;
+    font-size:clamp(2.4rem,6.4vw,4.4rem);line-height:1.02;margin:.35em 0 .1em;
+    letter-spacing:-.02em;text-wrap:balance}
+  .hero .tagline em{color:var(--accent);font-style:italic}
+  .hero .sub{color:var(--hero-soft);max-width:52ch;font-size:1.1rem}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:28px}
+  .hero .pulse{position:absolute;inset:0;z-index:0;opacity:.5;pointer-events:none}
+
+  /* ---- Buttons ---- */
+  .btn{display:inline-flex;align-items:center;gap:9px;font:inherit;font-weight:650;
+    font-size:.98rem;padding:13px 22px;border-radius:999px;border:1.5px solid transparent;
+    cursor:pointer;text-decoration:none;transition:transform .15s ease, box-shadow .15s ease, background .15s ease}
+  .btn:focus-visible{outline:3px solid var(--brand-bright);outline-offset:2px}
+  .btn-primary{background:var(--accent);color:var(--on-accent);
+    box-shadow:0 10px 24px -12px color-mix(in srgb,var(--accent) 80%,#000)}
+  .btn-primary:hover{transform:translateY(-2px)}
+  .btn-ghost{background:transparent;color:inherit;border-color:color-mix(in srgb,currentColor 34%,transparent)}
+  .btn-ghost:hover{background:color-mix(in srgb,currentColor 10%,transparent)}
+  .btn-solid{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .btn-solid:hover{transform:translateY(-2px)}
+  .btn-sm{padding:9px 16px;font-size:.9rem}
+
+  /* ---- Rationale strip ---- */
+  .why{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px;margin-top:26px}
+  .why .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow)}
+  .why .n{font-family:var(--serif);font-size:1.4rem;color:var(--brand-bright);font-weight:600}
+
+  /* ---- Palette ---- */
+  .swatches{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-top:26px}
+  .sw{border:1px solid var(--line);border-radius:var(--radius-sm);overflow:hidden;background:var(--surface)}
+  .sw .chip{height:92px}
+  .sw .meta{padding:12px 14px}
+  .sw .nm{font-weight:650;font-size:.92rem}
+  .sw .hex{font-family:ui-monospace,"SFMono-Regular",Menlo,monospace;font-size:.8rem;color:var(--ink-soft);
+    letter-spacing:.02em}
+  .sw .role{font-size:.78rem;color:var(--ink-soft);margin-top:2px}
+
+  /* ---- Type specimen ---- */
+  .type-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-top:24px}
+  .specimen{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:26px 28px;box-shadow:var(--shadow)}
+  .spec-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:14px;padding:12px 0;border-bottom:1px dashed var(--line)}
+  .spec-row:last-child{border-bottom:none}
+  .spec-tag{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);
+    min-width:120px;flex-shrink:0}
+  .d-serif{font-family:var(--serif)}
+  .scale-1{font-family:var(--serif);font-size:2.4rem;font-weight:600;letter-spacing:-.02em}
+  .scale-2{font-size:1.5rem;font-weight:600;letter-spacing:-.01em}
+  .scale-3{font-size:1.05rem;font-weight:650}
+  .scale-4{font-size:1rem}
+  .scale-5{font-size:.75rem;text-transform:uppercase;letter-spacing:.14em;font-weight:700;color:var(--brand-bright)}
+
+  /* ---- Components ---- */
+  .comp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:22px;margin-top:26px}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow)}
+  .panel h3{margin-bottom:14px}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .pill{font-size:.76rem;font-weight:650;padding:5px 11px;border-radius:999px;letter-spacing:.01em}
+  .pill-brand{background:color-mix(in srgb,var(--brand-bright) 16%,transparent);color:var(--brand);border:1px solid color-mix(in srgb,var(--brand-bright) 32%,transparent)}
+  .pill-accent{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent-deep);border:1px solid color-mix(in srgb,var(--accent) 34%,transparent)}
+  .pill-good{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good);border:1px solid color-mix(in srgb,var(--good) 32%,transparent)}
+  .field{width:100%;font:inherit;padding:11px 14px;border-radius:var(--radius-sm);
+    border:1.5px solid var(--line);background:var(--ground);color:var(--ink)}
+  .field:focus-visible{outline:none;border-color:var(--brand-bright);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-bright) 24%,transparent)}
+
+  /* ---- Category tiles (as 6 seções reais) ---- */
+  .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-top:26px}
+  .cat{display:flex;flex-direction:column;gap:10px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);transition:transform .15s ease,border-color .15s ease}
+  .cat:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--brand-bright) 50%,var(--line))}
+  .cat .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
+    background:color-mix(in srgb,var(--brand-bright) 15%,transparent);color:var(--brand)}
+  .cat .ic svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .cat .nm{font-weight:700;font-size:1rem}
+  .cat .ds{font-size:.85rem;color:var(--ink-soft)}
+
+  /* ---- Product card ---- */
+  .prod{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .prod .ph{height:120px;background:
+      radial-gradient(80% 120% at 20% 0%, color-mix(in srgb,var(--brand-bright) 30%,var(--surface-2)), var(--surface-2));
+    display:grid;place-items:center;color:var(--brand)}
+  .prod .ph svg{width:44px;height:44px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+  .prod .body{padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+  .prod .nm{font-weight:700}
+  .prod .ds{font-size:.86rem;color:var(--ink-soft)}
+  .prod .foot{display:flex;align-items:center;justify-content:space-between;margin-top:6px}
+  .prod .price{font-weight:700;color:var(--brand)}
+
+  /* ---- Mockup storefront ---- */
+  .mock{margin-top:26px;border:1px solid var(--line);border-radius:20px;overflow:hidden;
+    box-shadow:var(--shadow);background:var(--surface)}
+  .mock .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;
+    border-bottom:1px solid var(--line);background:var(--surface)}
+  .mock .nav .links{display:flex;gap:18px;font-size:.9rem;color:var(--ink-soft);font-weight:550}
+  .mock .nav .links span{display:none}
+  .mock .strip{padding:34px 24px;background:
+      linear-gradient(120deg, color-mix(in srgb,var(--brand-deep) 92%,#000) 0%, var(--brand) 100%);
+    color:#eaf6f8}
+  .mock .strip .tl{font-family:var(--serif);font-style:italic;font-weight:600;
+    font-size:clamp(1.6rem,3.6vw,2.4rem);margin:0 0 6px}
+  .mock .strip .tl em{color:var(--accent);font-style:italic}
+  .mock .strip p{color:#bfe0e6;max-width:44ch;margin:0 0 18px}
+  .mock .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;padding:22px}
+  .mock .cta-band{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;
+    padding:20px 24px;border-top:1px solid var(--line);background:var(--surface-2)}
+  .mock .cta-band .t{font-family:var(--serif);font-size:1.15rem;font-weight:600}
+
+  /* ---- Footer / next ---- */
+  .next{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:24px}
+  .step{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius);padding:18px}
+  .step .k{font-family:var(--serif);font-size:1.2rem;color:var(--accent);font-weight:700;line-height:1}
+  footer{padding:40px 0 70px;color:var(--ink-soft);font-size:.9rem}
+  .foot-mark{font-size:1.1rem;color:var(--ink)}
+
+  @media (min-width:720px){ .mock .nav .links span{display:inline} }
+  @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+
+<div class="topbar">
+  <div class="wrap">
+    <span class="mark"><span class="m1">imuno</span><span class="plus">+</span><span class="m2">care</span></span>
+    <span class="badge">Proposta de identidade · Loja online</span>
+  </div>
+</div>
+
+<header class="hero">
+  <canvas class="pulse" id="pulse" aria-hidden="true"></canvas>
+  <div class="wrap">
+    <p class="eyebrow" style="color:var(--hero-soft)">Clínica de vacinação · Uberlândia-MG</p>
+    <span class="mark"><span class="m1">imuno</span><span class="plus">+</span><span class="m2">care</span></span>
+    <h1 class="tagline">Você <em>mais forte</em>.</h1>
+    <p class="sub">Uma evolução da identidade atual: o azul-clínico amadurece para um
+      <strong>teal profundo</strong> de confiança, com um <strong>coral de vitalidade</strong> que
+      traduz a promessa da marca. Menos frieza de hospital, mais cuidado premium de quem protege a família.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#mock">Agendar vacinação
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <a class="btn btn-ghost" href="#paleta" style="color:var(--hero-ink)">Ver o sistema visual</a>
+    </div>
+  </div>
+</header>
+
+<section id="evolucao">
+  <div class="wrap">
+    <p class="eyebrow">A evolução</p>
+    <h2>De onde parte, para onde vai</h2>
+    <p class="lead">O site atual já fala em azul e clareza — essa base é boa. A proposta não joga fora:
+      ela <strong>aprofunda e aquece</strong>, criando um sistema consistente que serve tanto a loja
+      quanto o agendamento, sem parecer genérico de template.</p>
+    <div class="why">
+      <div class="card"><div class="n">01</div><h3>Confiança que amadurece</h3>
+        <p>O ciano claro vira um <strong>teal profundo</strong>: mais sério, mais premium, melhor contraste e legibilidade.</p></div>
+      <div class="card"><div class="n">02</div><h3>Vitalidade com rosto humano</h3>
+        <p>Um <strong>coral</strong> quente carrega o "você mais forte" — usado só nas ações e nos destaques, nunca no fundo inteiro.</p></div>
+      <div class="card"><div class="n">03</div><h3>Um sistema, não uma tela</h3>
+        <p>Cores, tipos e componentes viram <strong>tokens</strong> reaproveitáveis — a loja, a carteira e os e-mails ficam coerentes.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="paleta">
+  <div class="wrap">
+    <p class="eyebrow">Paleta</p>
+    <h2>Cores com papel definido</h2>
+    <p>Azuis carregam confiança e estrutura; o coral é a única voz quente — reservado para o que o cliente deve tocar.
+      Os neutros têm leve viés de teal, para nada parecer cinza "de sistema".</p>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#0C5566"></div><div class="meta"><div class="nm">Teal Profundo</div><div class="hex">#0C5566</div><div class="role">Marca · títulos · logo</div></div></div>
+      <div class="sw"><div class="chip" style="background:#063A47"></div><div class="meta"><div class="nm">Petróleo</div><div class="hex">#063A47</div><div class="role">Fundo do hero</div></div></div>
+      <div class="sw"><div class="chip" style="background:#12A2BE"></div><div class="meta"><div class="nm">Ciano Vivo</div><div class="hex">#12A2BE</div><div class="role">Links · interação · foco</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FB6D51"></div><div class="meta"><div class="nm">Coral Vitalidade</div><div class="hex">#FB6D51</div><div class="role">CTAs · destaques</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F4F8F8;border-bottom:1px solid #D9E5E5"></div><div class="meta"><div class="nm">Base Névoa</div><div class="hex">#F4F8F8</div><div class="role">Fundo das páginas</div></div></div>
+      <div class="sw"><div class="chip" style="background:#10292F"></div><div class="meta"><div class="nm">Tinta Teal</div><div class="hex">#10292F</div><div class="role">Texto principal</div></div></div>
+    </div>
+  </div>
+</section>
+
+<section id="tipografia">
+  <div class="wrap">
+    <p class="eyebrow">Tipografia</p>
+    <h2>Serifa que acolhe, sans que organiza</h2>
+    <p>Uma <strong>serifa editorial</strong> dá o tom humano nos títulos e no tagline; uma
+      <strong>sans limpa</strong> conduz preços, botões e formulários. O contraste evita o visual
+      "tech genérico" e sustenta o posicionamento premium.</p>
+    <div class="type-grid">
+      <div class="specimen">
+        <div class="spec-row"><span class="spec-tag">Display · serifa</span><span class="scale-1 d-serif">Você mais forte</span></div>
+        <div class="spec-row"><span class="spec-tag">Título H2</span><span class="scale-2 d-serif">Vacinas para toda a família</span></div>
+        <div class="spec-row"><span class="spec-tag">Subtítulo</span><span class="scale-3">Proteção com hora marcada, sem fila</span></div>
+        <div class="spec-row"><span class="spec-tag">Corpo · sans</span><span class="scale-4">Agende sua dose, escolha o melhor horário e receba o comprovante — tudo em poucos toques.</span></div>
+        <div class="spec-row"><span class="spec-tag">Rótulo</span><span class="scale-5">Imunização premium</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="componentes">
+  <div class="wrap">
+    <p class="eyebrow">Componentes</p>
+    <h2>As peças da interface</h2>
+    <p>Botões, etiquetas de estado, campos e cartões — todos derivados dos mesmos tokens de cor e raio.</p>
+    <div class="comp-grid">
+      <div class="panel">
+        <h3>Botões</h3>
+        <div class="row" style="margin-bottom:12px">
+          <button class="btn btn-primary btn-sm">Agendar</button>
+          <button class="btn btn-solid btn-sm">Adicionar à sacola</button>
+        </div>
+        <div class="row">
+          <button class="btn btn-ghost btn-sm" style="color:var(--ink)">Ver detalhes</button>
+          <span class="pill pill-accent">Ação principal = coral</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Etiquetas &amp; estado</h3>
+        <div class="row">
+          <span class="pill pill-brand">Em estoque</span>
+          <span class="pill pill-good">Pago</span>
+          <span class="pill pill-accent">Últimas vagas</span>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <span class="pill pill-brand">1 dose</span>
+          <span class="pill pill-brand">A partir de 12 anos</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Campo de busca</h3>
+        <input class="field" placeholder="Buscar vacina, vitamina ou consulta…" aria-label="Buscar" />
+        <div class="row" style="margin-top:12px">
+          <button class="btn btn-solid btn-sm">Buscar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="secoes">
+  <div class="wrap">
+    <p class="eyebrow">As 6 seções da loja</p>
+    <h2>Cada categoria com sua cara</h2>
+    <p>As seções reais do catálogo, com ícones desenhados na linguagem da marca (traço, não emoji).</p>
+    <div class="cats">
+      <div class="cat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M18 2l4 4M17 5l2 2M15 7l-9 9-3 1 1-3 9-9zM8 14l2 2"/></svg></div><div class="nm">Vacinas</div><div class="ds">Calendário premium e PNI</div></div>
+      <div class="cat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3s5 6 5 10a5 5 0 0 1-10 0c0-4 5-10 5-10z"/></svg></div><div class="nm">Vitaminas injetáveis</div><div class="ds">Reposição e imunidade</div></div>
+      <div class="cat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M2 12h4l2 6 4-14 2 8h6"/></svg></div><div class="nm">Terapias injetáveis</div><div class="ds">Protocolos guiados</div></div>
+      <div class="cat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M6 3v6a6 6 0 0 0 12 0V3M9 3v3M15 3v3M18 15a3 3 0 0 1 3 3v2"/><circle cx="18" cy="12" r="1.4"/></svg></div><div class="nm">Consultas médicas</div><div class="ds">Avaliação e orientação</div></div>
+      <div class="cat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 9h18v11H3zM3 9l2-5h14l2 5M12 4v16M8 9c-2 0-3-3-1-4s3 2 1 4zM16 9c2 0 3-3 1-4s-3 2-1 4z"/></svg></div><div class="nm">Vale-presente</div><div class="ds">Cuidado de presente</div></div>
+      <div class="cat"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 4a4 4 0 0 0-4 4v4a4 4 0 0 0 8 0V8"/><circle cx="16" cy="18" r="2.2"/></svg></div><div class="nm">Brincos</div><div class="ds">Furo com segurança</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="mock">
+  <div class="wrap">
+    <p class="eyebrow">Preview</p>
+    <h2>A loja, montada</h2>
+    <p>Como os tokens se compõem numa tela real de storefront — cabeçalho, vitrine e chamada de agendamento.
+      <span class="muted">(preços ilustrativos)</span></p>
+    <div class="mock">
+      <div class="nav">
+        <span class="mark" style="font-size:1.1rem;color:var(--ink)"><span class="m1">imuno</span><span class="plus">+</span><span class="m2">care</span></span>
+        <span class="links"><span>Vacinas</span><span>Vitaminas</span><span>Consultas</span></span>
+        <button class="btn btn-primary btn-sm">Agendar</button>
+      </div>
+      <div class="strip">
+        <div class="tl">Você <em>mais forte</em>, o ano todo.</div>
+        <p>Vacinas, vitaminas e consultas com agendamento online e comprovante na hora.</p>
+        <button class="btn btn-primary">Começar agora</button>
+      </div>
+      <div class="grid">
+        <div class="prod"><div class="ph"><svg viewBox="0 0 24 24"><path d="M18 2l4 4M17 5l2 2M15 7l-9 9-3 1 1-3 9-9zM8 14l2 2"/></svg></div>
+          <div class="body"><div class="nm">Gripe (Influenza)</div><div class="ds">Quadrivalente · 1 dose</div>
+            <div class="foot"><span class="pill pill-brand">Em estoque</span><button class="btn btn-solid btn-sm">Agendar</button></div></div></div>
+        <div class="prod"><div class="ph"><svg viewBox="0 0 24 24"><path d="M12 3s5 6 5 10a5 5 0 0 1-10 0c0-4 5-10 5-10z"/></svg></div>
+          <div class="body"><div class="nm">Vitamina D injetável</div><div class="ds">Reposição · avaliação inclusa</div>
+            <div class="foot"><span class="pill pill-accent">Procurado</span><button class="btn btn-solid btn-sm">Agendar</button></div></div></div>
+        <div class="prod"><div class="ph"><svg viewBox="0 0 24 24"><path d="M6 3v6a6 6 0 0 0 12 0V3M9 3v3M15 3v3M18 15a3 3 0 0 1 3 3v2"/><circle cx="18" cy="12" r="1.4"/></svg></div>
+          <div class="body"><div class="nm">Consulta de imunização</div><div class="ds">Plano de vacinas personalizado</div>
+            <div class="foot"><span class="pill pill-good">Online</span><button class="btn btn-solid btn-sm">Marcar</button></div></div></div>
+      </div>
+      <div class="cta-band">
+        <span class="t">Não sabe de qual vacina precisa?</span>
+        <button class="btn btn-primary btn-sm">Falar com a clínica</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="proximos">
+  <div class="wrap">
+    <p class="eyebrow">Se você aprovar</p>
+    <h2>Como isso vira a loja de verdade</h2>
+    <p>Tudo aplicado pelo <strong>nativo do Frappe</strong> — reuso primeiro, sem framework novo:
+      <strong>Website Theme</strong> (cores, tipos, CSS), <strong>Website Settings</strong> (logo, favicon,
+      rodapé) e os hooks de SCSS que o app já reserva.</p>
+    <div class="next">
+      <div class="step"><span class="k">1</span><div><h3>Tokens &amp; tema</h3><p class="muted">Paleta e tipos viram um Website Theme + SCSS versionado no imunocare_ecommerce.</p></div></div>
+      <div class="step"><span class="k">2</span><div><h3>Logo &amp; favicon</h3><p class="muted">Wordmark evoluído aplicado; troca pelo SVG oficial quando você tiver.</p></div></div>
+      <div class="step"><span class="k">3</span><div><h3>Vitrine &amp; seções</h3><p class="muted">Cartões, botões e as 6 categorias estilizados no storefront do webshop.</p></div></div>
+      <div class="step"><span class="k">4</span><div><h3>Revisão no local</h3><p class="muted">Você vê rodando no imunocare.local antes de qualquer deploy.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="mark foot-mark"><span class="m1">imuno</span><span class="plus">+</span><span class="m2">care</span></span>
+    <p style="margin-top:10px">Proposta de identidade visual da loja online · versão 1 para aprovação.
+      Wordmark e paleta são propostas editáveis. Nenhum código foi aplicado ainda.</p>
+  </div>
+</footer>
+
+<script>
+  // Batimento sutil no hero (respeitando reduced-motion). Decorativo.
+  (function(){
+    var c = document.getElementById('pulse');
+    if(!c) return;
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var ctx = c.getContext('2d'), w, h, t=0;
+    function size(){ w=c.width=c.offsetWidth*devicePixelRatio; h=c.height=c.offsetHeight*devicePixelRatio; }
+    size(); window.addEventListener('resize', size);
+    function line(offset, alpha){
+      ctx.beginPath();
+      var mid=h*0.62, amp=h*0.12;
+      for(var x=0;x<=w;x+=6){
+        var p=(x/w)*Math.PI*8 + offset;
+        var beat=Math.sin(p)*Math.exp(-Math.pow((x/w*8 % (Math.PI*2))-Math.PI,2)*0.6);
+        var y=mid - beat*amp - Math.sin(x/w*Math.PI)*amp*0.4;
+        x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      }
+      ctx.strokeStyle='rgba(251,109,81,'+alpha+')';
+      ctx.lineWidth=2*devicePixelRatio; ctx.stroke();
+    }
+    function frame(){ ctx.clearRect(0,0,w,h); line(t,0.5); line(t+1.2,0.18); t+=0.03; requestAnimationFrame(frame); }
+    if(reduce){ line(0,0.4); line(1.2,0.15); } else { frame(); }
+  })();
+</script>
