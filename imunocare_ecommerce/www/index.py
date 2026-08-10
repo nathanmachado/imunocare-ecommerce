@@ -67,6 +67,17 @@ def get_context(context):
 		context.nav_imuno = []
 		context.nav_care = []
 
+	# R2 (Feature 70 — REDO do site): carrossel de médicos parceiros. Lista
+	# vazia (nenhum profissional com imun_publicar_site=1) esconde a seção
+	# inteira no template — ver medicos.home.medicos_para_home().
+	try:
+		from imunocare_ecommerce.medicos.home import medicos_para_home
+
+		context.medicos = medicos_para_home()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.www.index")
+		context.medicos = []
+
 	return context
 
 

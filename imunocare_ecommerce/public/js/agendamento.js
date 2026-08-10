@@ -49,11 +49,17 @@ function imun_render_botao_agendar(item_code, info) {
 				"/login?redirect-to=" + encodeURIComponent(window.location.pathname);
 			return;
 		}
-		imun_abrir_dialogo_agendamento(item_code, info);
+		imun_abrir_dialogo_agendamento({ item_code: item_code }, info);
 	});
 }
 
-function imun_abrir_dialogo_agendamento(item_code, info) {
+// Diálogo de agendamento compartilhado — aceita ``params`` com
+// ``{item_code}`` (item da loja, fluxo A1.3 acima) OU ``{appointment_type}``
+// (agendamento direto, ex.: carrossel de médicos na home — R2/Feature 70)
+// porque ``agendamento.booking`` já resolve os dois formatos
+// (``_resolver_agendavel``). Exposto em ``window.imunAbrirAgendamentoDialogo``
+// para outros scripts site-wide reusarem sem duplicar o diálogo inteiro.
+function imun_abrir_dialogo_agendamento(params, info) {
 	// F3: modalidade "Na clínica x Domiciliar" — consome o endpoint
 	// info_domiciliar() (já pronto, ver agendamento/domiciliar.py) para
 	// decidir se mostra a opção e o texto da taxa. Antes desta atividade o
@@ -61,12 +67,12 @@ function imun_abrir_dialogo_agendamento(item_code, info) {
 	frappe.call({
 		method: "imunocare_ecommerce.agendamento.domiciliar.info_domiciliar",
 		callback: function (r) {
-			imun_montar_dialogo_agendamento(item_code, info, r.message || {});
+			imun_montar_dialogo_agendamento(params, info, r.message || {});
 		},
 	});
 }
 
-function imun_montar_dialogo_agendamento(item_code, info, domiciliar_info) {
+function imun_montar_dialogo_agendamento(params, info, domiciliar_info) {
 	var fields = [
 		{
 			fieldname: "appointment_date",
@@ -116,16 +122,18 @@ function imun_montar_dialogo_agendamento(item_code, info, domiciliar_info) {
 			var domiciliar = domiciliar_info.ativo && values.modalidade === __("Domiciliar (+ taxa)");
 			frappe.call({
 				method: "imunocare_ecommerce.agendamento.booking.criar_agendamento",
-				args: {
-					item_code: item_code,
-					appointment_date: values.appointment_date,
-					appointment_time: values.appointment_time,
-					practitioner: info.practitioner,
-					modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
-					// Rastreio da jornada (Feature 56 / A2.4) — null se o cliente não
-					// consentiu, e o agendamento segue normalmente sem UTM/origem.
-					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
-				},
+				args: Object.assign(
+					{
+						appointment_date: values.appointment_date,
+						appointment_time: values.appointment_time,
+						practitioner: info.practitioner,
+						modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
+						// Rastreio da jornada (Feature 56 / A2.4) — null se o cliente não
+						// consentiu, e o agendamento segue normalmente sem UTM/origem.
+						session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
+					},
+					params
+				),
 				freeze: true,
 				freeze_message: __("Agendando..."),
 				callback: function (r) {
@@ -165,7 +173,7 @@ function imun_montar_dialogo_agendamento(item_code, info, domiciliar_info) {
 
 		frappe.call({
 			method: "imunocare_ecommerce.agendamento.booking.get_horarios",
-			args: { item_code: item_code, data: data, practitioner: info.practitioner },
+			args: Object.assign({ data: data, practitioner: info.practitioner }, params),
 			callback: function (r) {
 				imun_render_horarios(d, r.message || {});
 			},
@@ -203,3 +211,8 @@ function imun_render_horarios(d, res) {
 		d.set_value("appointment_time", $(this).data("hora"));
 	});
 }
+
+// Reuso site-wide (R2/Feature 70 — carrossel de médicos na home,
+// public/js/medicos_carrossel.js): mesmo diálogo de agendamento, sem
+// duplicar a lógica de disponibilidade/confirmação acima.
+window.imunAbrirAgendamentoDialogo = imun_abrir_dialogo_agendamento;

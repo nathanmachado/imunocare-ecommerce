@@ -15,6 +15,11 @@
 	<!-- Hero: kicker genérico -> H1 tagline -> sub -> CTAs -> trust row
 	     (F6 — hierarquia revisada, sem o kicker domiciliar, ver F3). -->
 	<section class="imun-hero">
+		<img
+			src="/assets/imunocare_ecommerce/logo/brand/imunocare-simbolo-ciano.png"
+			alt=""
+			aria-hidden="true"
+			class="imun-hero-marca-agua">
 		<span class="imun-hero-kicker">Clínica de Vacinas Particulares em Uberlândia</span>
 		<h1 class="imun-hero-tagline">Você <span class="imun-accent">mais forte!</span></h1>
 		<p class="imun-hero-sub">
@@ -117,6 +122,87 @@
 			Catálogo em preparação — volte em breve.
 		</div>
 	{% endif %}
+
+	<!-- R2 (Feature 70 — REDO do site): carrossel de médicos parceiros.
+	     Dados 100% do Healthcare Practitioner nativo (imun_publicar_site=1
+	     — ver medicos/setup.py + medicos/home.py). Degrade gracioso: sem
+	     nenhum profissional publicado, a seção inteira fica oculta. -->
+	{% if medicos %}
+	<section class="imun-section" id="medicos-parceiros">
+		<div class="d-flex justify-content-between align-items-center mb-2">
+			<h2 class="imun-section-title h4 mb-0 imun-section-title-icon">
+				{{ imun_icone("Consultas Médicas", 22) }}Médicos parceiros
+			</h2>
+			<a href="/parceria-com-medicos" class="small">Ver todos &rarr;</a>
+		</div>
+		<p class="text-muted" style="max-width:64ch;">
+			Conheça alguns dos profissionais de saúde habilitados que atendem na Imunocare.
+		</p>
+		<div class="imun-medicos-carrossel">
+			{% for m in medicos %}
+			<div class="imun-medico-card">
+				{% if m.foto %}
+				<img
+					src="{{ m.foto }}"
+					alt="{{ m.nome }}"
+					class="imun-medico-foto"
+					loading="lazy">
+				{% else %}
+				<div class="imun-medico-foto-ph" aria-hidden="true">
+					{{ imun_icone("Consultas Médicas", 40) }}
+				</div>
+				{% endif %}
+				<div class="imun-medico-body">
+					{% if m.especialidade %}
+					<span class="imun-medico-especialidade">{{ m.especialidade }}</span>
+					{% endif %}
+					<div class="imun-medico-nome">{{ m.nome }}</div>
+					{% if m.bio %}
+					<div class="imun-medico-bio">{{ m.bio }}</div>
+					{% endif %}
+					{% if m.appointment_type %}
+					<button
+						type="button"
+						class="btn imun-cta imun-btn-sm imun-medico-agendar"
+						data-practitioner="{{ m.practitioner }}"
+						data-appointment-type="{{ m.appointment_type }}">
+						Agendar
+					</button>
+					{% else %}
+					<a href="/parceria-com-medicos" class="btn imun-cta imun-btn-sm">Saiba mais</a>
+					{% endif %}
+				</div>
+			</div>
+			{% endfor %}
+		</div>
+	</section>
+	{% endif %}
+
+	<!-- R3 (Feature 70 — REDO do site): resumo do Protocolo de Emagrecimento
+	     na home, ADS-SAFE (nunca cita princípio ativo/fármaco — linguagem de
+	     "protocolo / acompanhamento médico / avaliação individualizada").
+	     Reaproveita 100% a landing /protocolo-de-emagrecimento existente —
+	     os CTAs levam para lá (âncora do agendamento inclusive), sem
+	     duplicar formulário/calendário aqui. -->
+	<section class="imun-section" id="protocolo-emagrecimento">
+		<span class="imun-eyebrow">Consulta médica</span>
+		<h2 class="imun-section-title h4">Protocolo de Emagrecimento com Acompanhamento Médico</h2>
+		<div class="imun-emagrecimento-bloco">
+			<div>
+				<span class="imun-pill imun-pill-accent">Consulta médica</span>
+				<h3>Um programa conduzido por médico, do início ao fim</h3>
+				<p>
+					Avaliação médica, exames e acompanhamento contínuo — para você seguir
+					mais forte, com segurança e responsabilidade. A indicação e o plano
+					são sempre individuais, definidos pelo médico após avaliação.
+				</p>
+			</div>
+			<div class="imun-emagrecimento-cta">
+				<a href="/protocolo-de-emagrecimento" class="imun-btn-outline">Saber mais</a>
+				<a href="/protocolo-de-emagrecimento#imun-avaliacao" class="btn imun-cta">Agendar avaliação</a>
+			</div>
+		</div>
+	</section>
 
 	<!-- Linha Care (F7): teaser "em breve" — produtos ainda não cadastrados
 	     pelo dono; cada chip leva à página de categoria informativa. -->
