@@ -166,6 +166,15 @@ a:hover {{ color: var(--imun-coral); }}
 	.imun-brand-symbol, .navbar .navbar-brand img.imun-brand-symbol {{ height: 40px !important; max-height: 40px !important; }}
 	.imun-brand-text {{ font-size: 1.3rem; }}
 }}
+// Menu "Produtos" à DIREITA (feedback do dono 2026-08-10): o navbar nativo põe
+// a lista de itens com ``mr-auto`` (colada na logo → parecia parte do nome).
+// Invertendo para ``margin-left:auto`` ela vai para a direita, ao lado do
+// carrinho/Entrar; ``gap`` afasta um pouco os itens de nav entre si.
+#navbarSupportedContent > .navbar-nav.mr-auto {{
+	margin-right: 0 !important;
+	margin-left: auto !important;
+}}
+#navbarSupportedContent > .navbar-nav.ml-auto {{ margin-left: 1.5rem !important; }}
 
 // ---- Rodapé escuro (identidade oficial): fundo petróleo + logo/textos
 //      claros — o "Standard Footer" nativo do Frappe usa fundo CLARO por
