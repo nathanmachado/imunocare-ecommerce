@@ -153,8 +153,33 @@ _TERMOS_PROIBIDOS_PUBLICOS: tuple[str, ...] = (
 # ruim. Produto sem foto própria fica com ``website_image`` vazio de
 # propósito: o fallback visual agora é o ÍCONE SVG de traço da seção
 # (templates/includes/imun_icons.html), não mais uma foto repetida.
+# Fotos de produto das vacinas (mão segurando o frasco + rótulo da marca),
+# fornecidas pelo dono 2026-08-09, otimizadas em public/img/vacinas/. Match por
+# substring no NOME DE LOJA do item; PRIMEIRA ocorrência vence (_imagem_para),
+# então a ORDEM importa — o mais específico vem antes do mais genérico:
+#   - "rotavirus" ANTES de "pentavalente" (senão "Rotavirus Pentavalente"
+#     casaria com a foto do Pentavalente puro).
+#   - "tetraxim" (DTPa+IPV) ANTES de "dtpa" (senão "DTPa + IPV - Tetraxim"
+#     casaria com a foto do DTPa puro).
+# Vacinas do catálogo sem foto no lote (HPV, Beyfortus, Febre Amarela, etc.)
+# ficam sem website_image de propósito → fallback é o ícone SVG da seção.
+# "pneumo-23.jpg" fica mapeado para uso futuro (não há item 23V hoje).
 _IMAGEM_POR_PALAVRA: list[tuple[str, str]] = [
-	("qdenga", "qdenga.jpg"),
+	("qdenga", "vacinas/qdenga.jpg"),
+	("rotavirus", "vacinas/rotavirus-pentavalente.jpg"),
+	("pentavalente", "vacinas/pentavalente.jpg"),
+	("influenza tetravalente", "vacinas/influenza-tetravalente.jpg"),
+	("acwy", "vacinas/meningo-acwy.jpg"),
+	("meningite b", "vacinas/meningo-b.jpg"),
+	("meningocócica b", "vacinas/meningo-b.jpg"),
+	("13v", "vacinas/pneumo-13.jpg"),
+	("15v", "vacinas/pneumo-15.jpg"),
+	("20v", "vacinas/pneumo-20.jpg"),
+	("23v", "vacinas/pneumo-23.jpg"),
+	("mmr", "vacinas/triplice-viral-mmr.jpg"),
+	("tetraxim", "vacinas/tetravalente.jpg"),
+	("dtpa", "vacinas/dtpa.jpg"),
+	("varicela", "vacinas/varivax.jpg"),
 ]
 
 

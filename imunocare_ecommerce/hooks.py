@@ -46,7 +46,33 @@ fixtures = [
 				],
 			]
 		],
-	}
+	},
+	# R2 (Feature 70 — REDO do site): carrossel de médicos parceiros na home —
+	# custom fields de PUBLICAÇÃO em Healthcare Practitioner (nativo do
+	# Healthcare, não tocado — só estendido). Criados em código, idempotentes
+	# (medicos.setup.setup_medicos, ver after_install/after_migrate abaixo);
+	# esta entrada só serve para exportar/versionar o estado via
+	# `bench export-fixtures`, mesmo padrão do imunocare_clinic_ext.
+	{
+		"dt": "Custom Field",
+		"filters": [
+			[
+				"dt",
+				"in",
+				["Healthcare Practitioner"],
+			],
+			[
+				"fieldname",
+				"in",
+				[
+					"imun_site_section",
+					"imun_publicar_site",
+					"imun_bio_publica",
+					"imun_appointment_type",
+				],
+			],
+		],
+	},
 ]
 
 # Each item in the list will be shown as an app in the apps page
@@ -79,6 +105,11 @@ web_include_js = [
 	"/assets/imunocare_ecommerce/js/seo_jsonld.js",
 	"/assets/imunocare_ecommerce/js/rastreio.js",
 	"/assets/imunocare_ecommerce/js/domiciliar_cart.js",
+	# R2 (Feature 70): botão "Agendar" do carrossel de médicos parceiros na
+	# home — reusa o diálogo de agendamento.js (window.imunAbrirAgendamentoDialogo),
+	# carregado depois dele por clareza (a chamada só acontece no clique, a
+	# ordem de carregamento em si não é estritamente necessária).
+	"/assets/imunocare_ecommerce/js/medicos_carrossel.js",
 	# Reestiliza o card nativo do webshop (grid all-products/categoria) para o
 	# DESIGN_ALVO_v1 — monkey-patch de webshop.ProductGrid, ver comentário no
 	# próprio arquivo. Precisa carregar DEPOIS do "web.bundle.js" do webshop
@@ -153,6 +184,7 @@ after_install = [
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
 	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
 	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
+	"imunocare_ecommerce.medicos.setup.setup_medicos",
 	"imunocare_ecommerce.landing.setup.setup_landing_pages",
 	"imunocare_ecommerce.rastreio.setup.setup_rastreio",
 ]
@@ -171,12 +203,14 @@ after_install = [
 # Feature 55 / A1.6), o checkout apontado ao gateway maxiPago (Feature 63 /
 # A3.3), os custom fields de agendamento online + modalidade domiciliar
 # (Feature 55 / A1.3 e A1.5), o SEO/disclaimer das landing pages (Feature 55 /
-# A1.4) e os custom fields do rastreio de jornada -> funil do CRM (Feature 56 /
-# A2.2 e A2.4) a cada bench migrate. Todos idempotentes e tolerantes a falha
-# (não interrompem o migrate) — a ordem importa: importar_prod cria os Items
-# reais ANTES de setup_catalogo publicá-los; landing/agendamento/rastreio
-# dependem dos Website Items já publicados; rastreio depende do custom field
-# imun_origem_loja já criado por agendamento.
+# A1.4), os custom fields do carrossel de médicos parceiros na home (R2 —
+# Feature 70, em Healthcare Practitioner) e os custom fields do rastreio de
+# jornada -> funil do CRM (Feature 56 / A2.2 e A2.4) a cada bench migrate.
+# Todos idempotentes e tolerantes a falha (não interrompem o migrate) — a
+# ordem importa: importar_prod cria os Items reais ANTES de setup_catalogo
+# publicá-los; landing/agendamento/medicos/rastreio dependem dos Website
+# Items já publicados; rastreio depende do custom field imun_origem_loja já
+# criado por agendamento.
 after_migrate = [
 	"imunocare_ecommerce.identidade.setup.setup_identidade",
 	"imunocare_ecommerce.catalogo.importar_prod.importar_catalogo_prod",
@@ -185,6 +219,7 @@ after_migrate = [
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
 	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
 	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
+	"imunocare_ecommerce.medicos.setup.setup_medicos",
 	"imunocare_ecommerce.landing.setup.setup_landing_pages",
 	"imunocare_ecommerce.rastreio.setup.setup_rastreio",
 ]

@@ -467,7 +467,15 @@ def secoes_para_home(limite_por_secao: int = 4) -> list[dict]:
 				"thumbnail",
 				"short_description",
 			],
-			order_by="web_item_name asc",
+			# Vitrine da home: itens COM foto primeiro (as vacinas fotografadas
+			# do lote 2026-08-09), depois alfabético — para a prévia de 4 cards
+			# não cair só nos itens sem imagem (que renderizam o ícone SVG).
+			# ``website_image desc`` = strings não-vazias antes de NULL/'' no
+			# MariaDB (NULLs por último em DESC); seções sem nenhuma foto
+			# (Vitaminas/Pacotes/Brincos) empatam e caem no ``web_item_name``.
+			# (order_by só aceita "campo [asc|desc]" — CASE é barrado pelo
+			# sanitizador do frappe.get_all como "Consulta SQL ilegal".)
+			order_by="website_image desc, web_item_name asc",
 			limit_page_length=limite_por_secao,
 		)
 		if not website_items:
