@@ -133,27 +133,39 @@ a:hover {{ color: var(--imun-coral); }}
 	border-color: var(--imun-coral-hover) !important;
 }}
 
-// ---- Header: logo oficial COMPLETA (símbolo + wordmark), ver _BRAND_HTML -
-// Ajuste 2026-08-10: logo do header com mais DESTAQUE (pedido do dono) —
-// lockup horizontal ~3.7:1 (557x150) a 56px de altura; navbar ganha folga
-// vertical (min-height + padding) para não cortar o símbolo.
-// !important + especificidade extra: o navbar nativo do Frappe impõe um
-// ``max-height`` no ``.navbar-brand img`` que clampava o logo em ~30-40px.
-.imun-topbar-logo,
-.navbar .navbar-brand img.imun-topbar-logo {{
-	height: 56px !important;
-	max-height: 56px !important;
-	width: auto !important;
-	display: block;
-	vertical-align: middle;
-}}
+// ---- Header: logo DESAGRUPADA (pedido do dono 2026-08-10) — símbolo como
+// IMAGEM + "IMUNOCARE" como TEXTO na fonte oficial (Lexend). Evita a distorção
+// do lockup-em-imagem (o navbar nativo do Frappe clampa a largura do
+// ``.navbar-brand img`` e espremia o wordmark) e fica crisp/escalável.
 .navbar .navbar-brand {{
 	display: flex;
 	align-items: center;
-	padding-top: 6px;
-	padding-bottom: 6px;
+	gap: 12px;
+	padding-top: 8px;
+	padding-bottom: 8px;
 }}
-.navbar {{ min-height: 76px; }}
+.imun-brand-symbol,
+.navbar .navbar-brand img.imun-brand-symbol {{
+	height: 48px !important;
+	max-height: 48px !important;
+	width: auto !important;
+	display: block;
+}}
+.imun-brand-text {{
+	font-family: 'Lexend', sans-serif;
+	font-weight: 800;
+	font-size: 1.6rem;
+	letter-spacing: .1em;
+	line-height: 1;
+	color: var(--imun-petroleo);
+	white-space: nowrap;
+}}
+.navbar .navbar-brand:hover .imun-brand-text {{ color: var(--imun-petroleo); }}
+.navbar {{ min-height: 78px; }}
+@media (max-width: 480px) {{
+	.imun-brand-symbol, .navbar .navbar-brand img.imun-brand-symbol {{ height: 40px !important; max-height: 40px !important; }}
+	.imun-brand-text {{ font-size: 1.3rem; }}
+}}
 
 // ---- Rodapé escuro (identidade oficial): fundo petróleo + logo/textos
 //      claros — o "Standard Footer" nativo do Frappe usa fundo CLARO por
@@ -725,7 +737,19 @@ _LOGO_BRANCO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-logo-branc
 # ``www/index.html`` (``.imun-hero-marca-agua``) — caminho estático, não
 # precisa passar por contexto Python.
 
-_BRAND_HTML = f'<img src="{_LOGO_PATH}" alt="Imunocare" class="imun-topbar-logo">'
+# Header DESAGRUPADO (feedback do dono 2026-08-10): o lockup-em-imagem ficava
+# espremido no navbar. Agora o SÍMBOLO é imagem (anel de pontos, petróleo) e
+# "IMUNOCARE" é TEXTO em Lexend (fonte oficial) — crisp, escalável, sem
+# distorção. O ``<span>`` dá o nome acessível do link; o símbolo é decorativo
+# (``alt=""``). Ver ``.imun-brand-symbol``/``.imun-brand-text`` no SCSS.
+# (``_LOGO_PATH`` — lockup petróleo — deixa de ser usado no header; o rodapé
+# segue com o lockup branco via ``footer_logo``, que renderiza bem fora do
+# navbar.)
+_SIMBOLO_PETROLEO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-simbolo-petroleo.png"
+_BRAND_HTML = (
+	f'<img src="{_SIMBOLO_PETROLEO_PATH}" alt="" aria-hidden="true" class="imun-brand-symbol">'
+	'<span class="imun-brand-text">IMUNOCARE</span>'
+)
 
 _HEAD_HTML_MARCADOR_INICIO = "<!-- imun:favicons:inicio -->"
 _HEAD_HTML_MARCADOR_FIM = "<!-- imun:favicons:fim -->"
