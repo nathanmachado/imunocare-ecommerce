@@ -134,18 +134,26 @@ a:hover {{ color: var(--imun-coral); }}
 }}
 
 // ---- Header: logo oficial COMPLETA (símbolo + wordmark), ver _BRAND_HTML -
-// Ajuste fino 2026-08-10: lockup horizontal ~3.7:1 (557x150) — height maior
-// que o wordmark isolado para o símbolo continuar legível no navbar.
-.imun-topbar-logo {{
-	height: 40px;
-	width: auto;
+// Ajuste 2026-08-10: logo do header com mais DESTAQUE (pedido do dono) —
+// lockup horizontal ~3.7:1 (557x150) a 56px de altura; navbar ganha folga
+// vertical (min-height + padding) para não cortar o símbolo.
+// !important + especificidade extra: o navbar nativo do Frappe impõe um
+// ``max-height`` no ``.navbar-brand img`` que clampava o logo em ~30-40px.
+.imun-topbar-logo,
+.navbar .navbar-brand img.imun-topbar-logo {{
+	height: 56px !important;
+	max-height: 56px !important;
+	width: auto !important;
 	display: block;
 	vertical-align: middle;
 }}
 .navbar .navbar-brand {{
 	display: flex;
 	align-items: center;
+	padding-top: 6px;
+	padding-bottom: 6px;
 }}
+.navbar {{ min-height: 76px; }}
 
 // ---- Rodapé escuro (identidade oficial): fundo petróleo + logo/textos
 //      claros — o "Standard Footer" nativo do Frappe usa fundo CLARO por
