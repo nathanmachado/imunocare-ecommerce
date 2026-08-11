@@ -43,11 +43,18 @@ def setup_webshop_settings() -> None:
 		settings = frappe.get_single("Webshop Settings")
 		mudou = False
 
-		# Interruptores essenciais — sempre ligados (é o objetivo desta atividade).
+		# Interruptores essenciais para a VITRINE — sempre ligados: loja
+		# habilitada, preços visíveis, navegação de itens sem estoque.
+		#
+		# ``enable_checkout`` (pagamento com cartão online) NÃO é forçado aqui
+		# (2026-08-11, go-live prod = "vitrine + agendamento sem cartão"): o
+		# gateway ainda não está confirmado em produção, então o checkout fica
+		# como está (desligado em prod por padrão; quem já ligou manualmente —
+		# ex.: dev — permanece ligado). Ligar o checkout é um passo à parte,
+		# quando o gateway estiver validado em prod.
 		for campo in (
 			"enabled",
 			"show_price",
-			"enable_checkout",
 			"show_price_in_quotation",
 			"allow_items_not_in_stock",
 		):
