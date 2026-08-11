@@ -36,7 +36,8 @@ fixtures = [
 					"Consultas Médicas",
 					"Vale-Presente",
 					"Brincos",
-					"Pacotes",
+					# Item 2b (2026-08-10): "Pacotes" -> "Planos".
+					"Planos",
 					"Exames",
 					# Linha Care (F7):
 					"Cuidado Pessoal",
@@ -115,6 +116,14 @@ web_include_js = [
 	# próprio arquivo. Precisa carregar DEPOIS do "web.bundle.js" do webshop
 	# (garantido pela ordem de instalação dos apps — webshop antes deste).
 	"/assets/imunocare_ecommerce/js/product_grid_style.js",
+	# Item 3 — "Carregar mais" (append) nas páginas de listagem, no lugar da
+	# paginação nativa Prev/Next. Carregado DEPOIS do product_grid_style.js
+	# (mesma razão: usa webshop.ProductGrid/ProductList, precisa do
+	# "web.bundle.js" do webshop já definido).
+	"/assets/imunocare_ecommerce/js/product_list_more.js",
+	# Item 4 — barra de chips de categoria no topo das páginas de listagem
+	# (independente do item 3, mas registrado na mesma leva "loja").
+	"/assets/imunocare_ecommerce/js/product_category_nav.js",
 ]
 
 # include custom scss in every website theme (without file extension ".scss")

@@ -55,6 +55,8 @@ _GRUPO_PAI_CARE = "Cuidado Pessoal"  # = "Linha Care" na navegação do site
 
 # Ordem importa: o pai deve ser criado antes dos filhos.
 # Tupla: (nome, is_group, parent_item_group)
+# Item 2b (2026-08-10): "Pacotes" -> "Planos" (rename real, ver
+# ``_migrar_pacotes_para_planos``, chamada por ``_setup_item_groups``).
 _ITEM_GROUPS: list[tuple[str, int, str]] = [
 	(_GRUPO_PAI, 1, "All Item Groups"),
 	("Vacinas", 0, _GRUPO_PAI),
@@ -63,7 +65,7 @@ _ITEM_GROUPS: list[tuple[str, int, str]] = [
 	("Consultas Médicas", 0, _GRUPO_PAI),
 	("Vale-Presente", 0, _GRUPO_PAI),
 	("Brincos", 0, _GRUPO_PAI),
-	("Pacotes", 0, _GRUPO_PAI),
+	("Planos", 0, _GRUPO_PAI),
 	# Exames (F7): novo, sem item hoje — página informativa (ver
 	# templates/generators/item_group.html + catalogo.jinja_utils).
 	("Exames", 0, _GRUPO_PAI),
@@ -86,7 +88,11 @@ _ITEM_GROUPS_CARE: list[tuple[str, int, str]] = [
 # A chave é substring (lower) do item_group do Item no banco.
 # Primeiro match vence — a ordem da lista é relevante.
 _SECTION_MAP: list[tuple[str, str]] = [
-	("pacote", "Pacotes"),
+	# Item 2b: "Pacotes" -> "Planos". Mantida a keyword "pacote" (itens reais
+	# cujo item_group ainda contém essa palavra continuam mapeando certo) +
+	# nova keyword "plano" (para item_group já cadastrado com o nome novo).
+	("pacote", "Planos"),
+	("plano", "Planos"),
 	("vacina", "Vacinas"),
 	("vitamina", "Vitaminas Injetáveis"),
 	("terapia injetável", "Terapias Injetáveis"),
@@ -130,9 +136,11 @@ _GROUP_COPY: dict[str, str] = {
 		"Aplicação de brincos (piercing de orelha) infantil e adulto, com material "
 		"esterilizado e procedimento seguro."
 	),
-	"Pacotes": (
-		"Pacotes fechados de doses de vacina com condição especial — ideal para completar "
-		"o esquema vacinal recomendado."
+	# Item 2b: "Pacotes" -> "Planos" (chave renomeada; copy ajustada mantendo
+	# "pacote(s)" como sinônimo, para não perder correspondência de busca).
+	"Planos": (
+		"Planos Imunocare — pacotes fechados de doses de vacina com condição especial, "
+		"ideais para completar o esquema vacinal recomendado."
 	),
 	"Exames": (
 		"Agende exames na Imunocare, com coleta/realização presencial na clínica e "
@@ -204,16 +212,69 @@ def _setup_item_groups() -> None:
 	(``_ITEM_GROUPS``) e Care (``_ITEM_GROUPS_CARE``, F7) — idempotente."""
 	if not frappe.db.exists("DocType", "Item Group"):
 		return  # ERPNext não instalado; improvável em produção
+	_migrar_pacotes_para_planos()
 	for name, is_group, parent in _ITEM_GROUPS:
 		_ensure_item_group(name, is_group, parent)
 	for name, is_group, parent in _ITEM_GROUPS_CARE:
 		_ensure_item_group(name, is_group, parent)
 
 
+def _migrar_pacotes_para_planos() -> None:
+	"""Item 2b (2026-08-10): rename real do Item Group "Pacotes" -> "Planos"
+	— seguro porque a loja ainda não está em produção (trocar a rota pública
+	não quebra link externo/Google Ads em produção).
+
+	``frappe.rename_doc`` já cuida de atualizar o docname, o campo
+	``item_group_name`` (autoname ``field:item_group_name``) e todo Link
+	("Item.item_group", "Website Item Group.item_group" etc. — cascata
+	nativa do framework). O que ele NÃO faz sozinho é recalcular a ROTA do
+	webshop: ``WebshopItemGroup.make_route()`` (apps/webshop, upstream, não
+	tocado) só preenche ``self.route`` se estiver vazio — então, sem ação
+	extra, a categoria continuaria respondendo em
+	"/loja-imunocare/pacotes" em vez de "/planos". Por isso, no caminho de
+	rename simples, limpamos ``route`` e salvamos de novo para a rota nativa
+	ser recalculada a partir do novo nome.
+
+	IMPORTANTE (2026-08-11): usa ``force=True`` e NÃO ``ignore_permissions``.
+	O wrapper público ``frappe.rename_doc`` (frappe/__init__.py) NÃO expõe o
+	kwarg ``ignore_permissions`` (só a função interna
+	``frappe.model.rename_doc.rename_doc`` tem) — passá-lo levanta
+	``TypeError``, que o try/except abaixo engolia silenciosamente (foi o que
+	deixou "Pacotes" intacto e criou um "Planos" vazio ao lado, no 1º migrate
+	desta feature). Em ``after_migrate`` o usuário é Administrator, então
+	``force=True`` já basta para permissão.
+
+	Auto-recuperação: se um "Planos" já existir (instalação nova que nasce
+	com o nome certo via ``_ITEM_GROUPS``, OU o "Planos vazio" órfão criado
+	pela tentativa que falhou), consolida "Pacotes" nele com ``merge=True``
+	(move item/links e apaga "Pacotes"); senão, faz o rename simples +
+	recálculo de rota. Idempotente: se "Pacotes" não existe, é no-op."""
+	if not frappe.db.exists("Item Group", "Pacotes"):
+		return
+	try:
+		if frappe.db.exists("Item Group", "Planos"):
+			# "Planos" já existe -> mescla "Pacotes" nele (move o(s) item(ns) e
+			# atualiza os Links; "Pacotes" é apagado). A rota de "Planos" já é
+			# a correta (/loja-imunocare/planos), não precisa recalcular.
+			frappe.rename_doc("Item Group", "Pacotes", "Planos", merge=True, force=True)
+		else:
+			frappe.rename_doc("Item Group", "Pacotes", "Planos", force=True)
+			doc = frappe.get_doc("Item Group", "Planos")
+			if doc.route:
+				doc.route = None
+				doc.flags.ignore_permissions = True
+				doc.save(ignore_permissions=True)
+		frappe.logger(_LOG_TITLE).info(
+			"Item Group 'Pacotes' migrado para 'Planos' (item 2b)."
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
 def ensure_item_groups() -> None:
 	"""Wrapper público de ``_setup_item_groups`` — usado por
 	``catalogo.importar_prod`` para garantir que os Item Groups da loja
-	(inclusive "Pacotes") já existam ANTES de criar os Items reais."""
+	(inclusive "Planos") já existam ANTES de criar os Items reais."""
 	_setup_item_groups()
 
 
@@ -401,17 +462,20 @@ def _ensure_website_item_section(doc: "frappe.Document", section: str) -> None:
 # ---------------------------------------------------------------------------
 
 # Ordem de exibição das seções na home. Seções sem nenhum Website Item
-# publicado são omitidas silenciosamente (ex.: Consultas Médicas/Vale-Presente
-# nesta 1ª versão, sem itens ainda cadastrados).
+# publicado são omitidas silenciosamente (ex.: Consultas Médicas nesta 1ª
+# versão, sem itens ainda cadastrados).
+#
+# Item 2a (2026-08-10): "Exames" e "Vale-Presente" tirados da home/nav "nesse
+# momento", a pedido do dono — remoção SÓ DE EXIBIÇÃO e REVERSÍVEL (os Item
+# Groups continuam existindo no banco, ``_ITEM_GROUPS`` acima não foi
+# alterado; basta devolver os dois nomes a estas listas para reaparecerem).
 SECOES_HOME_ORDEM: list[str] = [
 	"Vacinas",
 	"Vitaminas Injetáveis",
 	"Terapias Injetáveis",
-	"Pacotes",
+	"Planos",
 	"Brincos",
 	"Consultas Médicas",
-	"Exames",
-	"Vale-Presente",
 	# Linha Care (F7):
 	"Filtro Solar",
 	"Serum Facial",
@@ -419,15 +483,15 @@ SECOES_HOME_ORDEM: list[str] = [
 ]
 
 # Ordem de navegação (F7 — nav com TODAS as categorias, mesmo vazias).
+# Item 2a: "Exames"/"Vale-Presente" removidos daqui também (ver comentário
+# acima de SECOES_HOME_ORDEM — mesma regra, mesma reversibilidade).
 _NAV_ORDEM_IMUNO: list[str] = [
 	"Vacinas",
 	"Vitaminas Injetáveis",
 	"Terapias Injetáveis",
-	"Pacotes",
+	"Planos",
 	"Consultas Médicas",
-	"Exames",
 	"Brincos",
-	"Vale-Presente",
 ]
 _NAV_ORDEM_CARE: list[str] = ["Filtro Solar", "Serum Facial", "Filtro Solar Infantil"]
 
@@ -472,7 +536,7 @@ def secoes_para_home(limite_por_secao: int = 4) -> list[dict]:
 			# não cair só nos itens sem imagem (que renderizam o ícone SVG).
 			# ``website_image desc`` = strings não-vazias antes de NULL/'' no
 			# MariaDB (NULLs por último em DESC); seções sem nenhuma foto
-			# (Vitaminas/Pacotes/Brincos) empatam e caem no ``web_item_name``.
+			# (Vitaminas/Planos/Brincos) empatam e caem no ``web_item_name``.
 			# (order_by só aceita "campo [asc|desc]" — CASE é barrado pelo
 			# sanitizador do frappe.get_all como "Consulta SQL ilegal".)
 			order_by="website_image desc, web_item_name asc",
@@ -537,3 +601,12 @@ def nav_categorias(grupo_pai: str) -> list[dict]:
 		for nome in ordem
 		if por_nome.get(nome)
 	]
+
+
+def nav_categorias_loja() -> list[dict]:
+	"""Wrapper público de ``nav_categorias(_GRUPO_PAI)`` — Linha Imuno (as
+	mesmas categorias/ordem da nav da home, já sem Exames/Vale-Presente —
+	item 2a). Usado por ``catalogo.api.categorias_nav`` (item 4 — barra de
+	chips de categoria nas páginas de listagem do webshop) para não expor o
+	nome do grupo-pai fora deste módulo nem duplicar a lista de categorias."""
+	return nav_categorias(_GRUPO_PAI)

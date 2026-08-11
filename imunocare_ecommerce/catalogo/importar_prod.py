@@ -37,13 +37,20 @@ _PRICE_LIST_FALLBACK = "Standard Selling"
 _STOCK_UOM = "Unidade"
 
 # chave do JSON -> (Item Group / seção da loja, prefixo do item_code)
+# Item 2b (2026-08-10): o Item Group de destino da chave "pacotes" virou
+# "Planos" (rename real, ver catalogo.setup._migrar_pacotes_para_planos) —
+# a chave do JSON e o prefixo do item_code (compatibilidade com os Items já
+# criados) continuam "pacotes"/"pac", só o NOME da categoria mudou.
+# ATENÇÃO: não confundir com a chave "planos" abaixo (Calendário Premium,
+# um conceito DIFERENTE — não é produto de venda, nunca importado).
 _SECOES: dict[str, tuple[str, str]] = {
 	"vacinas": ("Vacinas", "vac"),
 	"vitaminas": ("Vitaminas Injetáveis", "vit"),
 	"terapias": ("Terapias Injetáveis", "ter"),
 	"brincos": ("Brincos", "bri"),
-	"pacotes": ("Pacotes", "pac"),
-	# "planos": NÃO importado — Calendário Premium (preço 0) não é produto de venda.
+	"pacotes": ("Planos", "pac"),
+	# "planos" (chave do JSON, Calendário Premium, preço 0): NÃO importado —
+	# não é produto de venda. Não tem relação com o Item Group "Planos" acima.
 }
 
 # F7 (Linha Care): extensão PRONTA para receber a lista real de produtos do
@@ -677,7 +684,7 @@ def importar_catalogo_prod() -> None:
 		return
 
 	try:
-		# Garante os Item Groups da loja (inclusive "Pacotes") ANTES de criar
+		# Garante os Item Groups da loja (inclusive "Planos") ANTES de criar
 		# os Items — senão o Item.insert() falha com LinkValidationError.
 		from imunocare_ecommerce.catalogo.setup import ensure_item_groups
 

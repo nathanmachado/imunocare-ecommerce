@@ -40,12 +40,13 @@ import frappe
 _LOG_TITLE = "imunocare_ecommerce.landing.setup"
 
 # Seções "de saúde" (recebem disclaimer) vs. as demais seções da loja.
+# Item 2b (2026-08-10): "Pacotes" -> "Planos".
 _SECOES_SAUDE = {
 	"Vacinas",
 	"Vitaminas Injetáveis",
 	"Terapias Injetáveis",
 	"Consultas Médicas",
-	"Pacotes",
+	"Planos",
 }
 
 _DISCLAIMER_INICIO = "<!-- imun:disclaimer:inicio -->"
