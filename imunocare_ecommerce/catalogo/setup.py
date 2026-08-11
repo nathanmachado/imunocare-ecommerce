@@ -32,8 +32,10 @@ Mapeamento Item → seção:
 
 from __future__ import annotations
 
+import json
 import os
 import re
+from pathlib import Path
 
 import frappe
 
@@ -336,22 +338,54 @@ def _ensure_item_group(name: str, is_group: int, parent: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+_ARQUIVO_LOJA = Path(__file__).parent / "catalogo_loja.json"
+
+
+def _carregar_mapa_loja() -> dict:
+	"""Carrega ``catalogo_loja.json`` -> dict ``{item_name: entrada}``.
+
+	CATÁLOGO CURADO da loja (2026-08-11), SEM preços (seguro versionar). Cada
+	entrada tem ``item_names`` (1+ variações do nome que identificam o MESMO
+	produto), ``web_name`` (nome de vitrine), ``secao`` (categoria da loja) e
+	``foto`` (slug do arquivo em ``public/img/produtos/<slug>.jpg``).
+
+	Por que múltiplos nomes por produto: dev e PROD divergem no ``item_code``
+    E no ``item_name`` do mesmo produto (dev usa o nome de loja como
+	``item_name``; prod usa o nome clínico "Aplicação Vacina X"). Casar por
+	``item_name`` cobrindo AMBAS as grafias liga o produto certo à sua seção/
+	nome/foto nos dois ambientes, sem depender do ``item_code``."""
+	try:
+		with open(_ARQUIVO_LOJA, encoding="utf-8") as f:
+			dados = json.load(f)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		return {}
+	mapa: dict = {}
+	for entrada in dados:
+		for nome in entrada.get("item_names", []):
+			mapa[nome] = entrada
+	return mapa
+
+
 def _publish_website_items() -> None:
-	"""Cria/atualiza Website Items para os Items de serviço existentes.
+	"""Publica APENAS os produtos do catálogo curado (``catalogo_loja.json``),
+	casando pelo ``item_name`` do Item (elegível: is_sales_item=1,
+	is_stock_item=0, disabled=0).
 
-	Critério de elegibilidade:
-	  - disabled = 0
-	  - is_stock_item = 0  → item de serviço/aplicação (não insumo físico)
-	  - is_sales_item = 1  → faturável ao cliente
-
-	Esses são os itens de "Aplicação - [Vacina]" criados automaticamente pelo
-	Healthcare Therapy Type. Os insumos físicos (estoque) são excluídos — eles
-	controlam o estoque interno e não devem aparecer na loja pública.
-
-	Para cada item elegível, a seção da loja é inferida pelo item_group via
-	_resolve_section(). Items sem match em _SECTION_MAP são ignorados.
-	"""
+	Curado por design (2026-08-11 — go-live prod): antes a seção era inferida
+	por keyword do ``item_group`` e publicava TODO item de serviço elegível —
+	o que, na estrutura de PROD (tudo sob "Aplicação de Vacinas"), classificaria
+	vitaminas/brincos como "Vacina" e ainda publicaria itens de teste/duplicados/
+	calendários. Agora só entram os produtos do mapa, na seção correta, com o
+	nome de vitrine e a foto certos — mesmo comportamento limpo em dev e prod.
+	Item fora do mapa (ex.: tirzepatida — F9, itens de teste, Calendário Premium)
+	simplesmente não é publicado."""
 	if not frappe.db.exists("DocType", "Item"):
+		return
+
+	mapa = _carregar_mapa_loja()
+	if not mapa:
+		frappe.logger(_LOG_TITLE).warning("catalogo_loja.json vazio/ausente — nada publicado.")
 		return
 
 	items = frappe.get_all(
@@ -366,24 +400,18 @@ def _publish_website_items() -> None:
 
 	publicados = 0
 	ignorados = 0
-	excluidos = 0
 
 	for item in items:
-		if item.item_code in _ITEM_CODES_EXCLUIR_LOJA_DIRETA:
-			_despublicar_se_necessario(item.item_code)
-			excluidos += 1
-			continue
-		section = _resolve_section(item.item_group)
-		if not section:
+		entrada = mapa.get(item.item_name)
+		if not entrada:
 			ignorados += 1
 			continue
-		_upsert_website_item(item, section)
+		_upsert_website_item(item, entrada)
 		publicados += 1
 
 	frappe.logger(_LOG_TITLE).info(
-		f"setup_catalogo: {publicados} Website Item(s) publicados, "
-		f"{ignorados} Item(s) ignorados (sem mapeamento de seção), "
-		f"{excluidos} excluído(s) do checkout direto (F9 — compliance)."
+		f"setup_catalogo: {publicados} Website Item(s) do catálogo curado publicados, "
+		f"{ignorados} Item(s) fora do catálogo curado (não publicados)."
 	)
 
 
@@ -417,34 +445,38 @@ _IMG_PRODUTOS_PREFIXO_GERIDO = "/assets/imunocare_ecommerce/img/"
 _IMG_PRODUTOS_EXTS = (".png", ".jpg", ".jpeg", ".webp")
 
 
-def _imagem_produto(item_code: str) -> str | None:
-	"""Imagem do produto por CONVENÇÃO de nome de arquivo: se existir
-	``public/img/produtos/<item_code>.<ext>`` (png/jpg/jpeg/webp), retorna a
-	URL ``/assets`` correspondente; senão ``None``.
+def _imagem_produto(slug: str | None) -> str | None:
+	"""Imagem do produto pelo SLUG do catálogo curado: se existir
+	``public/img/produtos/<slug>.<ext>`` (jpg/png/jpeg/webp), retorna a URL
+	``/assets`` correspondente; senão ``None``.
 
-	Convenção (2026-08-11, "complementar o site com as imagens"): o arquivo é
-	nomeado pelo ITEM_CODE ESTÁVEL do produto. Para adicionar/trocar a foto de
-	um produto no futuro, basta soltar ``<item_code>.png`` nessa pasta —
-	nenhum código muda. O item_code aparece na página do produto e na lista de
-	Website Item no Desk. Mantém a lógica de imagem em UM lugar só (aqui), no
-	momento da publicação, em vez de espalhar por keyword de nome de produto.
-	"""
+	O slug (campo ``foto`` de ``catalogo_loja.json``) é estável e independente
+	do ``item_code`` — por isso a MESMA foto liga o produto em dev e em prod,
+	que têm ``item_code`` diferentes. Trocar a foto = substituir o arquivo do
+	slug; adicionar produto = novo slug no JSON + arquivo."""
+	if not slug:
+		return None
 	try:
 		base = frappe.get_app_path("imunocare_ecommerce", "public", "img", "produtos")
 	except Exception:
 		return None
 	for ext in _IMG_PRODUTOS_EXTS:
-		if os.path.exists(os.path.join(base, f"{item_code}{ext}")):
-			return f"{_IMG_PRODUTOS_URL}/{item_code}{ext}"
+		if os.path.exists(os.path.join(base, f"{slug}{ext}")):
+			return f"{_IMG_PRODUTOS_URL}/{slug}{ext}"
 	return None
 
 
-def _upsert_website_item(item: "frappe._dict", section: str) -> None:
-	"""Cria ou atualiza o Website Item vinculado ao Item.
+def _upsert_website_item(item: "frappe._dict", entrada: dict) -> None:
+	"""Cria ou atualiza o Website Item de um produto do catálogo curado.
 
-	Preserva customizações manuais: web_item_name e short_description só são
-	preenchidos automaticamente se ainda estiverem em branco.
-	"""
+	``entrada`` vem de ``catalogo_loja.json`` (web_name/secao/foto). O nome de
+	vitrine e a seção são AUTORITATIVOS (curados) — a seção é gravada como a
+	ÚNICA de ``website_item_groups`` (corrige a classificação errada quando o
+	``item_group`` nativo do Item é genérico, ex.: "Aplicação de Vacinas" em
+	prod). A ``short_description`` só é preenchida se vazia."""
+	web_name = entrada.get("web_name") or item.item_name
+	secao = entrada.get("secao")
+
 	existing_name: str | None = frappe.db.get_value(
 		"Website Item", {"item_code": item.item_code}, "name"
 	)
@@ -456,31 +488,28 @@ def _upsert_website_item(item: "frappe._dict", section: str) -> None:
 		doc.item_code = item.item_code
 
 	doc.published = 1
+	doc.web_item_name = web_name  # nome de vitrine curado (autoritativo)
 
-	# Preenche web_item_name só se vazio (permite renomear manualmente depois)
-	if not doc.web_item_name:
-		doc.web_item_name = item.item_name
-
-	# short_description: texto plano (sem HTML), máx 140 chars
+	# short_description: texto plano (sem HTML), máx 140 chars — só se vazia
 	if not doc.short_description and item.description:
 		plain = re.sub(r"<[^>]+>", "", item.description or "").strip()
 		doc.short_description = plain[:140] if plain else ""
 
-	# Garante que a seção correta esteja em website_item_groups
-	_ensure_website_item_section(doc, section)
+	# Seção curada = única categoria de navegação (substitui as anteriores que
+	# este módulo gerencia; evita item aparecer na seção errada).
+	if secao:
+		doc.set("website_item_groups", [{"item_group": secao}])
 
 	doc.save(ignore_permissions=True)
 
-	# Imagem do produto por convenção de nome (item_code) — ver
-	# ``_imagem_produto``. Gravada DIRETO no banco DEPOIS do save: o webshop
-	# (``WebsiteItem.validate_website_image``, upstream, não tocado) ZERA
-	# qualquer ``website_image`` que não seja um doc File público — e um asset
-	# estático ``/assets/.../img/`` não tem File associado (foi por isso que o
-	# mecanismo antigo por keyword nunca pegava). ``frappe.db.set_value``
-	# contorna essa validação sem tocar upstream. Idempotente (roda a cada
-	# publish); respeita upload manual do operador (``/files/...``),
-	# sobrescreve só quando vazio ou quando é uma imagem NOSSA (``/assets/``).
-	img = _imagem_produto(item.item_code)
+	# Foto do produto (slug curado). Gravada DIRETO no banco DEPOIS do save: o
+	# webshop (``WebsiteItem.validate_website_image``, upstream, não tocado)
+	# ZERA qualquer ``website_image`` que não seja um doc File público — e um
+	# asset estático ``/assets/.../img/`` não tem File associado.
+	# ``frappe.db.set_value`` contorna essa validação sem tocar upstream.
+	# Respeita upload manual do operador (``/files/...``); sobrescreve só quando
+	# vazio ou quando é uma imagem NOSSA (``/assets/``).
+	img = _imagem_produto(entrada.get("foto"))
 	if img:
 		atual = frappe.db.get_value("Website Item", doc.name, "website_image")
 		if not atual or str(atual).startswith(_IMG_PRODUTOS_PREFIXO_GERIDO):

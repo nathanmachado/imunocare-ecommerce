@@ -1,0 +1,370 @@
+[
+ {
+  "item_names": [
+   "Aplicação Vacina Qdenga – Takeda (Dengue)",
+   "Qdenga – Takeda (Dengue)"
+  ],
+  "web_name": "Qdenga – Takeda (Dengue)",
+  "secao": "Vacinas",
+  "foto": "qdenga"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Influenza Tetravalente",
+   "Influenza Tetravalente"
+  ],
+  "web_name": "Influenza Tetravalente",
+  "secao": "Vacinas",
+  "foto": "influenza-tetravalente"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Efluelda (Influenza – Idosos)",
+   "Efluelda (Influenza – Idosos)"
+  ],
+  "web_name": "Efluelda (Influenza – Idosos)",
+  "secao": "Vacinas",
+  "foto": "efluelda"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Febre Amarela",
+   "Febre Amarela"
+  ],
+  "web_name": "Febre Amarela",
+  "secao": "Vacinas",
+  "foto": "febre-amarela"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Hepatite A – Adulto",
+   "Hepatite A – Adulto"
+  ],
+  "web_name": "Hepatite A – Adulto",
+  "secao": "Vacinas",
+  "foto": "hepatite-a-adulto"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Hepatite A – Infantil",
+   "Hepatite A – Infantil"
+  ],
+  "web_name": "Hepatite A – Infantil",
+  "secao": "Vacinas",
+  "foto": "hepatite-a-infantil"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Shingrix – Herpes Zoster",
+   "Shingrix – Herpes Zoster"
+  ],
+  "web_name": "Shingrix – Herpes Zoster",
+  "secao": "Vacinas",
+  "foto": "shingrix"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Hexavalente",
+   "Hexavalente"
+  ],
+  "web_name": "Hexavalente",
+  "secao": "Vacinas",
+  "foto": "hexavalente"
+ },
+ {
+  "item_names": [
+   "APL-HPV9",
+   "Vacina HPV9 (Nonavalente)",
+   "Vacina HPV Nonavalente (9-valente)"
+  ],
+  "web_name": "Vacina HPV9 (Nonavalente)",
+  "secao": "Vacinas",
+  "foto": "hpv9"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Meningite ACWY",
+   "Meningite ACWY"
+  ],
+  "web_name": "Meningite ACWY",
+  "secao": "Vacinas",
+  "foto": "meningo-acwy"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Meningite B",
+   "Meningite B"
+  ],
+  "web_name": "Meningite B",
+  "secao": "Vacinas",
+  "foto": "meningo-b"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Pentavalente",
+   "Pentavalente"
+  ],
+  "web_name": "Pentavalente",
+  "secao": "Vacinas",
+  "foto": "pentavalente"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Pneumocócica 13V",
+   "Pneumocócica 13V"
+  ],
+  "web_name": "Pneumocócica 13V",
+  "secao": "Vacinas",
+  "foto": "pneumo-13"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Pneumocócica 15V",
+   "Pneumocócica 15V"
+  ],
+  "web_name": "Pneumocócica 15V",
+  "secao": "Vacinas",
+  "foto": "pneumo-15"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Pneumocócica 20V",
+   "Pneumocócica 20V"
+  ],
+  "web_name": "Pneumocócica 20V",
+  "secao": "Vacinas",
+  "foto": "pneumo-20"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Rotavirus Pentavalente",
+   "Rotavirus Pentavalente"
+  ],
+  "web_name": "Rotavirus Pentavalente",
+  "secao": "Vacinas",
+  "foto": "rotavirus"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Tríplice Viral (MMR)",
+   "Tríplice Viral (MMR)"
+  ],
+  "web_name": "Tríplice Viral (MMR)",
+  "secao": "Vacinas",
+  "foto": "triplice-viral"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina DTPa",
+   "DTPa"
+  ],
+  "web_name": "DTPa",
+  "secao": "Vacinas",
+  "foto": "dtpa"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina DTPa + IPV - Tetraxim",
+   "DTPa + IPV - Tetraxim",
+   "DTPa + IPV (Tetraxim)"
+  ],
+  "web_name": "DTPa + IPV (Tetraxim)",
+  "secao": "Vacinas",
+  "foto": "tetravalente-dtpa-ipv"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Varicela",
+   "Varicela"
+  ],
+  "web_name": "Varicela",
+  "secao": "Vacinas",
+  "foto": "varicela"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Tetra Viral",
+   "Tetra Viral"
+  ],
+  "web_name": "Tetra Viral",
+  "secao": "Vacinas",
+  "foto": "tetra-viral"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Abrysvo (VSR)",
+   "Abrysvo (VSR)"
+  ],
+  "web_name": "Abrysvo (VSR)",
+  "secao": "Vacinas",
+  "foto": "abrysvo"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Beyfortus (1 ML)",
+   "Beyfortus (1 ML)"
+  ],
+  "web_name": "Beyfortus (1 ML)",
+  "secao": "Vacinas",
+  "foto": "beyfortus-1ml"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Beyfortus (0.5 ML)",
+   "Beyfortus (0.5 ML)"
+  ],
+  "web_name": "Beyfortus (0.5 ML)",
+  "secao": "Vacinas",
+  "foto": "beyfortus-05ml"
+ },
+ {
+  "item_names": [
+   "Aplicação Vacina Rhoplylac",
+   "Rhoplylac"
+  ],
+  "web_name": "Rhoplylac",
+  "secao": "Vacinas",
+  "foto": "rhoplylac"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Coenzima Q10 - 5% (100 mg)",
+   "Coenzima Q10 - 5% (100 mg)",
+   "Coenzima Q10 (100 mg)",
+   "Coenzima Q10 Injetável"
+  ],
+  "web_name": "Coenzima Q10 (100 mg)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "coenzima-q10"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Colina - 25% (500 mg)",
+   "Colina - 25% (500 mg)",
+   "Colina (500 mg)",
+   "Colina Injetável"
+  ],
+  "web_name": "Colina (500 mg)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "colina"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Complexo B Com Vit.B1",
+   "Complexo B Com Vit.B1",
+   "Complexo B (com B1)",
+   "Complexo B Injetável (com B1)"
+  ],
+  "web_name": "Complexo B (com B1)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "complexo-b-b1"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Complexo B Com Vit.B12",
+   "Complexo B Com Vit.B12",
+   "Complexo B (com B12)",
+   "Complexo B Injetável (com B12)"
+  ],
+  "web_name": "Complexo B (com B12)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "complexo-b-b12"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Resveratrol Bioencapsulado - 1,5 %",
+   "Resveratrol Bioencapsulado - 1,5 %",
+   "Resveratrol Bioencapsulado",
+   "Resveratrol Injetável"
+  ],
+  "web_name": "Resveratrol Bioencapsulado",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "resveratrol"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Vitamina B1 (Tiamina - 10%)",
+   "Vitamina B1 (Tiamina - 10%)",
+   "Vitamina B1 (Tiamina)",
+   "Vitamina B1 Injetável (Tiamina)"
+  ],
+  "web_name": "Vitamina B1 (Tiamina)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "vitamina-b1"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Vitamina B12 (Metilcobalamina - 0,25%)",
+   "Vitamina B12 (Metilcobalamina - 0,25%)",
+   "Vitamina B12 (Metilcobalamina)",
+   "Vitamina B12 Injetável (Metilcobalamina)"
+  ],
+  "web_name": "Vitamina B12 (Metilcobalamina)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "vitamina-b12"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Vitamina C (Ácido Ascorbico - 22,2%)",
+   "Vitamina C (Ácido Ascorbico - 22,2%)",
+   "Vitamina C (Ácido Ascórbico)",
+   "Vitamina C Injetável (Ácido Ascórbico)"
+  ],
+  "web_name": "Vitamina C (Ácido Ascórbico)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "vitamina-c"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Vitamina D3 (Colecalciferol 1,5%) 600.000 UI/ml",
+   "Vitamina D3 (Colecalciferol 1,5%) 600.000 UI/ml",
+   "Vitamina D3 (Colecalciferol)",
+   "Vitamina D3 Injetável (Colecalciferol)"
+  ],
+  "web_name": "Vitamina D3 (Colecalciferol)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "vitamina-d3"
+ },
+ {
+  "item_names": [
+   "Aplicação Intramuscular Vitamina Dk2 (D3 600.000UI + K2Mk7 1,3Mg)",
+   "Vitamina Dk2 (D3 600.000UI + K2Mk7 1,3Mg)",
+   "Vitamina DK2 (D3 + K2)",
+   "Vitamina D3 + K2 Injetável"
+  ],
+  "web_name": "Vitamina DK2 (D3 + K2)",
+  "secao": "Vitaminas Injetáveis",
+  "foto": "vitamina-dk2"
+ },
+ {
+  "item_names": [
+   "Aplicação Brinco Adulto",
+   "Adulto",
+   "Brinco Adulto",
+   "Aplicação de Brinco Adulto"
+  ],
+  "web_name": "Brinco Adulto",
+  "secao": "Brincos",
+  "foto": "brinco-adulto"
+ },
+ {
+  "item_names": [
+   "Aplicação Brinco Infantil",
+   "Infantil",
+   "Brinco Infantil",
+   "Aplicação de Brinco Infantil"
+  ],
+  "web_name": "Brinco Infantil",
+  "secao": "Brincos",
+  "foto": "brinco-infantil"
+ },
+ {
+  "item_names": [
+   "Pacote HPV Nonavalente — 3 doses",
+   "Pacote HPV Nonavalente (3 doses)"
+  ],
+  "web_name": "Pacote HPV Nonavalente (3 doses)",
+  "secao": "Planos",
+  "foto": "pacote-hpv9"
+ }
+]

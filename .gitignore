@@ -17,3 +17,5 @@ imunocare_ecommerce/public/img/Vacinas Todas/
 imunocare_ecommerce/public/img/Vitaminas e Protocolos/
 imunocare_ecommerce/public/img/Planos/
 imunocare_ecommerce/public/img/Brincos/
+# Foto-fonte de médico (PNG original pesado; o site usa o .jpg otimizado)
+imunocare_ecommerce/public/img/Medicos/*.png
