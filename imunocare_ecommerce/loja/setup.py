@@ -24,6 +24,14 @@ _PRICE_LIST = "Venda Padrão"
 _CUSTOMER_GROUP = "Pessoa Física"
 _QUOTATION_SERIES = "SAL-QTN-.YYYY.-"
 
+# Item 3 (2026-08-10): 12 produtos por página (grid 3x4/4x3) + "Carregar
+# mais" no lugar da paginação Prev/Next nativa (ver
+# public/js/product_list_more.js). Webshop Settings nasce com default 6
+# (ver webshop_settings.json) — forçado para 12 aqui, sempre que o valor
+# atual estiver vazio OU for menor que 12 (nunca reduz um valor manual maior
+# que 12 que o operador já tenha configurado de propósito).
+_PRODUTOS_POR_PAGINA = 12
+
 
 def setup_webshop_settings() -> None:
 	"""Entry-point idempotente (after_migrate). Nunca interrompe o migrate."""
@@ -65,6 +73,11 @@ def setup_webshop_settings() -> None:
 
 		if not settings.quotation_series:
 			settings.quotation_series = _QUOTATION_SERIES
+			mudou = True
+
+		# Item 3: força 12/página (vazio OU menor que 12 — default nativo é 6).
+		if not settings.products_per_page or frappe.utils.cint(settings.products_per_page) < _PRODUTOS_POR_PAGINA:
+			settings.products_per_page = _PRODUTOS_POR_PAGINA
 			mudou = True
 
 		if mudou:

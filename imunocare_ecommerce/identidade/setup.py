@@ -127,44 +127,58 @@ a:hover {{ color: var(--imun-coral); }}
 	background-color: var(--imun-coral) !important;
 	border-color: var(--imun-coral) !important;
 	color: #fff !important;
+	// Ajuste fino 2026-08-10 (item 1 — feedback do dono: texto "colado no
+	// topo" do botão). Bootstrap usa display:inline-block com padding
+	// vertical já simétrico (.375rem/.375rem) — o problema é a métrica da
+	// Lexend (bastante espaço acima do glifo dentro do line-height padrão),
+	// que desloca o texto visualmente para cima DENTRO da caixa. Flex +
+	// line-height:1 centraliza pelo glifo real, não pela métrica da fonte;
+	// padding-top/bottom simétrico garante a altura da caixa em si.
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	line-height: 1 !important;
+	padding-top: .65rem !important;
+	padding-bottom: .65rem !important;
 }}
 .btn-primary:hover, .btn.btn-primary:hover, a.imun-cta:hover, .imun-cta:hover {{
 	background-color: var(--imun-coral-hover) !important;
 	border-color: var(--imun-coral-hover) !important;
 }}
 
-// ---- Header: logo DESAGRUPADA (pedido do dono 2026-08-10) — símbolo como
-// IMAGEM + "IMUNOCARE" como TEXTO na fonte oficial (Lexend). Evita a distorção
-// do lockup-em-imagem (o navbar nativo do Frappe clampa a largura do
-// ``.navbar-brand img`` e espremia o wordmark) e fica crisp/escalável.
+// ---- Header: logomarca oficial (ajuste 2026-08-10, item 5) — lockup
+// horizontal completo (símbolo/anel de pontos + wordmark "IMUNOCARE"), um
+// único PNG (``docs/brand/logo_oficial_horizontal_claro.png``, staged em
+// ``public/logo/brand/imunocare-lockup-oficial-claro.png``). Substitui a
+// variante anterior (símbolo em imagem + texto em Lexend, desagrupados),
+// rejeitada — volta ao lockup único, oficial. A causa da deformação NÃO era
+// o lockup em si, e sim o clamp nativo do Frappe (``.navbar-brand img {{
+// max-width:150px; max-height:22px }}``, ``navbar.scss`` upstream, NÃO
+// tocado) — resolvido abaixo com seletor mais específico + ``!important`` em
+// vez de reduzir o lockup a um símbolo solto.
 .navbar .navbar-brand {{
 	display: flex;
 	align-items: center;
-	gap: 12px;
 	padding-top: 8px;
 	padding-bottom: 8px;
 }}
-.imun-brand-symbol,
-.navbar .navbar-brand img.imun-brand-symbol {{
-	height: 48px !important;
-	max-height: 48px !important;
+// O clamp nativo do navbar tem DUAS restrições (navbar.scss upstream:
+// ``.navbar-brand img {{ max-width:150px; max-height:22px }}``). Vencer só
+// ``max-width`` não basta: ``max-height:22px`` continuava travando a altura
+// em 22px por mais que ``height`` fosse 44px (2026-08-11, feedback do dono:
+// logo renderizando a 22px no desktop). Por isso ``max-height:none`` +
+// ``height`` com !important.
+.navbar .navbar-brand img.imun-brand-logo {{
+	height: 44px !important;
+	max-height: none !important;
 	width: auto !important;
+	max-width: none !important;
+	object-fit: contain;
 	display: block;
 }}
-.imun-brand-text {{
-	font-family: 'Lexend', sans-serif;
-	font-weight: 800;
-	font-size: 1.6rem;
-	letter-spacing: .1em;
-	line-height: 1;
-	color: var(--imun-petroleo);
-	white-space: nowrap;
-}}
-.navbar .navbar-brand:hover .imun-brand-text {{ color: var(--imun-petroleo); }}
 .navbar {{ min-height: 78px; }}
 @media (max-width: 480px) {{
-	.imun-brand-symbol, .navbar .navbar-brand img.imun-brand-symbol {{ height: 40px !important; max-height: 40px !important; }}
-	.imun-brand-text {{ font-size: 1.3rem; }}
+	.navbar .navbar-brand img.imun-brand-logo {{ height: 34px !important; }}
 }}
 // Menu "Produtos" à DIREITA (feedback do dono 2026-08-10): o navbar nativo põe
 // a lista de itens com ``mr-auto`` (colada na logo → parecia parte do nome).
@@ -183,9 +197,15 @@ a:hover {{ color: var(--imun-coral); }}
 	background-color: var(--imun-petroleo) !important;
 	border-top: none;
 }}
+// Rodapé: o nativo fixa ``.footer-logo {{ height:1.5rem }}`` (=24px,
+// footer.scss upstream) — precisa sobrescrever o ``height`` (não só o
+// ``max-height``) para o lockup aparecer maior (2026-08-11, feedback do
+// dono: 34px no rodapé).
 .web-footer .footer-logo, .web-footer img.footer-logo {{
-	max-height: 40px;
-	width: auto;
+	height: 34px !important;
+	max-height: none !important;
+	width: auto !important;
+	object-fit: contain;
 }}
 .web-footer .footer-link,
 .web-footer .footer-child-item a,
@@ -654,6 +674,53 @@ a:hover {{ color: var(--imun-coral); }}
 	.imun-emagrecimento-bloco {{ grid-template-columns: 1fr; text-align: left; }}
 }}
 
+// ---- Bloco de destaque: Atendimento Domiciliar (item 2c — diferencial da
+// home, gate ``domiciliar_ativo`` em www/index.py). Mesmo padrão visual do
+// ``.imun-emagrecimento-bloco`` (cartão + CTA), com um selo circular próprio
+// em vez do texto discreto que existia antes (bloco pequeno "text-muted
+// small" só perto do rodapé — mantido para o aviso no fluxo de checkout).
+.imun-domiciliar-bloco {{
+	background:
+		linear-gradient(135deg, color-mix(in srgb, var(--imun-ciano) 10%, #fff) 0%, #fff 60%);
+	border: 1px solid var(--imun-line);
+	border-radius: var(--imun-radius);
+	box-shadow: var(--imun-shadow);
+	padding: 34px 32px;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 24px;
+	align-items: center;
+}}
+.imun-domiciliar-bloco h2 {{ margin: 10px 0 8px; }}
+.imun-domiciliar-bloco p {{ color: var(--imun-ink-soft); max-width: 56ch; margin: 0; }}
+.imun-domiciliar-cta {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
+.imun-domiciliar-icone {{
+	width: 84px;
+	height: 84px;
+	border-radius: 50%;
+	background: var(--imun-surface-2);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--imun-ciano);
+	flex: none;
+}}
+@media (max-width: 640px) {{
+	.imun-domiciliar-bloco {{ grid-template-columns: 1fr; text-align: left; }}
+	.imun-domiciliar-icone {{ display: none; }}
+}}
+
+// ---- Barra de chips de categoria nas páginas de listagem (item 4 —
+// product_category_nav.js/catalogo.api.categorias_nav). Reusa ``.imun-catnav``/
+// ``.imun-chip`` (já existentes) + um estado "ativo" (rota atual).
+.imun-chip-active {{
+	background: var(--imun-petroleo);
+	border-color: var(--imun-petroleo);
+	color: #fff;
+}}
+.imun-chip-active:hover {{ color: #fff; border-color: var(--imun-petroleo); }}
+.imun-listing-catnav {{ margin: 0 0 20px; }}
+
 // ---- Mobile (≤768px / ≤400px): grid de cards, catnav com scroll
 //      horizontal, clamp do hero já cobre a tipografia (ver .imun-hero-
 //      tagline acima, clamp()). ------------------------------------------
@@ -731,14 +798,21 @@ a:hover {{ color: var(--imun-coral); }}
 .imun-faq-item p {{ color: var(--imun-ink-soft); margin: 10px 0 0; }}
 """
 
-# Logo OFICIAL COMPLETA (ajuste fino 2026-08-10, feedback do dono: a versão
-# anterior usava só o WORDMARK — faltava o símbolo/anel de pontos). Lockup
-# horizontal (símbolo + wordmark, 557x150), transparente, staged em
-# public/logo/brand/ pelo CTO. Petróleo para fundo claro (header/navbar) e
-# branco para fundo escuro (rodapé, escuro por padrão — ver ``.web-footer``
-# no SCSS acima).
-_LOGO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-logo-petroleo.png"
-_LOGO_BRANCO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-logo-branco.png"
+# Logo OFICIAL — lockup horizontal completo (símbolo/anel de pontos +
+# wordmark "IMUNOCARE", 867x172, ``docs/brand/logo_oficial_horizontal_*.png``,
+# staged em ``public/logo/brand/`` por este item). Petróleo para fundo claro
+# (header/navbar) e branco para fundo escuro (rodapé, escuro por padrão —
+# ver ``.web-footer`` no SCSS acima).
+#
+# Ajuste 2026-08-10 (item 5): substitui a variante anterior, desagrupada
+# (símbolo em imagem + "IMUNOCARE" em texto Lexend), voltando ao lockup único
+# oficial — a deformação relatada pelo dono era causada pelo clamp nativo do
+# navbar do Frappe (``.navbar-brand img {{ max-width:150px; max-height:22px
+# }}``, upstream, não tocado), não pelo lockup em si; corrigido via seletor
+# mais específico + !important (ver ``.navbar .navbar-brand img.imun-brand-
+# logo`` no SCSS acima), sem precisar quebrar o lockup em símbolo+texto.
+_LOGO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-lockup-oficial-claro.png"
+_LOGO_BRANCO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-lockup-oficial-branco.png"
 
 # Símbolo isolado (anel de pontos), usado como marca-d'água discreta no hero
 # (ajuste fino 2026-08-10, item 3 — sobriedade: baixa opacidade, atrás do
@@ -746,19 +820,7 @@ _LOGO_BRANCO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-logo-branc
 # ``www/index.html`` (``.imun-hero-marca-agua``) — caminho estático, não
 # precisa passar por contexto Python.
 
-# Header DESAGRUPADO (feedback do dono 2026-08-10): o lockup-em-imagem ficava
-# espremido no navbar. Agora o SÍMBOLO é imagem (anel de pontos, petróleo) e
-# "IMUNOCARE" é TEXTO em Lexend (fonte oficial) — crisp, escalável, sem
-# distorção. O ``<span>`` dá o nome acessível do link; o símbolo é decorativo
-# (``alt=""``). Ver ``.imun-brand-symbol``/``.imun-brand-text`` no SCSS.
-# (``_LOGO_PATH`` — lockup petróleo — deixa de ser usado no header; o rodapé
-# segue com o lockup branco via ``footer_logo``, que renderiza bem fora do
-# navbar.)
-_SIMBOLO_PETROLEO_PATH = "/assets/imunocare_ecommerce/logo/brand/imunocare-simbolo-petroleo.png"
-_BRAND_HTML = (
-	f'<img src="{_SIMBOLO_PETROLEO_PATH}" alt="" aria-hidden="true" class="imun-brand-symbol">'
-	'<span class="imun-brand-text">IMUNOCARE</span>'
-)
+_BRAND_HTML = f'<img src="{_LOGO_PATH}" alt="Imunocare" class="imun-brand-logo">'
 
 _HEAD_HTML_MARCADOR_INICIO = "<!-- imun:favicons:inicio -->"
 _HEAD_HTML_MARCADOR_FIM = "<!-- imun:favicons:fim -->"

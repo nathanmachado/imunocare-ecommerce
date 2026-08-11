@@ -39,14 +39,45 @@
 		</div>
 	</section>
 
+	<!-- Item 2c: Atendimento Domiciliar como DIFERENCIAL — seção-banner de
+	     destaque (mesmo padrão do .imun-emagrecimento-bloco), logo após o
+	     hero. Gate igual ao texto discreto que já existia perto do rodapé
+	     (mantido lá para o aviso no momento do checkout) — aqui é a
+	     "manchete" do diferencial. domiciliar_ativo vem de www/index.py
+	     (Imunocare Ecommerce Settings.domiciliar_ativo + taxa_domiciliar>0). -->
+	{% if domiciliar_ativo %}
+	<section class="imun-section" style="border-top:none; padding-top:0;">
+		<div class="imun-domiciliar-bloco">
+			<div>
+				<span class="imun-pill imun-pill-brand">Diferencial Imunocare</span>
+				<h2 class="imun-section-title h4">Atendimento Domiciliar</h2>
+				<p>
+					Vacinas e cuidados no conforto da sua casa — a mesma equipe de
+					enfermagem especializada da clínica, com toda a segurança e o
+					acompanhamento de sempre, até a sua porta.
+				</p>
+				<div class="imun-domiciliar-cta">
+					<a href="/all-products" class="btn imun-cta">Agendar em casa</a>
+					<a href="/contact" class="imun-btn-outline">Saiba mais</a>
+				</div>
+			</div>
+			<div class="imun-domiciliar-icone">
+				{{ imun_icone("Atendimento Domiciliar", 40) }}
+			</div>
+		</div>
+	</section>
+	{% endif %}
+
 	<!-- Catálogo: duas linhas de navegação, Imuno | Care (F5/F7) — ecoam o
 	     wordmark (imuno em petróleo / care em tom distinto). -->
 	<section class="imun-section" style="border-top:none; padding-top:0;">
 		<span class="imun-eyebrow">Catálogo</span>
 		<h2 class="imun-section-title h4">O que você encontra na Imunocare</h2>
 		<p class="text-muted" style="max-width:64ch;">
-			Vacinas, vitaminas injetáveis, terapias injetáveis, consultas médicas,
-			vale-presente e brincos — todo item pode ser aplicado na clínica ou em casa.
+			{#- Item 2a (2026-08-10): "vale-presente" e "exames" tirados desta
+				frase — remoção só de exibição (ver catalogo/setup.py). -#}
+			Vacinas, vitaminas injetáveis, terapias injetáveis, planos, consultas
+			médicas e brincos — todo item pode ser aplicado na clínica ou em casa.
 		</p>
 
 		{% if nav_imuno %}

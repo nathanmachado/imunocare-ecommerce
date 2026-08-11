@@ -1,7 +1,7 @@
 """Home da loja Imunocare (BRIEF_LOJA.md item 5; ver F6 — revisão de design,
 inventário 2026-08-02, sobre o fallback de imagem por ícone).
 
-Reuso: as seções (Vacinas/Vitaminas/.../Pacotes) e seus itens vêm de
+Reuso: as seções (Vacinas/Vitaminas/.../Planos) e seus itens vêm de
 ``catalogo.setup.secoes_para_home`` (Website Item + Item Price já publicados
 pelo catálogo — nenhuma consulta nova é criada aqui). O link "ver todos" de
 cada seção é a própria página nativa da categoria
@@ -85,7 +85,8 @@ _DESC_PADRAO_SECAO = {
 	"Vacinas": "Aplicação por profissional de saúde habilitado, na clínica ou em casa.",
 	"Vitaminas Injetáveis": "Reposição com avaliação profissional — mais energia e imunidade.",
 	"Terapias Injetáveis": "Protocolos com indicação e acompanhamento profissional.",
-	"Pacotes": "Condição especial para completar o esquema recomendado.",
+	# Item 2b (2026-08-10): "Pacotes" -> "Planos".
+	"Planos": "Condição especial para completar o esquema recomendado.",
 	"Brincos": "Furo de orelha com técnica asséptica e material hipoalergênico.",
 	"Consultas Médicas": "Orientação profissional para vacinar e se cuidar com segurança.",
 	"Vale-Presente": "Presenteie saúde: crédito para vacinas, vitaminas ou consultas.",

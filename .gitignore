@@ -9,3 +9,11 @@ node_modules
 .idea/
 # catálogo real extraído de produção — contém PREÇOS (dado de negócio, nunca versionar)
 imunocare_ecommerce/catalogo/catalogo_prod.json
+# Imagens-FONTE de produtos (originais ~1MB cada, ~58MB no total). O site usa
+# as versões OTIMIZADAS em public/img/produtos/*.jpg (nomeadas por item_code,
+# ~50KB cada, essas SIM versionadas). Mantidas só localmente como material
+# bruto para regerar/otimizar no futuro (ver catalogo.setup._imagem_produto).
+imunocare_ecommerce/public/img/Vacinas Todas/
+imunocare_ecommerce/public/img/Vitaminas e Protocolos/
+imunocare_ecommerce/public/img/Planos/
+imunocare_ecommerce/public/img/Brincos/
