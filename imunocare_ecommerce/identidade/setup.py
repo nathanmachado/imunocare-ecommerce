@@ -162,16 +162,23 @@ a:hover {{ color: var(--imun-coral); }}
 	padding-top: 8px;
 	padding-bottom: 8px;
 }}
+// O clamp nativo do navbar tem DUAS restrições (navbar.scss upstream:
+// ``.navbar-brand img {{ max-width:150px; max-height:22px }}``). Vencer só
+// ``max-width`` não basta: ``max-height:22px`` continuava travando a altura
+// em 22px por mais que ``height`` fosse 44px (2026-08-11, feedback do dono:
+// logo renderizando a 22px no desktop). Por isso ``max-height:none`` +
+// ``height`` com !important.
 .navbar .navbar-brand img.imun-brand-logo {{
-	height: 44px;
-	width: auto;
+	height: 44px !important;
+	max-height: none !important;
+	width: auto !important;
 	max-width: none !important;
 	object-fit: contain;
 	display: block;
 }}
 .navbar {{ min-height: 78px; }}
 @media (max-width: 480px) {{
-	.navbar .navbar-brand img.imun-brand-logo {{ height: 34px; }}
+	.navbar .navbar-brand img.imun-brand-logo {{ height: 34px !important; }}
 }}
 // Menu "Produtos" à DIREITA (feedback do dono 2026-08-10): o navbar nativo põe
 // a lista de itens com ``mr-auto`` (colada na logo → parecia parte do nome).
@@ -190,9 +197,15 @@ a:hover {{ color: var(--imun-coral); }}
 	background-color: var(--imun-petroleo) !important;
 	border-top: none;
 }}
+// Rodapé: o nativo fixa ``.footer-logo {{ height:1.5rem }}`` (=24px,
+// footer.scss upstream) — precisa sobrescrever o ``height`` (não só o
+// ``max-height``) para o lockup aparecer maior (2026-08-11, feedback do
+// dono: 34px no rodapé).
 .web-footer .footer-logo, .web-footer img.footer-logo {{
-	max-height: 40px;
-	width: auto;
+	height: 34px !important;
+	max-height: none !important;
+	width: auto !important;
+	object-fit: contain;
 }}
 .web-footer .footer-link,
 .web-footer .footer-child-item a,
