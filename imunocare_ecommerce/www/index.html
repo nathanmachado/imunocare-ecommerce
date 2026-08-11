@@ -164,7 +164,7 @@
 			<h2 class="imun-section-title h4 mb-0 imun-section-title-icon">
 				{{ imun_icone("Consultas Médicas", 22) }}Médicos parceiros
 			</h2>
-			<a href="/parceria-com-medicos" class="small">Ver todos &rarr;</a>
+			<a href="{{ consultas_medicas_route }}" class="small">Ver todos &rarr;</a>
 		</div>
 		<p class="text-muted" style="max-width:64ch;">
 			Conheça alguns dos profissionais de saúde habilitados que atendem na Imunocare.
@@ -200,7 +200,7 @@
 						Agendar
 					</button>
 					{% else %}
-					<a href="/parceria-com-medicos" class="btn imun-cta imun-btn-sm">Saiba mais</a>
+					<a href="{{ consultas_medicas_route }}" class="btn imun-cta imun-btn-sm">Saiba mais</a>
 					{% endif %}
 				</div>
 			</div>

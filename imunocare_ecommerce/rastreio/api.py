@@ -154,7 +154,7 @@ def evento(
 		return {"ok": False}
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=True)
 def vincular_carrinho_atual(session_id: str) -> dict:
 	"""Amarra a sessão web ao carrinho (Quotation Shopping Cart) do usuário logado.
 
@@ -163,6 +163,13 @@ def vincular_carrinho_atual(session_id: str) -> dict:
 	``webshop...cart._get_cart_quotation`` usa internamente (contrato estável
 	e documentado do modelo de dados do webshop) em vez de importar função
 	privada de outro app.
+
+	``allow_guest=True`` (Atividade 537 / Feature 72): o front (``rastreio.js``)
+	chama este endpoint logo após o consentimento de cookies, ANTES de saber se
+	o visitante está logado — sem ``allow_guest`` o Frappe barra a chamada com
+	"Método não permitido" antes mesmo de chegar no early-return abaixo
+	(``frappe.session.user == "Guest"``), que já existia e já cobria esse caso
+	com segurança (não cria/edita nada para Guest).
 	"""
 	if frappe.session.user == "Guest":
 		return {"linked": False}

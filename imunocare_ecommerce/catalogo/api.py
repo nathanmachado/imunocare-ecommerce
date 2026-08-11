@@ -26,3 +26,45 @@ def categorias_nav() -> list[dict]:
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.catalogo.api")
 		return []
+
+
+# ---------------------------------------------------------------------------
+# Atividade 541 (Feature 72) — sinal serviço×produto no grid/listagem
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist(allow_guest=True)
+def get_product_filter_data_loja(query_args=None) -> dict:
+	"""Override de ``webshop.webshop.api.get_product_filter_data``
+	(``hooks.override_whitelisted_methods``) — MESMO retorno nativo (query,
+	filtros, paginação de ``ProductQuery``, 100% reusados, upstream não
+	tocado), só ACRESCENTA ``imun_servico``/``imun_appointment_type`` em cada
+	item.
+
+	Cobre os dois pontos de entrada do grid/lista: o carregamento inicial
+	(``webshop...product_ui/views.js``) e o "Carregar mais"
+	(``public/js/product_list_more.js``) — ambos chamam este MESMO método
+	whitelisted, então o override cobre os dois sem código extra.
+
+	``public/js/agendamento.js`` monkey-patcha
+	``webshop.ProductGrid/ProductList.get_primary_button`` pra ler
+	``item.imun_servico`` e desenhar "Agendar" no lugar do botão nativo —
+	sem precisar de 1 chamada ao backend por card."""
+	from webshop.webshop.api import get_product_filter_data
+
+	resultado = get_product_filter_data(query_args=query_args)
+	_enriquecer_com_sinal_servico(resultado.get("items") or [])
+	return resultado
+
+
+def _enriquecer_com_sinal_servico(items: list) -> None:
+	from imunocare_ecommerce.catalogo.servico import sinal_servico
+
+	for item in items:
+		try:
+			sinal = sinal_servico(item.get("item_code"))
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.catalogo.api")
+			sinal = {"servico": False, "appointment_type": None}
+		item["imun_servico"] = 1 if sinal["servico"] else 0
+		item["imun_appointment_type"] = sinal["appointment_type"]

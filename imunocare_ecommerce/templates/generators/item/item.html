@@ -24,7 +24,15 @@
 {% endblock %}
 
 {% block page_content %}
-<div class="imun-product-page">
+{#- Atividade 540 (Feature 72): sinal serviço×produto (imun_sinal_servico,
+	registrado em hooks.jinja) exposto como data-attribute num container
+	estável — public/js/agendamento.js lê isso pra decidir entre o botão
+	"Agendar" e o botão nativo do webshop, sem precisar recalcular a regra no
+	client. -#}
+{% set imun_sinal = imun_sinal_servico(doc) %}
+<div class="imun-product-page"
+	data-imun-servico="{{ 1 if imun_sinal.servico else 0 }}"
+	data-imun-appointment-type="{{ imun_sinal.appointment_type or '' }}">
 	<span class="imun-eyebrow">Produto</span>
 	{#- H1 por produto (F2): visualmente oculto (mesmo texto do <title>) — o
 		título grande realmente exibido é o "product-title" nativo do webshop

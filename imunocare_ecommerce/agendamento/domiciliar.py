@@ -150,3 +150,65 @@ def info_domiciliar() -> dict:
 		"taxa_fmt": fmt_money(taxa, currency="BRL"),
 		"selecionado": selecionado,
 	}
+
+
+# ---------------------------------------------------------------------------
+# Elegibilidade POR SERVIÇO (Atividade 542-dep / Feature 72) — diferente de
+# ``info_domiciliar()`` acima (carrinho de produtos, sem noção de "serviço").
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist(allow_guest=True)
+def info_domiciliar_agendamento(
+	item_code: str | None = None, appointment_type: str | None = None
+) -> dict:
+	"""Elegibilidade de atendimento domiciliar para o MODAL DE AGENDAMENTO
+	(``public/js/agendamento.js``/``window.imunAbrirAgendamentoDialogo``).
+
+	Domiciliar só é oferecido quando **as duas** condições valem:
+	  1. o recurso está ligado globalmente (``info_domiciliar()`` — mesmo
+	     flag/taxa do carrinho, ``Imunocare Ecommerce Settings``);
+	  2. o **Appointment Type do serviço** tem o custom field
+	     ``imun_permite_domiciliar=1`` — campo do ``imunocare_clinic_ext``
+	     (dev-clinic). Lido DEFENSIVAMENTE: se o DocType "Appointment Type"
+	     ainda não tiver esse campo (app não migrado) ou o valor estiver
+	     vazio/0, domiciliar NÃO é oferecido para esse serviço — nunca
+	     lança erro, apenas degrada para "só Clínica" (SPEC 2026-08-11,
+	     riscos: "campo só o CTO migra").
+
+	Reaproveita ``agendamento.booking._resolver_agendavel`` para resolver o
+	``appointment_type`` a partir de ``item_code`` (ou usar o direto) — mesma
+	validação usada por ``get_horarios``/``criar_agendamento``, sem duplicar."""
+	base = info_domiciliar()
+	if not base.get("ativo"):
+		return base
+
+	try:
+		from imunocare_ecommerce.agendamento.booking import _resolver_agendavel
+
+		_wi, resolved_appointment_type = _resolver_agendavel(item_code, appointment_type)
+	except Exception:
+		# Item/Appointment Type inválido -> nem chega a fazer sentido perguntar
+		# sobre domicílio; o próprio fluxo de agendamento vai barrar depois com
+		# a mensagem certa (booking.info_agendamento/criar_agendamento).
+		return {"ativo": False}
+
+	permite = False
+	try:
+		meta = frappe.get_meta("Appointment Type")
+		if meta.has_field("imun_permite_domiciliar"):
+			permite = bool(
+				frappe.db.get_value(
+					"Appointment Type", resolved_appointment_type, "imun_permite_domiciliar"
+				)
+			)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		permite = False
+
+	if not permite:
+		return {"ativo": False}
+
+	base = dict(base)
+	base["appointment_type"] = resolved_appointment_type
+	return base

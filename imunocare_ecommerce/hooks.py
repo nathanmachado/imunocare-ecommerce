@@ -175,6 +175,10 @@ jinja = {
 	"methods": [
 		"imunocare_ecommerce.catalogo.jinja_utils.contagem_produtos_publicados",
 		"imunocare_ecommerce.catalogo.jinja_utils.info_categoria_vazia",
+		# Atividade 540 (Feature 72): sinal serviço×produto exposto na página
+		# do item (templates/generators/item/item.html) para o
+		# public/js/agendamento.js decidir o botão.
+		"imunocare_ecommerce.catalogo.jinja_utils.imun_sinal_servico",
 	]
 }
 
@@ -319,9 +323,15 @@ scheduler_events = {
 # Overriding Methods
 # ------------------------------
 #
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "imunocare_ecommerce.event.get_events"
-# }
+# Atividade 541 (Feature 72): mesmo endpoint nativo do webshop que alimenta o
+# grid/lista de produtos (all-products e páginas de categoria, chamado tanto
+# no carregamento inicial quanto no "Carregar mais" — product_list_more.js),
+# só ACRESCENTA o sinal serviço×produto (Atividade 540 /
+# catalogo.servico.sinal_servico) em cada item, sem duplicar
+# filtros/busca/paginação (ProductQuery, upstream, não tocado).
+override_whitelisted_methods = {
+	"webshop.webshop.api.get_product_filter_data": "imunocare_ecommerce.catalogo.api.get_product_filter_data_loja",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
