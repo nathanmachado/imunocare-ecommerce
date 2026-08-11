@@ -32,6 +32,7 @@ Mapeamento Item → seção:
 
 from __future__ import annotations
 
+import os
 import re
 
 import frappe
@@ -411,6 +412,33 @@ def _resolve_section(item_group: str) -> str | None:
 	return None
 
 
+_IMG_PRODUTOS_URL = "/assets/imunocare_ecommerce/img/produtos"
+_IMG_PRODUTOS_PREFIXO_GERIDO = "/assets/imunocare_ecommerce/img/"
+_IMG_PRODUTOS_EXTS = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def _imagem_produto(item_code: str) -> str | None:
+	"""Imagem do produto por CONVENÇÃO de nome de arquivo: se existir
+	``public/img/produtos/<item_code>.<ext>`` (png/jpg/jpeg/webp), retorna a
+	URL ``/assets`` correspondente; senão ``None``.
+
+	Convenção (2026-08-11, "complementar o site com as imagens"): o arquivo é
+	nomeado pelo ITEM_CODE ESTÁVEL do produto. Para adicionar/trocar a foto de
+	um produto no futuro, basta soltar ``<item_code>.png`` nessa pasta —
+	nenhum código muda. O item_code aparece na página do produto e na lista de
+	Website Item no Desk. Mantém a lógica de imagem em UM lugar só (aqui), no
+	momento da publicação, em vez de espalhar por keyword de nome de produto.
+	"""
+	try:
+		base = frappe.get_app_path("imunocare_ecommerce", "public", "img", "produtos")
+	except Exception:
+		return None
+	for ext in _IMG_PRODUTOS_EXTS:
+		if os.path.exists(os.path.join(base, f"{item_code}{ext}")):
+			return f"{_IMG_PRODUTOS_URL}/{item_code}{ext}"
+	return None
+
+
 def _upsert_website_item(item: "frappe._dict", section: str) -> None:
 	"""Cria ou atualiza o Website Item vinculado ao Item.
 
@@ -442,6 +470,26 @@ def _upsert_website_item(item: "frappe._dict", section: str) -> None:
 	_ensure_website_item_section(doc, section)
 
 	doc.save(ignore_permissions=True)
+
+	# Imagem do produto por convenção de nome (item_code) — ver
+	# ``_imagem_produto``. Gravada DIRETO no banco DEPOIS do save: o webshop
+	# (``WebsiteItem.validate_website_image``, upstream, não tocado) ZERA
+	# qualquer ``website_image`` que não seja um doc File público — e um asset
+	# estático ``/assets/.../img/`` não tem File associado (foi por isso que o
+	# mecanismo antigo por keyword nunca pegava). ``frappe.db.set_value``
+	# contorna essa validação sem tocar upstream. Idempotente (roda a cada
+	# publish); respeita upload manual do operador (``/files/...``),
+	# sobrescreve só quando vazio ou quando é uma imagem NOSSA (``/assets/``).
+	img = _imagem_produto(item.item_code)
+	if img:
+		atual = frappe.db.get_value("Website Item", doc.name, "website_image")
+		if not atual or str(atual).startswith(_IMG_PRODUTOS_PREFIXO_GERIDO):
+			frappe.db.set_value(
+				"Website Item",
+				doc.name,
+				{"website_image": img, "thumbnail": img},
+				update_modified=False,
+			)
 
 
 def _ensure_website_item_section(doc: "frappe.Document", section: str) -> None:
