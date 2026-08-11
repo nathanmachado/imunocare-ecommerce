@@ -1,14 +1,30 @@
-// Widget de agendamento online (Feature 55 / A1.3).
+// Widget de agendamento online (Feature 55 / A1.3; evoluído na Feature 72 —
+// Atividade 541 — "botão contextual": este arquivo passou de "só ADICIONA um
+// botão Agendar" para "DECIDE o botão" — serviço esconde o nativo e mostra
+// "Agendar"; produto mantém o nativo. Nenhum item fica sem botão (fallback
+// explícito: se algo estiver mal configurado, o nativo continua visível).
 //
-// Reuso: injeta um botão "Agendar" na página nativa de detalhe do Website
-// Item (webshop `templates/generators/item/item.html`/`item_details.html`)
-// SEM tocar nesses templates — lê o item_code do atributo `data-item-code`
-// que o webshop já renderiza no botão "Add to Cart" e usa `frappe.ui.Dialog`
-// (já carregado nessa página pelo próprio webshop via `dialog.bundle.js`).
+// Reuso: injeta/decide o botão na página nativa de detalhe do Website Item
+// (webshop `templates/generators/item/item.html`/`item_details.html`) e no
+// grid/lista nativos (`webshop.ProductGrid`/`ProductList`,
+// `product_ui/grid.js`/`list.js`) SEM tocar nesses templates/arquivos — só
+// lê o sinal já exposto (Atividade 540 — data-attribute na página do item,
+// `item.imun_servico` no JSON do grid, ver `catalogo.api.get_product_filter_data_loja`)
+// e usa `frappe.ui.Dialog` (já carregado nessa página pelo próprio webshop
+// via `dialog.bundle.js`).
 //
 // Site-wide via hooks.web_include_js — roda em toda página pública e sai
 // cedo se não houver item agendável na página atual.
 frappe.ready(function () {
+	imun_decidir_botao_pagina_item();
+	imun_patch_botao_grid();
+});
+
+// ---------------------------------------------------------------------------
+// Página do item (produto único) — Atividade 541
+// ---------------------------------------------------------------------------
+
+function imun_decidir_botao_pagina_item() {
 	var itemEl = document.querySelector("[data-item-code]");
 	if (!itemEl) {
 		return;
@@ -18,6 +34,21 @@ frappe.ready(function () {
 		return;
 	}
 
+	// Sinal exposto pela Atividade 540 (templates/generators/item/item.html +
+	// catalogo.jinja_utils.imun_sinal_servico) — evita a ida ao backend no
+	// caso comum ("produto": mantém o botão nativo tal como já está na tela).
+	var $productPage = $(".imun-product-page").first();
+	var sinalServico = $productPage.length && $productPage.attr("data-imun-servico") === "1";
+	if (!sinalServico) {
+		return;
+	}
+
+	// Confirmação/validação completa no backend (agendamento.booking já sabe
+	// se o Appointment Type/profissional realmente funcionam) — só ENTÃO
+	// esconde o botão nativo. Fallback explícito (SPEC item 4): se
+	// `agendavel` vier falso (ex.: Appointment Type foi apagado depois), o
+	// botão nativo de produto permanece visível — a página nunca fica sem
+	// nenhum botão.
 	frappe.call({
 		method: "imunocare_ecommerce.agendamento.booking.info_agendamento",
 		args: { item_code: item_code },
@@ -26,10 +57,18 @@ frappe.ready(function () {
 			if (!info || !info.agendavel) {
 				return;
 			}
+			imun_esconder_botao_nativo_pagina();
 			imun_render_botao_agendar(item_code, info);
 		},
 	});
-});
+}
+
+function imun_esconder_botao_nativo_pagina() {
+	// item_add_to_cart.html (webshop, upstream): ".btn-add-to-cart" ("Add to
+	// Cart"/"Add to Quote") e ".btn-view-in-cart" ("View in Cart"/"View in
+	// Quote") — os dois únicos botões de carrinho da página do item.
+	$(".item-cart .btn-add-to-cart, .item-cart .btn-view-in-cart").addClass("d-none");
+}
 
 function imun_render_botao_agendar(item_code, info) {
 	var $host = $(".item-cart").first();
@@ -38,7 +77,7 @@ function imun_render_botao_agendar(item_code, info) {
 	}
 	var $btn = $(
 		'<button type="button" class="btn btn-primary mt-2 imun-btn-agendar">' +
-			__("Agendar Consulta") +
+			__("Agendar") +
 			"</button>"
 	);
 	$host.append($btn);
@@ -53,6 +92,92 @@ function imun_render_botao_agendar(item_code, info) {
 	});
 }
 
+// ---------------------------------------------------------------------------
+// Grid/lista de listagem (all-products, categorias) — Atividade 541
+//
+// Monkey-patch de `webshop.ProductGrid`/`ProductList.get_primary_button`
+// (mesmo padrão de `product_grid_style.js`, que já faz o mesmo com
+// `get_card_body_html`): guarda a implementação NATIVA e só substitui a
+// saída quando `item.imun_servico` vier `1` (enriquecido pelo backend, ver
+// `catalogo.api.get_product_filter_data_loja`) — produto continua 100%
+// nativo (Add to Cart/Quote, variantes, estoque, preço), sem duplicar essa
+// lógica aqui.
+// ---------------------------------------------------------------------------
+
+function imun_patch_botao_grid() {
+	if (typeof webshop === "undefined") {
+		return;
+	}
+
+	if (webshop.ProductGrid && !webshop.ProductGrid.prototype._imun_patched) {
+		var original_grid_btn = webshop.ProductGrid.prototype.get_primary_button;
+		webshop.ProductGrid.prototype.get_primary_button = function (item, settings) {
+			if (item.imun_servico) {
+				return imun_html_botao_agendar_card(item);
+			}
+			return original_grid_btn.call(this, item, settings);
+		};
+		webshop.ProductGrid.prototype._imun_patched = true;
+	}
+
+	if (webshop.ProductList && !webshop.ProductList.prototype._imun_patched) {
+		var original_list_btn = webshop.ProductList.prototype.get_primary_button;
+		webshop.ProductList.prototype.get_primary_button = function (item, settings) {
+			if (item.imun_servico) {
+				return imun_html_botao_agendar_card(item);
+			}
+			return original_list_btn.call(this, item, settings);
+		};
+		webshop.ProductList.prototype._imun_patched = true;
+	}
+}
+
+function imun_html_botao_agendar_card(item) {
+	return (
+		'<div class="btn btn-sm btn-primary w-100 mt-2 imun-btn-agendar-card" ' +
+		'data-item-code="' +
+		frappe.utils.escape_html(item.item_code || "") +
+		'">' +
+		__("Agendar") +
+		"</div>"
+	);
+}
+
+// Delegado (os cards são recriados a cada render/"Carregar mais" — ver
+// product_list_more.js) — clique abre o MESMO diálogo da página do item,
+// mas só depois de validar no backend (agendamento.booking.info_agendamento)
+// que o serviço realmente está configurado; fallback: se não estiver, avisa
+// o cliente em vez de abrir um diálogo quebrado (nunca lança 500).
+frappe.ready(function () {
+	$(document).on("click", ".imun-btn-agendar-card", function (e) {
+		e.preventDefault();
+		var item_code = $(this).data("item-code");
+		if (!item_code) {
+			return;
+		}
+		if (!frappe.session.user || frappe.session.user === "Guest") {
+			window.location.href =
+				"/login?redirect-to=" + encodeURIComponent(window.location.pathname);
+			return;
+		}
+		frappe.call({
+			method: "imunocare_ecommerce.agendamento.booking.info_agendamento",
+			args: { item_code: item_code },
+			freeze: true,
+			callback: function (r) {
+				var info = r.message;
+				if (!info || !info.agendavel) {
+					frappe.msgprint(
+						__("Este item ainda não está disponível para agendamento online. Fale com a clínica.")
+					);
+					return;
+				}
+				imun_abrir_dialogo_agendamento({ item_code: item_code }, info);
+			},
+		});
+	});
+});
+
 // Diálogo de agendamento compartilhado — aceita ``params`` com
 // ``{item_code}`` (item da loja, fluxo A1.3 acima) OU ``{appointment_type}``
 // (agendamento direto, ex.: carrossel de médicos na home — R2/Feature 70)
@@ -60,12 +185,16 @@ function imun_render_botao_agendar(item_code, info) {
 // (``_resolver_agendavel``). Exposto em ``window.imunAbrirAgendamentoDialogo``
 // para outros scripts site-wide reusarem sem duplicar o diálogo inteiro.
 function imun_abrir_dialogo_agendamento(params, info) {
-	// F3: modalidade "Na clínica x Domiciliar" — consome o endpoint
-	// info_domiciliar() (já pronto, ver agendamento/domiciliar.py) para
-	// decidir se mostra a opção e o texto da taxa. Antes desta atividade o
-	// diálogo não enviava "modalidade" nenhuma ao backend (parâmetro morto).
+	// F3 (evoluído na Atividade 542-dep / Feature 72): modalidade "Na clínica
+	// x Domiciliar" — consome ``info_domiciliar_agendamento`` (elegibilidade
+	// POR SERVIÇO: só oferece Domiciliar quando o Appointment Type do item
+	// tiver ``imun_permite_domiciliar=1``, lido defensivamente — ver
+	// ``agendamento/domiciliar.py``). Antes desta atividade a elegibilidade
+	// era só o flag GLOBAL da loja (``info_domiciliar()``, ainda usado pelo
+	// carrinho de produtos em ``domiciliar_cart.js``, sem noção de serviço).
 	frappe.call({
-		method: "imunocare_ecommerce.agendamento.domiciliar.info_domiciliar",
+		method: "imunocare_ecommerce.agendamento.domiciliar.info_domiciliar_agendamento",
+		args: params,
 		callback: function (r) {
 			imun_montar_dialogo_agendamento(params, info, r.message || {});
 		},
@@ -111,7 +240,11 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info) {
 	}
 
 	var d = new frappe.ui.Dialog({
-		title: __("Agendar Consulta"),
+		// Título genérico (Feature 72): este diálogo compartilhado agenda
+		// vacina/vitamina/terapia/consulta — não só "Consulta" (mesmo botão
+		// "Agendar" em toda a loja, ver imun_render_botao_agendar/
+		// imun_html_botao_agendar_card/medicos_carrossel.js).
+		title: __("Agendar"),
 		fields: fields,
 		primary_action_label: __("Confirmar Agendamento"),
 		primary_action: function (values) {

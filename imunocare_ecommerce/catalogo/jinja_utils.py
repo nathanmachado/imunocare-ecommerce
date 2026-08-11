@@ -94,3 +94,21 @@ _INFO_CATEGORIA_VAZIA: dict[str, dict[str, str]] = {
 
 def info_categoria_vazia(item_group_name: str) -> dict | None:
 	return _INFO_CATEGORIA_VAZIA.get(item_group_name)
+
+
+def imun_sinal_servico(doc) -> dict:
+	"""Serviço×produto (Atividade 540 — Feature 72): ``{"servico", "appointment_type"}``
+	para o Website Item ``doc`` da página atual. Usado por
+	``templates/generators/item/item.html`` para expor
+	``data-imun-servico``/``data-imun-appointment-type`` no DOM — o sinal que
+	``public/js/agendamento.js`` lê para decidir entre o botão "Agendar" e o
+	botão nativo de carrinho (Atividade 541), sem duplicar a regra (ver
+	``catalogo.servico.sinal_servico``, fonte única também usada pelo grid)."""
+	try:
+		from imunocare_ecommerce.catalogo.servico import sinal_servico
+
+		item_code = doc.get("item_code") if hasattr(doc, "get") else getattr(doc, "item_code", None)
+		return sinal_servico(item_code)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		return {"servico": False, "appointment_type": None}

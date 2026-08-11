@@ -78,7 +78,29 @@ def get_context(context):
 		frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.www.index")
 		context.medicos = []
 
+	# Atividade 538 (Feature 72): "Ver todos ->" e o fallback "Saiba mais" do
+	# carrossel de médicos levam à CATEGORIA Consultas Médicas (não mais ao
+	# recrutamento "/parceria-com-medicos") — não há perfil individual de
+	# médico neste ciclo (SPEC 2026-08-11, "não entra").
+	context.consultas_medicas_route = _rota_consultas_medicas()
+
 	return context
+
+
+def _rota_consultas_medicas() -> str:
+	"""Rota pública do Item Group "Consultas Médicas" (a mesma página nativa
+	gerada por ``templates/generators/item_group.html``). Lida do próprio Item
+	Group em vez de fixa no template — se a rota mudar (rename, webshop
+	regerando ``route``), o link acompanha sem precisar mexer no HTML.
+	Fallback: se o grupo não existir (instalação quebrada/incompleta), mantém
+	o destino antigo em vez de gerar um link morto."""
+	try:
+		route = frappe.db.get_value("Item Group", "Consultas Médicas", "route")
+		if route:
+			return "/" + route.lstrip("/")
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.www.index")
+	return "/parceria-com-medicos"
 
 
 _DESC_PADRAO_SECAO = {

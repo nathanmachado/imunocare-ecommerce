@@ -438,7 +438,11 @@ def criar_agendamento(
 
 	modalidade_domiciliar = (modalidade or "").strip().lower() in ("domiciliar", "domicilio", "domicílio")
 	if meta_pa.has_field("imun_modalidade"):
-		pa.imun_modalidade = "Domiciliar" if modalidade_domiciliar else "Na Clínica"
+		# O Select imun_modalidade (imunocare_clinic_ext) só aceita
+		# "Clínica"/"Domiciliar" (MODALIDADE_OPTIONS). Gravar "Na Clínica" aqui
+		# fazia todo agendamento NÃO-domiciliar quebrar em pa.insert() com
+		# ValidationError (Feature 72, achado do dev-clinic 2026-08-11).
+		pa.imun_modalidade = "Domiciliar" if modalidade_domiciliar else "Clínica"
 	pa.insert(ignore_permissions=True)
 
 	resultado = {
@@ -446,7 +450,7 @@ def criar_agendamento(
 		"status": pa.status,
 		"faturado": False,
 		"payment_url": None,
-		"modalidade": "Domiciliar" if modalidade_domiciliar else "Na Clínica",
+		"modalidade": "Domiciliar" if modalidade_domiciliar else "Clínica",
 	}
 	if modalidade_domiciliar:
 		resultado["aviso_domiciliar"] = _(
