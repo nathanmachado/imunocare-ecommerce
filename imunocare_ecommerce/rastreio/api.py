@@ -18,7 +18,7 @@ depois do aceite. Isso simplifica a guarda no servidor (não há branch de
 ou não existe nenhum registro. Nenhum IP é armazenado em nenhum caso.
 
 Guarda contra abuso: endpoint ``allow_guest``, mas com rate-limit por IP
-(``frappe.rate_limiter.rate_limit``) e validação de tamanho/forma dos
+(``imunocare_ecommerce.rate_limit``) e validação de tamanho/forma dos
 identificadores e do tipo de evento (Select fechado).
 """
 
@@ -28,7 +28,7 @@ import json
 from urllib.parse import urlparse
 
 import frappe
-from frappe.rate_limiter import rate_limit
+from imunocare_ecommerce.rate_limit import rate_limit
 from frappe.utils import now_datetime
 
 _LOG_TITLE = "imunocare_ecommerce.rastreio.api"
@@ -77,7 +77,7 @@ def config() -> dict:
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-@rate_limit(key="imun_rastreio_evento", limit=180, seconds=60)
+@rate_limit(limit=180, seconds=60)
 def evento(
 	visitor_id: str,
 	session_id: str,
