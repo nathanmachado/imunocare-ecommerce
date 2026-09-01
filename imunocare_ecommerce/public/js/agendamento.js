@@ -18,7 +18,38 @@
 frappe.ready(function () {
 	imun_decidir_botao_pagina_item();
 	imun_patch_botao_grid();
+	imun_retomar_reserva_pendente();
 });
+
+// Reserva como visitante (Task 6): quem foi ao /login, ou cujo horário
+// sumiu enquanto digitava o código (ver o error: em imun_passo_codigo),
+// volta/recarrega aqui — reabre o modal com a escolha preservada. O
+// horário É REVALIDADO (imun_montar_dialogo_agendamento chama get_horarios
+// de novo via preset), porque nunca ficou reservado enquanto a pessoa se
+// identificava.
+function imun_retomar_reserva_pendente() {
+	var pendente = sessionStorage.getItem("imun_reserva_pendente");
+	if (!pendente || !frappe.session.user || frappe.session.user === "Guest") {
+		return;
+	}
+	sessionStorage.removeItem("imun_reserva_pendente");
+	var e = JSON.parse(pendente);
+	if (!e.item_code) {
+		// Só o fluxo de item da loja guarda o suficiente para reabrir sozinho
+		// (ver escolha em imun_passo_identificacao); o carrossel de médicos
+		// (appointment_type direto) já exige login antes de abrir o modal.
+		return;
+	}
+	frappe.call({
+		method: "imunocare_ecommerce.agendamento.booking.info_agendamento",
+		args: { item_code: e.item_code },
+		callback: function (r) {
+			if (r.message && r.message.agendavel) {
+				imun_abrir_dialogo_agendamento({ item_code: e.item_code }, r.message, e);
+			}
+		},
+	});
+}
 
 // ---------------------------------------------------------------------------
 // Página do item (produto único) — Atividade 541
@@ -83,11 +114,10 @@ function imun_render_botao_agendar(item_code, info) {
 	$host.append($btn);
 
 	$btn.on("click", function () {
-		if (!info.logged_in) {
-			window.location.href =
-				"/login?redirect-to=" + encodeURIComponent(window.location.pathname);
-			return;
-		}
+		// A parede de /login caiu (Reserva como visitante — Task 6): o modal
+		// abre para qualquer um; quem não está logado é ramificado para a
+		// identificação/verificação dentro do próprio diálogo, no Confirmar
+		// (ver imun_montar_dialogo_agendamento/imun_passo_identificacao).
 		imun_abrir_dialogo_agendamento({ item_code: item_code }, info);
 	});
 }
@@ -155,11 +185,8 @@ frappe.ready(function () {
 		if (!item_code) {
 			return;
 		}
-		if (!frappe.session.user || frappe.session.user === "Guest") {
-			window.location.href =
-				"/login?redirect-to=" + encodeURIComponent(window.location.pathname);
-			return;
-		}
+		// A parede de /login caiu aqui também (Reserva como visitante —
+		// Task 6): o card da listagem abre o mesmo modal para qualquer um.
 		frappe.call({
 			method: "imunocare_ecommerce.agendamento.booking.info_agendamento",
 			args: { item_code: item_code },
@@ -184,7 +211,13 @@ frappe.ready(function () {
 // porque ``agendamento.booking`` já resolve os dois formatos
 // (``_resolver_agendavel``). Exposto em ``window.imunAbrirAgendamentoDialogo``
 // para outros scripts site-wide reusarem sem duplicar o diálogo inteiro.
-function imun_abrir_dialogo_agendamento(params, info) {
+//
+// ``preset`` (opcional, Reserva como visitante — Task 6): ``{appointment_date,
+// appointment_time}`` de uma escolha feita ANTES de identificar/logar —
+// preenche o diálogo ao reabrir depois do /login ou depois de uma
+// verificação, mas o horário É REVALIDADO normalmente (não fica reservado
+// enquanto a pessoa se identifica).
+function imun_abrir_dialogo_agendamento(params, info, preset) {
 	// F3 (evoluído na Atividade 542-dep / Feature 72): modalidade "Na clínica
 	// x Domiciliar" — consome ``info_domiciliar_agendamento`` (elegibilidade
 	// POR SERVIÇO: só oferece Domiciliar quando o Appointment Type do item
@@ -196,12 +229,12 @@ function imun_abrir_dialogo_agendamento(params, info) {
 		method: "imunocare_ecommerce.agendamento.domiciliar.info_domiciliar_agendamento",
 		args: params,
 		callback: function (r) {
-			imun_montar_dialogo_agendamento(params, info, r.message || {});
+			imun_montar_dialogo_agendamento(params, info, r.message || {}, preset);
 		},
 	});
 }
 
-function imun_montar_dialogo_agendamento(params, info, domiciliar_info) {
+function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) {
 	var fields = [
 		{
 			fieldname: "appointment_date",
@@ -253,6 +286,17 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info) {
 				return;
 			}
 			var domiciliar = domiciliar_info.ativo && values.modalidade === __("Domiciliar (+ taxa)");
+
+			// Reserva como visitante (Task 6): guest chegou até o Confirmar
+			// sem logar — ramifica para identificação/verificação em vez de
+			// chamar criar_agendamento direto (que recusa Guest). O horário
+			// escolhido aqui é só a INTENÇÃO; confirmar_codigo_e_agendar é
+			// quem de fato cria o agendamento, já logado.
+			if (!info.logged_in) {
+				imun_passo_identificacao(d, params, values, domiciliar);
+				return;
+			}
+
 			frappe.call({
 				method: "imunocare_ecommerce.agendamento.booking.criar_agendamento",
 				args: Object.assign(
@@ -314,6 +358,15 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info) {
 	});
 
 	d.show();
+
+	// Reabertura pós-login/verificação (Task 6): repõe a escolha de data/hora
+	// de antes de identificar — o listener de "change" acima revalida o
+	// horário no backend (get_horarios), porque ele NÃO ficou reservado
+	// enquanto a pessoa se verificava.
+	if (preset) {
+		d.set_value("appointment_date", preset.appointment_date);
+		d.set_value("appointment_time", preset.appointment_time);
+	}
 }
 
 function imun_render_horarios(d, res) {
@@ -342,6 +395,277 @@ function imun_render_horarios(d, res) {
 		$wrap.find(".imun-slot-btn").removeClass("btn-primary").addClass("btn-outline-primary");
 		$(this).removeClass("btn-outline-primary").addClass("btn-primary");
 		d.set_value("appointment_time", $(this).data("hora"));
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Reserva como visitante (Task 6) — identificação + código, dentro do
+// próprio modal. Backend: imunocare_ecommerce.conta.verificacao (Tasks 4/5).
+// ---------------------------------------------------------------------------
+
+// Guest que chegou ao Confirmar: escolhe entrar na conta ou se verificar.
+function imun_passo_identificacao(dialogo, params, values, domiciliar) {
+	var escolha = {
+		item_code: params.item_code,
+		appointment_type: params.appointment_type,
+		appointment_date: values.appointment_date,
+		appointment_time: values.appointment_time,
+		modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
+	};
+	// Sobrevive ao page load do /login (botão "Já tenho conta") e a um
+	// reload após "horário sumiu" (ver o error: do passo do código); some ao
+	// fechar a aba.
+	sessionStorage.setItem("imun_reserva_pendente", JSON.stringify(escolha));
+
+	dialogo.hide();
+	var d2 = new frappe.ui.Dialog({
+		title: __("Quase lá"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				options: "<p>" + __("Para confirmar o horário escolhido, identifique-se.") + "</p>",
+			},
+			{ fieldname: "ja_tenho_conta", fieldtype: "Button", label: __("Já tenho conta") },
+			{ fieldtype: "Section Break" },
+			{ fieldname: "nome", fieldtype: "Data", label: __("Nome completo"), reqd: 1 },
+			{ fieldname: "celular", fieldtype: "Data", label: __("Celular / WhatsApp"), reqd: 1 },
+			{ fieldname: "email", fieldtype: "Data", label: __("E-mail"), options: "Email", reqd: 1 },
+			{ fieldname: "cpf", fieldtype: "Data", label: __("CPF"), reqd: 1 },
+			{ fieldname: "dob", fieldtype: "Date", label: __("Data de nascimento"), reqd: 1 },
+			{
+				fieldname: "sexo",
+				fieldtype: "Select",
+				label: __("Sexo"),
+				options: "\nMale\nFemale\nOther",
+				reqd: 1,
+			},
+			{
+				fieldname: "para_outra_pessoa",
+				fieldtype: "Check",
+				label: __("A consulta é para outra pessoa"),
+				description: __(
+					"Menor de 18 anos só pode ser agendado por um responsável — marque esta opção e informe os dados de quem vai ser atendido."
+				),
+			},
+			{
+				fieldname: "paciente_nome",
+				fieldtype: "Data",
+				label: __("Nome do paciente"),
+				depends_on: "para_outra_pessoa",
+				mandatory_depends_on: "para_outra_pessoa",
+			},
+			{
+				fieldname: "paciente_cpf",
+				fieldtype: "Data",
+				label: __("CPF do paciente"),
+				depends_on: "para_outra_pessoa",
+				mandatory_depends_on: "para_outra_pessoa",
+			},
+			{
+				fieldname: "paciente_dob",
+				fieldtype: "Date",
+				label: __("Nascimento do paciente"),
+				depends_on: "para_outra_pessoa",
+				mandatory_depends_on: "para_outra_pessoa",
+			},
+			{
+				fieldname: "paciente_sexo",
+				fieldtype: "Select",
+				label: __("Sexo do paciente"),
+				options: "\nMale\nFemale\nOther",
+				depends_on: "para_outra_pessoa",
+				mandatory_depends_on: "para_outra_pessoa",
+			},
+			{ fieldtype: "Section Break" },
+			{
+				fieldname: "canal",
+				fieldtype: "Select",
+				label: __("Receber o código por"),
+				reqd: 1,
+				// Mudança de contrato (revisão de segurança 2026-09-01): o canal
+				// não é cosmético — é ele que ANCORA a conta. Verificar por
+				// WhatsApp identifica pelo CELULAR; por e-mail, pelo E-MAIL. Quem
+				// já tem conta de e-mail e verifica por WhatsApp pode entrar numa
+				// conta nova, não na antiga.
+				description: __(
+					"O contato que você confirmar aqui é o que abre/identifica sua conta — não o outro campo do formulário."
+				),
+			},
+		],
+		primary_action_label: __("Receber código"),
+		primary_action: function (v) {
+			var canalEfetivo = v.canal === __("WhatsApp") ? "whatsapp" : "email";
+			frappe.call({
+				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
+				args: { canal: canalEfetivo, dados: v },
+				freeze: true,
+				freeze_message: __("Enviando código..."),
+				callback: function (r) {
+					if (!r.message) {
+						return;
+					}
+					d2.hide();
+					imun_passo_codigo(escolha, r.message, { canal: canalEfetivo, dados: v });
+				},
+			});
+		},
+	});
+
+	d2.fields_dict.ja_tenho_conta.$input.on("click", function () {
+		window.location.href = "/login?redirect-to=" + encodeURIComponent(window.location.pathname);
+	});
+
+	// O seletor só oferece o canal que está operacional AGORA.
+	frappe.call({
+		method: "imunocare_ecommerce.conta.verificacao.canais_disponiveis",
+		callback: function (r) {
+			var opcoes = [];
+			if ((r.message || {}).whatsapp) {
+				opcoes.push(__("WhatsApp"));
+			}
+			if ((r.message || {}).email) {
+				opcoes.push(__("E-mail"));
+			}
+			d2.set_df_property("canal", "options", opcoes.join("\n"));
+			if (opcoes.length === 1) {
+				d2.set_value("canal", opcoes[0]);
+			}
+		},
+	});
+
+	d2.show();
+}
+
+// Passo do código — ``reenvio`` guarda {canal, dados} da última chamada a
+// ``solicitar_codigo`` só para o botão "Reenviar código" (o Redis descarta o
+// código anterior ao emitir um novo, ver conta/codigo.py:emitir).
+function imun_passo_codigo(escolha, envio, reenvio) {
+	var d3 = new frappe.ui.Dialog({
+		title: __("Digite o código"),
+		fields: [
+			{ fieldname: "aviso_html", fieldtype: "HTML" },
+			{ fieldname: "codigo", fieldtype: "Data", label: __("Código de 6 dígitos"), reqd: 1 },
+		],
+		primary_action_label: __("Confirmar reserva"),
+		primary_action: function (v) {
+			frappe.call({
+				method: "imunocare_ecommerce.conta.verificacao.confirmar_codigo_e_agendar",
+				args: {
+					codigo: v.codigo,
+					appointment_date: escolha.appointment_date,
+					appointment_time: escolha.appointment_time,
+					item_code: escolha.item_code,
+					appointment_type: escolha.appointment_type,
+					modalidade: escolha.modalidade,
+					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
+				},
+				freeze: true,
+				freeze_message: __("Confirmando..."),
+				callback: function (r) {
+					if (!r.message) {
+						return;
+					}
+					sessionStorage.removeItem("imun_reserva_pendente");
+					d3.hide();
+					imun_mensagem_confirmacao_guest(r.message);
+				},
+				error: function (r) {
+					// Código errado/expirado/bloqueado e "menor sem responsável"
+					// acontecem ANTES do login (dentro de
+					// confirmar_codigo_e_agendar, antes de _garantir_usuario) — a
+					// mensagem do servidor já aparece sozinha (frappe.call mostra
+					// _server_messages mesmo com este `error` custom, ver
+					// frappe/public/js/frappe/request.js:cleanup); não duplicamos
+					// a regra aqui, só não engolimos o erro (não fazemos nada:
+					// dialogo continua aberto, campo código pronto pra nova
+					// tentativa/reenvio).
+					//
+					// O ÚNICO caso tratado aqui é o esperado do passo 5: horário
+					// tomado enquanto a pessoa digitava o código. Esse ponto só é
+					// alcançado DEPOIS de login_as/criação de conta — a pessoa
+					// perde o horário, nunca o cadastro. Identificado pela classe
+					// de exceção do healthcare (Patient Appointment.
+					// validate_overlaps), não pelo texto da mensagem.
+					var exc = r && r.exc_type;
+					if (exc !== "OverlapError" && exc !== "MaximumCapacityError") {
+						return;
+					}
+					d3.hide();
+					frappe.msgprint({
+						title: __("Esse horário acabou de ser preenchido"),
+						message: __(
+							"Sua conta já está criada e você está conectado. Escolha outro horário — agora é só um clique."
+						),
+						indicator: "orange",
+					});
+					// Recarrega para o front enxergar a sessão nova e reabrir o
+					// modal já logado, com a data revalidada.
+					sessionStorage.setItem("imun_reserva_pendente", JSON.stringify(escolha));
+					setTimeout(function () {
+						window.location.reload();
+					}, 2500);
+				},
+			});
+		},
+		secondary_action_label: __("Reenviar código"),
+		secondary_action: function () {
+			if (!reenvio) {
+				return;
+			}
+			frappe.call({
+				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
+				args: reenvio,
+				freeze: true,
+				freeze_message: __("Reenviando código..."),
+				callback: function (r) {
+					if (!r.message) {
+						return;
+					}
+					envio = r.message;
+					imun_atualizar_aviso_codigo(d3, envio);
+					d3.set_value("codigo", "");
+					frappe.show_alert({ message: __("Novo código enviado."), indicator: "green" });
+				},
+			});
+		},
+	});
+	imun_atualizar_aviso_codigo(d3, envio);
+	d3.show();
+}
+
+function imun_atualizar_aviso_codigo(d3, envio) {
+	d3.fields_dict.aviso_html.$wrapper.html(
+		"<p>" +
+			__("Enviamos um código para {0}. Ele vale por 10 minutos.", [envio.destino_mascarado]) +
+			"</p>"
+	);
+}
+
+// Mensagem final do fluxo de visitante — mesmo shape de resultado de
+// criar_agendamento (payment_url/aviso_domiciliar), acrescido de
+// ``conta_criada`` (Task 5): diferencia "criamos sua conta" de "você entrou
+// numa conta que já existia" (ex.: CPF já cadastrado, ou celular/e-mail já
+// era de um Website User).
+function imun_mensagem_confirmacao_guest(resultado) {
+	if (resultado.payment_url) {
+		window.location.href = resultado.payment_url;
+		return;
+	}
+	var contaMsg = resultado.conta_criada
+		? __("Criamos sua conta para você acompanhar este e outros agendamentos.")
+		: __("Você entrou na conta que já tinha conosco.");
+	var mensagem = __(
+		"Seu agendamento ({0}) foi registrado. Nossa equipe entrará em contato para combinar o pagamento.",
+		[resultado.appointment]
+	);
+	mensagem += "<br><br>" + contaMsg;
+	if (resultado.aviso_domiciliar) {
+		mensagem += "<br><br>" + frappe.utils.escape_html(resultado.aviso_domiciliar);
+	}
+	frappe.msgprint({
+		title: __("Reserva confirmada"),
+		message: mensagem,
+		indicator: "green",
 	});
 }
 
