@@ -34,12 +34,18 @@ def mascarar(canal: str, destino: str) -> str:
 
 	Importa no caso do CPF já cadastrado: o código vai para o contato do
 	cadastro, que pode não ser o que a pessoa digitou."""
+	if canal not in _CANAIS:
+		frappe.throw(_("Canal de verificação inválido."))
 	destino = (destino or "").strip()
 	if canal == "email":
 		usuario, _sep, dominio = destino.partition("@")
 		return f"{usuario[:1]}***@{dominio}" if dominio else "***"
 	digitos = re.sub(r"\D", "", destino)
-	return "*" * max(len(digitos) - 4, 0) + digitos[-4:]
+	if len(digitos) < 5:
+		# menos de 5 dígitos: não há o que preservar sem expor o contato
+		# inteiro — mascara tudo, sem revelar nenhum dígito.
+		return "*" * len(digitos)
+	return "*" * (len(digitos) - 4) + digitos[-4:]
 
 
 def enviar(canal: str, destino: str, codigo: str, nome: str) -> None:
