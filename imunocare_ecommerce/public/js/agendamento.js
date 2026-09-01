@@ -21,12 +21,30 @@ frappe.ready(function () {
 	imun_retomar_reserva_pendente();
 });
 
-// Reserva como visitante (Task 6): quem foi ao /login, ou cujo horário
-// sumiu enquanto digitava o código (ver o error: em imun_passo_codigo),
-// volta/recarrega aqui — reabre o modal com a escolha preservada. O
-// horário É REVALIDADO (imun_montar_dialogo_agendamento chama get_horarios
-// de novo via preset), porque nunca ficou reservado enquanto a pessoa se
-// identificava.
+// Reserva como visitante (Task 6) — sessionStorage "imun_reserva_pendente":
+// sobrevive à ida ao /login e ao reload do caso "horário sumiu" (ver
+// imun_passo_codigo). Carimbado com ``criado_em`` e limpo no fechamento dos
+// diálogos "Quase lá"/"Digite o código" quando a pessoa DESISTE (fix round 1
+// — achado da review 2026-09-01: sem isso, uma aba que loga bem depois por
+// qualquer outro motivo reabria o modal sozinho com data/horário velhos).
+var IMUN_RESERVA_PENDENTE_TTL_MS = 30 * 60 * 1000; // 30 min
+
+function imun_guardar_reserva_pendente(escolha) {
+	escolha.criado_em = Date.now();
+	sessionStorage.setItem("imun_reserva_pendente", JSON.stringify(escolha));
+}
+
+function imun_limpar_reserva_pendente() {
+	sessionStorage.removeItem("imun_reserva_pendente");
+}
+
+// Quem foi ao /login, ou cujo horário sumiu enquanto digitava o código,
+// volta/recarrega aqui — reabre o modal com a escolha preservada. O horário
+// É REVALIDADO (imun_montar_dialogo_agendamento chama get_horarios de novo
+// via preset), porque nunca ficou reservado enquanto a pessoa se
+// identificava. Cobre os dois formatos de escolha: item da loja
+// (``item_code``) e agendamento direto por profissional (``appointment_type``
+// + ``practitioner``, carrossel de médicos — ``medicos_carrossel.js``).
 function imun_retomar_reserva_pendente() {
 	var pendente = sessionStorage.getItem("imun_reserva_pendente");
 	if (!pendente || !frappe.session.user || frappe.session.user === "Guest") {
@@ -34,21 +52,32 @@ function imun_retomar_reserva_pendente() {
 	}
 	sessionStorage.removeItem("imun_reserva_pendente");
 	var e = JSON.parse(pendente);
-	if (!e.item_code) {
-		// Só o fluxo de item da loja guarda o suficiente para reabrir sozinho
-		// (ver escolha em imun_passo_identificacao); o carrossel de médicos
-		// (appointment_type direto) já exige login antes de abrir o modal.
+	if (!e.criado_em || Date.now() - e.criado_em > IMUN_RESERVA_PENDENTE_TTL_MS) {
+		// Escolha velha demais — não reabre sozinho com data/horário obsoletos.
 		return;
 	}
-	frappe.call({
-		method: "imunocare_ecommerce.agendamento.booking.info_agendamento",
-		args: { item_code: e.item_code },
-		callback: function (r) {
-			if (r.message && r.message.agendavel) {
-				imun_abrir_dialogo_agendamento({ item_code: e.item_code }, r.message, e);
-			}
-		},
-	});
+	if (e.item_code) {
+		frappe.call({
+			method: "imunocare_ecommerce.agendamento.booking.info_agendamento",
+			args: { item_code: e.item_code },
+			callback: function (r) {
+				if (r.message && r.message.agendavel) {
+					imun_abrir_dialogo_agendamento({ item_code: e.item_code }, r.message, e);
+				}
+			},
+		});
+		return;
+	}
+	if (e.appointment_type && e.practitioner) {
+		// Mesmo padrão do clique original em medicos_carrossel.js: o
+		// profissional já foi escolhido no card, sem ida ao backend — só repõe
+		// o mesmo params/info que o clique teria montado.
+		imun_abrir_dialogo_agendamento(
+			{ appointment_type: e.appointment_type },
+			{ practitioner: e.practitioner, logged_in: true },
+			e
+		);
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -293,7 +322,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			// escolhido aqui é só a INTENÇÃO; confirmar_codigo_e_agendar é
 			// quem de fato cria o agendamento, já logado.
 			if (!info.logged_in) {
-				imun_passo_identificacao(d, params, values, domiciliar);
+				imun_passo_identificacao(d, params, info, values, domiciliar);
 				return;
 			}
 
@@ -404,20 +433,28 @@ function imun_render_horarios(d, res) {
 // ---------------------------------------------------------------------------
 
 // Guest que chegou ao Confirmar: escolhe entrar na conta ou se verificar.
-function imun_passo_identificacao(dialogo, params, values, domiciliar) {
+// ``info`` é o mesmo objeto que o clique original montou (item da loja OU
+// carrossel de médicos) — carregamos ``info.practitioner`` na escolha para
+// que o fluxo por ``appointment_type`` (sem Website Item) consiga resolver o
+// profissional em ``confirmar_codigo_e_agendar`` sem depender do "só existe
+// 1 Practitioner Ativo" (ver agendamento.booking._resolver_practitioner).
+function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 	var escolha = {
 		item_code: params.item_code,
 		appointment_type: params.appointment_type,
+		practitioner: info.practitioner,
 		appointment_date: values.appointment_date,
 		appointment_time: values.appointment_time,
 		modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
 	};
 	// Sobrevive ao page load do /login (botão "Já tenho conta") e a um
-	// reload após "horário sumiu" (ver o error: do passo do código); some ao
-	// fechar a aba.
-	sessionStorage.setItem("imun_reserva_pendente", JSON.stringify(escolha));
+	// reload após "horário sumiu" (ver o error: do passo do código). Limpo no
+	// on_hide dos dois diálogos abaixo quando a pessoa DESISTE (fecha sem
+	// avançar) — não só ao fechar a aba.
+	imun_guardar_reserva_pendente(escolha);
 
 	dialogo.hide();
+	var avancouParaCodigo = false;
 	var d2 = new frappe.ui.Dialog({
 		title: __("Quase lá"),
 		fields: [
@@ -504,10 +541,18 @@ function imun_passo_identificacao(dialogo, params, values, domiciliar) {
 					if (!r.message) {
 						return;
 					}
+					avancouParaCodigo = true;
 					d2.hide();
 					imun_passo_codigo(escolha, r.message, { canal: canalEfetivo, dados: v });
 				},
 			});
+		},
+		on_hide: function () {
+			// Fechou sem avançar (X, backdrop, Esc) = desistiu — não deixa a
+			// escolha pendente reabrir o modal sozinho depois.
+			if (!avancouParaCodigo) {
+				imun_limpar_reserva_pendente();
+			}
 		},
 	});
 
@@ -540,6 +585,8 @@ function imun_passo_identificacao(dialogo, params, values, domiciliar) {
 // ``solicitar_codigo`` só para o botão "Reenviar código" (o Redis descarta o
 // código anterior ao emitir um novo, ver conta/codigo.py:emitir).
 function imun_passo_codigo(escolha, envio, reenvio) {
+	var concluido = false;
+	var recarregando = false;
 	var d3 = new frappe.ui.Dialog({
 		title: __("Digite o código"),
 		fields: [
@@ -556,6 +603,7 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 					appointment_time: escolha.appointment_time,
 					item_code: escolha.item_code,
 					appointment_type: escolha.appointment_type,
+					practitioner: escolha.practitioner,
 					modalidade: escolha.modalidade,
 					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
 				},
@@ -565,7 +613,8 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 					if (!r.message) {
 						return;
 					}
-					sessionStorage.removeItem("imun_reserva_pendente");
+					concluido = true;
+					imun_limpar_reserva_pendente();
 					d3.hide();
 					imun_mensagem_confirmacao_guest(r.message);
 				},
@@ -590,6 +639,7 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 					if (exc !== "OverlapError" && exc !== "MaximumCapacityError") {
 						return;
 					}
+					recarregando = true;
 					d3.hide();
 					frappe.msgprint({
 						title: __("Esse horário acabou de ser preenchido"),
@@ -599,8 +649,9 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 						indicator: "orange",
 					});
 					// Recarrega para o front enxergar a sessão nova e reabrir o
-					// modal já logado, com a data revalidada.
-					sessionStorage.setItem("imun_reserva_pendente", JSON.stringify(escolha));
+					// modal já logado, com a data revalidada. Timestamp novo: essa
+					// escolha acabou de nascer, não herda a idade da anterior.
+					imun_guardar_reserva_pendente(escolha);
 					setTimeout(function () {
 						window.location.reload();
 					}, 2500);
@@ -628,6 +679,13 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 				},
 			});
 		},
+		on_hide: function () {
+			// Fechou sem confirmar e sem cair no caso "horário sumiu" (que já
+			// regrava a escolha pendente sozinho) = desistiu de verdade.
+			if (!concluido && !recarregando) {
+				imun_limpar_reserva_pendente();
+			}
+		},
 	});
 	imun_atualizar_aviso_codigo(d3, envio);
 	d3.show();
@@ -636,7 +694,9 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 function imun_atualizar_aviso_codigo(d3, envio) {
 	d3.fields_dict.aviso_html.$wrapper.html(
 		"<p>" +
-			__("Enviamos um código para {0}. Ele vale por 10 minutos.", [envio.destino_mascarado]) +
+			__("Enviamos um código para {0}. Ele vale por 10 minutos.", [
+				frappe.utils.escape_html(envio.destino_mascarado),
+			]) +
 			"</p>"
 	);
 }
