@@ -1,4 +1,5 @@
 import random
+import secrets
 from unittest.mock import patch
 
 import frappe
@@ -17,6 +18,16 @@ _DADOS = {
 }
 
 _IP_TESTE = "203.0.113.9"
+
+
+def _token() -> str:
+	"""Token opaco por verificação — o mesmo formato que ``solicitar_codigo``
+	gera em produção (``secrets.token_urlsafe``). NUNCA ``frappe.session.sid``:
+	fora de um request de verdade ele vale sempre 'Administrator', e mesmo
+	num request real todo visitante anônimo compartilha o MESMO sid literal
+	('Guest') — foi exatamente esse compartilhamento que causou o bug que
+	``TestConcorrenciaEntreVisitantesAnonimos`` reproduz abaixo."""
+	return secrets.token_urlsafe(32)
 
 
 def _limpar_rate_limit_solicitar_codigo():
@@ -257,22 +268,18 @@ class TestConfirmarCodigo(FrappeTestCase):
 		frappe.local.request = frappe._dict(method="POST")
 		frappe.local.request_ip = _IP_TESTE
 		_limpar_rate_limit_confirmar_codigo()
-		# frappe.session.sid vale 'Administrator' fora de um request de
-		# verdade — todos os testes deste módulo compartilham o MESMO balde
-		# no Redis do código de verificação; sem isso um teste contamina o
-		# outro (código de sobra de um teste anterior, tentativas já gastas).
-		mod_codigo.descartar(frappe.session.sid)
-
-	def tearDown(self):
-		mod_codigo.descartar(frappe.session.sid)
 
 	def test_codigo_errado_nao_cria_nada(self):
 		antes_user = frappe.db.count("User")
 		antes_pac = frappe.db.count("Patient")
-		mod_codigo.emitir(frappe.session.sid, dict(_DADOS))
+		token = _token()
+		mod_codigo.emitir(token, dict(_DADOS))
 		with self.assertRaises(mod_codigo.CodigoInvalido):
 			verificacao.confirmar_codigo_e_agendar(
-				codigo="000000", appointment_date="2030-01-10", appointment_time="09:00:00"
+				codigo="000000",
+				verificacao_id=token,
+				appointment_date="2030-01-10",
+				appointment_time="09:00:00",
 			)
 		self.assertEqual(frappe.db.count("User"), antes_user)
 		self.assertEqual(frappe.db.count("Patient"), antes_pac)
@@ -340,10 +347,14 @@ class TestConfirmarCodigo(FrappeTestCase):
 			canal_verificado="email",
 			destino_verificado="crianca.sozinha@exemplo.com",
 		)
-		c = mod_codigo.emitir(frappe.session.sid, dados)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
 		with self.assertRaises(frappe.ValidationError):
 			verificacao.confirmar_codigo_e_agendar(
-				codigo=c, appointment_date="2030-01-10", appointment_time="09:00:00"
+				codigo=c,
+				verificacao_id=token,
+				appointment_date="2030-01-10",
+				appointment_time="09:00:00",
 			)
 		self.assertEqual(frappe.db.count("User"), antes_user)
 		self.assertEqual(frappe.db.count("Patient"), antes_pac)
@@ -507,16 +518,16 @@ class TestConfirmarCodigoEAgendarFimAFim(FrappeTestCase):
 		frappe.local.request = frappe._dict(method="POST")
 		frappe.local.request_ip = _IP_TESTE
 		_limpar_rate_limit_confirmar_codigo()
-		mod_codigo.descartar(frappe.session.sid)
 
 	def tearDown(self):
-		mod_codigo.descartar(frappe.session.sid)
 		frappe.set_user("Administrator")
 
 	def _confirmar(self, dados, appointment_time):
-		c = mod_codigo.emitir(frappe.session.sid, dados)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
 		return verificacao.confirmar_codigo_e_agendar(
 			codigo=c,
+			verificacao_id=token,
 			appointment_date="2030-02-01",
 			appointment_time=appointment_time,
 			appointment_type=self._appointment_type.name,
@@ -580,6 +591,203 @@ class TestConfirmarCodigoEAgendarFimAFim(FrappeTestCase):
 			frappe.db.get_value("Patient", pac2, "user_id"),
 			"os dois pendurados na mesma conta do adulto",
 		)
+
+
+class TestConcorrenciaEntreVisitantesAnonimos(FrappeTestCase):
+	"""Prova o defeito CRÍTICO (comprovado por HTTP, não hipótese):
+	``frappe.session.sid`` vale a MESMA string literal ("Guest") para
+	QUALQUER visitante anônimo. Usá-lo como chave no Redis fazia dois
+	visitantes concorrentes dividirem UMA ÚNICA chave — o segundo a pedir
+	código apagava o do primeiro (``codigo.emitir`` faz DELETE+HSET antes de
+	regravar), e a pessoa que pediu primeiro via "Código incorreto" mesmo
+	digitando certo.
+
+	Sem sid nenhum aqui de propósito: os testes deste módulo rodam fora de
+	um request de verdade, onde ``frappe.session.sid`` vale sempre
+	'Administrator' — um valor FIXO que mascararia justamente o bug (dois
+	pedidos "simultâneos" cairiam na mesma chave por acidentes de ambiente
+	de teste, não pela causa real). Este teste passa pelos DOIS endpoints
+	públicos (``solicitar_codigo`` + ``confirmar_codigo_e_agendar``), com o
+	token opaco (``verificacao_id``) que cada um devolve/recebe — a mesma
+	superfície que o navegador do visitante usa. Tem que FALHAR no código
+	antigo (chave = sid) e passar no novo (chave = token por verificação)."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls._appointment_type = frappe.get_doc(
+			{
+				"doctype": "Appointment Type",
+				"appointment_type": "E2E Concorrencia Reserva Visitante",
+				"allow_booking_for": "Practitioner",
+				"default_duration": 30,
+			}
+		).insert(ignore_permissions=True)
+		cls._practitioner = frappe.get_doc(
+			{
+				"doctype": "Healthcare Practitioner",
+				"first_name": "Praticante Teste Concorrencia",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_apagar_definitivamente("Appointment Type", cls._appointment_type.name)
+		_apagar_definitivamente("Healthcare Practitioner", cls._practitioner.name)
+		super().tearDownClass()
+
+	def setUp(self):
+		frappe.local.request = frappe._dict(method="POST")
+		frappe.local.request_ip = _IP_TESTE
+		_limpar_rate_limit_solicitar_codigo()
+		_limpar_rate_limit_confirmar_codigo()
+
+		# Precondição: canal e-mail disponível (mesmo padrão de
+		# TestSolicitarCodigo), e_mail_id próprio para não colidir com o
+		# Email Account de outra classe deste módulo.
+		self._conta_email = frappe.get_doc(
+			{
+				"doctype": "Email Account",
+				"email_id": "verificacao-concorrencia@exemplo.com",
+				"enable_outgoing": 1,
+				"default_outgoing": 1,
+				"smtp_server": "127.0.0.1",
+				"awaiting_password": 1,
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(
+			frappe.delete_doc,
+			"Email Account",
+			self._conta_email.name,
+			force=True,
+			ignore_permissions=True,
+		)
+
+		# Nenhum teste toca a rede: captura o código em claro pelo argumento
+		# que canais.enviar receberia de verdade — é a única forma de saber
+		# o código sem ele nunca aparecer na resposta HTTP (ver codigo.py).
+		self._codigos_enviados = []
+		patcher = patch(
+			"imunocare_ecommerce.conta.canais.enviar",
+			side_effect=lambda canal, destino, codigo, nome: self._codigos_enviados.append(codigo),
+		)
+		self.addCleanup(patcher.stop)
+		patcher.start()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def test_dois_visitantes_pedem_codigo_em_sequencia_sem_se_atropelar(self):
+		email_ana, celular_ana = _identidade_unica("ana.concorrencia")
+		email_bruno, celular_bruno = _identidade_unica("bruno.concorrencia")
+
+		dados_ana = dict(
+			_DADOS,
+			nome="Ana Concorrência",
+			email=email_ana,
+			celular=celular_ana,
+			cpf="39053344705",
+			sexo="Female",
+		)
+		dados_bruno = dict(
+			_DADOS,
+			nome="Bruno Concorrência",
+			email=email_bruno,
+			celular=celular_bruno,
+			cpf="52998224725",
+			sexo="Male",
+		)
+
+		# Ana pede primeiro; Bruno pede DEPOIS, exatamente a ordem do
+		# incidente relatado ("Ana pede o código -> Bruno pede o código ->
+		# Ana digita o dela -> código incorreto").
+		r_ana = verificacao.solicitar_codigo("email", dados_ana)
+		r_bruno = verificacao.solicitar_codigo("email", dados_bruno)
+
+		# O CERNE do fix: dois pedidos em sequência recebem tokens
+		# DIFERENTES. No código antigo os dois caíam na MESMA chave
+		# (frappe.session.sid == "Guest" para qualquer anônimo) e o pedido
+		# de Bruno apagava o de Ana.
+		self.assertIn("verificacao_id", r_ana)
+		self.assertIn("verificacao_id", r_bruno)
+		self.assertNotEqual(r_ana["verificacao_id"], r_bruno["verificacao_id"])
+
+		self.assertEqual(len(self._codigos_enviados), 2)
+		codigo_ana, codigo_bruno = self._codigos_enviados
+
+		# Ana confirma com O DELA (pedido primeiro, código emitido primeiro)
+		# DEPOIS que Bruno já pediu o dele — no bug antigo isto já bastava
+		# para "Código incorreto" ou pior, confirmar com os dados de Bruno.
+		resultado_ana = verificacao.confirmar_codigo_e_agendar(
+			codigo=codigo_ana,
+			verificacao_id=r_ana["verificacao_id"],
+			appointment_date="2030-03-01",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+		)
+		self.addCleanup(_apagar_definitivamente, "User", email_ana)
+
+		resultado_bruno = verificacao.confirmar_codigo_e_agendar(
+			codigo=codigo_bruno,
+			verificacao_id=r_bruno["verificacao_id"],
+			appointment_date="2030-03-01",
+			appointment_time="10:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+		)
+		self.addCleanup(_apagar_definitivamente, "User", email_bruno)
+
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado_ana["appointment"])
+		self.addCleanup(
+			_apagar_definitivamente, "Patient Appointment", resultado_bruno["appointment"]
+		)
+
+		pac_ana = frappe.db.get_value("Patient Appointment", resultado_ana["appointment"], "patient")
+		pac_bruno = frappe.db.get_value(
+			"Patient Appointment", resultado_bruno["appointment"], "patient"
+		)
+		self.addCleanup(_limpar_contatos_vinculados, "Patient", pac_ana)
+		self.addCleanup(_limpar_contatos_vinculados, "Patient", pac_bruno)
+		self.addCleanup(_apagar_definitivamente, "Patient", pac_ana)
+		self.addCleanup(_apagar_definitivamente, "Patient", pac_bruno)
+		# create_customer (hook nativo do Healthcare) cria um Customer de
+		# mesmo nome do Patient — órfão se não limpar.
+		self.addCleanup(_apagar_definitivamente, "Customer", "Ana Concorrência")
+		self.addCleanup(_apagar_definitivamente, "Customer", "Bruno Concorrência")
+
+		# Prova final de isolamento: cada um confirmou com o PRÓPRIO
+		# código/token e caiu no PRÓPRIO cadastro — nenhum viu dado do outro.
+		self.assertNotEqual(pac_ana, pac_bruno)
+		self.assertEqual(frappe.db.get_value("Patient", pac_ana, "first_name"), "Ana")
+		self.assertEqual(frappe.db.get_value("Patient", pac_bruno, "first_name"), "Bruno")
+		self.assertNotEqual(resultado_ana["appointment"], resultado_bruno["appointment"])
+
+	def test_verificacao_id_ausente_ou_invalido_e_recusado_com_mensagem_generica(self):
+		"""Ausente, vazio, tipo errado ou desconhecido — SEMPRE a mesma
+		recusa genérica de código expirado, nunca revelando a diferença
+		entre "token inválido" e "código expirado de verdade"."""
+		for valor_invalido in (None, "", "token-que-nunca-existiu", 123, ["a"], {"x": 1}):
+			with self.subTest(valor_invalido=valor_invalido):
+				with self.assertRaises(mod_codigo.CodigoInvalido):
+					verificacao.confirmar_codigo_e_agendar(
+						codigo="000000",
+						verificacao_id=valor_invalido,
+						appointment_date="2030-03-01",
+						appointment_time="09:00:00",
+					)
+
+	def test_verificacao_id_omitido_e_recusado(self):
+		"""Nem chamado (default None do parâmetro) — mesmo caminho do teste
+		acima, mas sem passar o argumento, para provar que o default do
+		endpoint também é seguro."""
+		with self.assertRaises(mod_codigo.CodigoInvalido):
+			verificacao.confirmar_codigo_e_agendar(
+				codigo="000000",
+				appointment_date="2030-03-01",
+				appointment_time="09:00:00",
+			)
 
 
 class TestRegressaoCriarAgendamento(FrappeTestCase):

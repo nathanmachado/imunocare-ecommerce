@@ -599,6 +599,11 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 				method: "imunocare_ecommerce.conta.verificacao.confirmar_codigo_e_agendar",
 				args: {
 					codigo: v.codigo,
+					// envio.verificacao_id é lido no momento do clique, não na criação
+					// do diálogo — "Reenviar código" reatribui envio (abaixo) com um
+					// token NOVO, e o antigo tem que ser descartado (é a chave que
+					// muda no Redis a cada emissão).
+					verificacao_id: envio.verificacao_id,
 					appointment_date: escolha.appointment_date,
 					appointment_time: escolha.appointment_time,
 					item_code: escolha.item_code,

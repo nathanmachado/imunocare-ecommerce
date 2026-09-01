@@ -13,6 +13,7 @@ Organização do módulo:
 from __future__ import annotations
 
 import json
+import secrets
 
 import frappe
 from frappe import _
@@ -153,11 +154,22 @@ def solicitar_codigo(canal: str, dados: str | dict) -> dict:
 	dados["canal_verificado"] = canal_efetivo
 	dados["destino_verificado"] = destino
 
+	# A chave no Redis NUNCA é frappe.session.sid: todo visitante anônimo
+	# compartilha o MESMO sid literal ("Guest") — usá-lo faria o segundo
+	# visitante a pedir código sobrescrever (emitir faz DELETE+HSET) o do
+	# primeiro na mesma chave, e cada um confirmaria contra os dados do
+	# outro. Token opaco por verificação, um por chamada — mesmo padrão do
+	# ``tmp_id`` do 2FA nativo do Frappe. Ele viaja pro cliente e volta em
+	# ``confirmar_codigo_e_agendar`` como ``verificacao_id``; nunca é
+	# adivinhável (32 bytes de entropia) nem reaproveitado entre pedidos.
+	verificacao_id = secrets.token_urlsafe(32)
+
 	# O código só existe aqui e no envio: nunca na resposta, nunca em log.
-	valor = codigo.emitir(frappe.session.sid, dados)
+	valor = codigo.emitir(verificacao_id, dados)
 	canais.enviar(canal_efetivo, destino, valor, _texto(dados.get("nome")))
 
 	return {
+		"verificacao_id": verificacao_id,
 		"destino_mascarado": canais.mascarar(canal_efetivo, destino),
 		"expira_em": codigo.TTL_PADRAO,
 	}
@@ -166,6 +178,20 @@ def solicitar_codigo(canal: str, dados: str | dict) -> dict:
 # ---------------------------------------------------------------------------
 # Confirmação do código: cria User + Patient e agenda (Task 5)
 # ---------------------------------------------------------------------------
+
+
+def _validar_verificacao_id(verificacao_id) -> str:
+	"""Recusa ``verificacao_id`` ausente/vazio/de tipo errado com a MESMA
+	mensagem genérica de código expirado que ``codigo.conferir`` usa para
+	chave inexistente no Redis — "token inválido" e "código expirado" são
+	indistinguíveis de propósito para quem chama de fora."""
+	if not isinstance(verificacao_id, str) or not verificacao_id:
+		frappe.throw(
+			_("Código expirado. Peça um novo."),
+			codigo.CodigoInvalido,
+			title=_("Código inválido"),
+		)
+	return verificacao_id
 
 
 def _idade(dob) -> int | None:
@@ -378,6 +404,7 @@ def confirmar_codigo_e_agendar(
 	codigo: str,
 	appointment_date: str,
 	appointment_time: str,
+	verificacao_id: str | None = None,
 	item_code: str | None = None,
 	appointment_type: str | None = None,
 	practitioner: str | None = None,
@@ -387,7 +414,8 @@ def confirmar_codigo_e_agendar(
 	from imunocare_ecommerce.agendamento.booking import criar_agendamento
 	from imunocare_ecommerce.conta.codigo import conferir
 
-	dados = conferir(frappe.session.sid, codigo)
+	verificacao_id = _validar_verificacao_id(verificacao_id)
+	dados = conferir(verificacao_id, codigo)
 	_exigir_adulto_para_si_mesmo(dados)
 	usuario, conta_criada = _garantir_usuario(dados)
 
