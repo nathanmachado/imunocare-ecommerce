@@ -122,9 +122,26 @@ def _destino_de_envio(canal: str, dados: dict) -> str:
 	return _resolver_envio(canal, dados)[1]
 
 
+def _descartar_verificacao_anterior(verificacao_id_anterior) -> None:
+	"""Apaga a chave da emissão anterior no botão "Reenviar código".
+
+	Dado vindo do cliente: ausente, vazio ou de tipo estranho nunca estoura
+	— só não descarta nada (``codigo.descartar`` de uma chave que não existe
+	já é no-op silencioso no Redis, então nem checamos existência aqui).
+
+	Descartar não é um jeito de invalidar a verificação de OUTRA pessoa: o
+	token tem 256 bits de entropia (``secrets.token_urlsafe(32)``) — quem o
+	possui já é, por construção, o dono daquela verificação. Não há consulta
+	nem validação de "dono" a fazer; a posse do token já É a prova."""
+	if isinstance(verificacao_id_anterior, str) and verificacao_id_anterior:
+		codigo.descartar(verificacao_id_anterior)
+
+
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 @rate_limit(limit=5, seconds=600)
-def solicitar_codigo(canal: str, dados: str | dict) -> dict:
+def solicitar_codigo(
+	canal: str, dados: str | dict, verificacao_id_anterior: str | None = None
+) -> dict:
 	if not isinstance(canal, str) or canal not in _CANAIS:
 		frappe.throw(_("Canal de verificação inválido."), title=_("Requisição inválida"))
 
@@ -156,12 +173,20 @@ def solicitar_codigo(canal: str, dados: str | dict) -> dict:
 
 	# A chave no Redis NUNCA é frappe.session.sid: todo visitante anônimo
 	# compartilha o MESMO sid literal ("Guest") — usá-lo faria o segundo
-	# visitante a pedir código sobrescrever (emitir faz DELETE+HSET) o do
-	# primeiro na mesma chave, e cada um confirmaria contra os dados do
-	# outro. Token opaco por verificação, um por chamada — mesmo padrão do
-	# ``tmp_id`` do 2FA nativo do Frappe. Ele viaja pro cliente e volta em
-	# ``confirmar_codigo_e_agendar`` como ``verificacao_id``; nunca é
-	# adivinhável (32 bytes de entropia) nem reaproveitado entre pedidos.
+	# visitante a pedir código colidir na MESMA chave com o primeiro, e cada
+	# um confirmaria contra os dados do outro (incidente real, corrigido
+	# nesta revisão). Token opaco por verificação, um NOVO por chamada —
+	# mesmo padrão do ``tmp_id`` do 2FA nativo do Frappe. Ele viaja pro
+	# cliente e volta em ``confirmar_codigo_e_agendar`` como
+	# ``verificacao_id``; nunca é adivinhável (32 bytes de entropia).
+	#
+	# Cada emissão vira uma chave PRÓPRIA (não sobrescreve mais nenhuma
+	# outra) — por isso o botão "Reenviar código" precisa mandar o
+	# ``verificacao_id`` da emissão anterior de volta aqui em
+	# ``verificacao_id_anterior``: sem descartá-la explicitamente, ela só
+	# morreria pelo TTL (até 10 min depois), deixando o código antigo
+	# válido e confirmável em paralelo com o novo.
+	_descartar_verificacao_anterior(verificacao_id_anterior)
 	verificacao_id = secrets.token_urlsafe(32)
 
 	# O código só existe aqui e no envio: nunca na resposta, nunca em log.

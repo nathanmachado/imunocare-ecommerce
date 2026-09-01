@@ -582,8 +582,12 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 }
 
 // Passo do código — ``reenvio`` guarda {canal, dados} da última chamada a
-// ``solicitar_codigo`` só para o botão "Reenviar código" (o Redis descarta o
-// código anterior ao emitir um novo, ver conta/codigo.py:emitir).
+// ``solicitar_codigo`` para o botão "Reenviar código" reenviar o mesmo
+// formulário. Cada emissão vira uma chave PRÓPRIA no Redis (não sobrescreve
+// mais nenhuma outra) — por isso o reenvio manda também
+// ``verificacao_id_anterior`` (o ``envio.verificacao_id`` corrente, lido no
+// clique) para o servidor descartar a verificação velha antes de emitir a
+// nova (ver conta/verificacao.py:_descartar_verificacao_anterior).
 function imun_passo_codigo(escolha, envio, reenvio) {
 	var concluido = false;
 	var recarregando = false;
@@ -670,7 +674,10 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 			}
 			frappe.call({
 				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
-				args: reenvio,
+				// verificacao_id_anterior = o token que ainda está com a pessoa
+				// nessa hora (lido de ``envio``, não de ``reenvio``, que nunca muda) —
+				// o servidor descarta essa chave velha antes de emitir a nova.
+				args: Object.assign({}, reenvio, { verificacao_id_anterior: envio.verificacao_id }),
 				freeze: true,
 				freeze_message: __("Reenviando código..."),
 				callback: function (r) {

@@ -179,6 +179,47 @@ class TestSolicitarCodigo(FrappeTestCase):
 			with self.assertRaises(frappe.ValidationError):
 				verificacao.solicitar_codigo("whatsapp", dict(_DADOS))
 
+	def test_reenviar_codigo_descarta_a_verificacao_anterior(self):
+		"""Fix round 1: cada emissão vira uma chave PRÓPRIA no Redis — sem
+		descartar a anterior explicitamente, ela só morreria pelo TTL (até
+		10 min), deixando o código da PRIMEIRA emissão confirmável em
+		paralelo com o da segunda. "Reenviar código" manda
+		``verificacao_id_anterior`` de volta e o servidor tem que apagá-la
+		antes de emitir a nova."""
+		codigos = []
+		with patch(
+			"imunocare_ecommerce.conta.canais.enviar",
+			side_effect=lambda canal, destino, codigo, nome: codigos.append(codigo),
+		):
+			r1 = verificacao.solicitar_codigo("email", dict(_DADOS))
+			r2 = verificacao.solicitar_codigo(
+				"email", dict(_DADOS), verificacao_id_anterior=r1["verificacao_id"]
+			)
+
+		self.assertNotEqual(r1["verificacao_id"], r2["verificacao_id"])
+		self.assertEqual(len(codigos), 2)
+		codigo_da_primeira, codigo_da_segunda = codigos
+
+		# O código da PRIMEIRA emissão deixa de ser aceito — a chave foi
+		# descartada pelo reenvio, não só sobrescrita.
+		with self.assertRaises(mod_codigo.CodigoInvalido):
+			mod_codigo.conferir(r1["verificacao_id"], codigo_da_primeira)
+
+		# O da SEGUNDA (a que o cliente realmente tem na tela) funciona.
+		dados = mod_codigo.conferir(r2["verificacao_id"], codigo_da_segunda)
+		self.assertEqual(dados["email"], _DADOS["email"])
+
+	def test_reenviar_codigo_sem_verificacao_id_anterior_nao_estoura(self):
+		"""verificacao_id_anterior é opcional — omitido, vazio ou de tipo
+		estranho (dado vindo do cliente) nunca pode virar 500; descartar um
+		token que não existe é no-op silencioso."""
+		for valor in (None, "", "token-que-nunca-existiu", 123, ["a"]):
+			with self.subTest(valor=valor):
+				r = verificacao.solicitar_codigo(
+					"email", dict(_DADOS), verificacao_id_anterior=valor
+				)
+				self.assertIn("verificacao_id", r)
+
 
 class TestResolverEnvio(FrappeTestCase):
 	"""Fix crítico da revisão da Task 4: quando o CPF já é de um Patient, o
