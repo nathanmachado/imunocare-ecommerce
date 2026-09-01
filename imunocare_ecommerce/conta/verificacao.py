@@ -144,6 +144,15 @@ def solicitar_codigo(canal: str, dados: str | dict) -> dict:
 	if not canais.disponiveis().get(canal_efetivo):
 		frappe.throw(_("Este canal de verificação está indisponível no momento."))
 
+	# canal_verificado/destino_verificado viajam DENTRO de "dados" para o
+	# Redis: é o CONTATO PROVADO (o que _resolver_envio decidiu), nunca o
+	# que a pessoa digitou. confirmar_codigo_e_agendar ancora a conta nisso
+	# — nunca num campo do formulário que ninguém verificou (fix da revisão
+	# 2026-09-01: canal whatsapp verificava o celular mas logava pelo
+	# e-mail digitado, sem relação provada com quem verificou).
+	dados["canal_verificado"] = canal_efetivo
+	dados["destino_verificado"] = destino
+
 	# O código só existe aqui e no envio: nunca na resposta, nunca em log.
 	valor = codigo.emitir(frappe.session.sid, dados)
 	canais.enviar(canal_efetivo, destino, valor, _texto(dados.get("nome")))
@@ -166,6 +175,30 @@ def _idade(dob) -> int | None:
 	if nasc > hoje:
 		return None
 	return hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
+
+
+def _exigir_adulto_para_si_mesmo(dados: dict) -> None:
+	"""Quem se verifica PARA SI MESMO precisa ser maior de 18.
+
+	Sem esta checagem, um menor que reserva para si mesmo teria
+	``nome_responsavel``/``cpf_responsavel`` preenchidos com os PRÓPRIOS
+	dados (ver ``_montar_paciente``), satisfazendo
+	``patient_hooks._validate_guardian`` de forma vazia — o "responsável"
+	seria a própria criança. Quem precisa agendar para um menor usa a opção
+	"para outra pessoa" a partir da conta de um adulto responsável.
+	"""
+	if dados.get("para_outra_pessoa"):
+		return
+	idade = _idade(dados.get("dob"))
+	if idade is not None and idade < MAIORIDADE:
+		frappe.throw(
+			_(
+				'Menores de 18 anos não podem se cadastrar sozinhos. Peça para um '
+				'responsável agendar por você ("Agendar para outra pessoa") ou '
+				"procure a clínica."
+			),
+			title=_("Cadastro não permitido"),
+		)
 
 
 def _partir_nome(nome_completo: str) -> tuple[str, str, str]:
@@ -214,8 +247,8 @@ def _montar_paciente(dados: dict, adulto_user: str):
 	return p
 
 
-def _garantir_usuario(dados: dict) -> str:
-	"""Cria (ou reaproveita) o Website User do adulto e o deixa logado.
+def _logar(email: str) -> None:
+	"""Deixa ``email`` logado no contexto atual.
 
 	Fora de um request HTTP de verdade (job, teste, console) o Frappe nunca
 	monta ``frappe.local.login_manager`` — ele só é criado no ciclo de
@@ -227,32 +260,116 @@ def _garantir_usuario(dados: dict) -> str:
 	troca só o contexto de execução do processo atual — suficiente para o
 	restante desta função e para o ``criar_agendamento`` que vem a seguir.
 	"""
-	email = (dados.get("email") or "").strip().lower()
-	if not frappe.db.exists("User", email):
-		primeiro, meio, ultimo = _partir_nome(dados.get("nome"))
-		u = frappe.new_doc("User")
-		u.email = email
-		u.first_name = primeiro
-		u.middle_name = meio
-		u.last_name = ultimo
-		u.mobile_no = dados.get("celular")
-		u.user_type = "Website User"
-		u.send_welcome_email = 0
-		u.flags.ignore_permissions = True
-		u.insert(ignore_permissions=True)
-		papel = frappe.get_single_value("Portal Settings", "default_role")
-		if papel:
-			u.add_roles(papel)
-	# A sessão precisa estar gravada antes de login_as — mesmo cuidado de
-	# frappe/core/api/user_invitation.py:150.
-	frappe.db.commit()  # nosemgrep
-
 	login_manager = getattr(frappe.local, "login_manager", None)
 	if login_manager is not None:
 		login_manager.login_as(email)
 	else:
 		frappe.set_user(email)
-	return email
+
+
+def _criar_website_user(email: str, dados: dict, mobile_no: str | None = None):
+	primeiro, meio, ultimo = _partir_nome(dados.get("nome"))
+	u = frappe.new_doc("User")
+	u.email = email
+	u.first_name = primeiro
+	u.middle_name = meio
+	u.last_name = ultimo
+	u.mobile_no = mobile_no if mobile_no is not None else dados.get("celular")
+	u.user_type = "Website User"
+	u.send_welcome_email = 0
+	u.flags.ignore_permissions = True
+	u.insert(ignore_permissions=True)
+	papel = frappe.get_single_value("Portal Settings", "default_role")
+	if papel:
+		u.add_roles(papel)
+	return u
+
+
+def _garantir_usuario_por_email(email_verificado: str, dados: dict) -> tuple[str, bool]:
+	"""``email_verificado`` já é o contato PROVADO (``destino_verificado``
+	de um ``canal_verificado == "email"``) — nunca o campo ``email`` cru do
+	formulário, que pode divergir dele quando o CPF já era de um cadastro
+	(``_resolver_envio`` manda o código para o e-mail do CADASTRO, não para
+	o digitado)."""
+	email = (email_verificado or "").strip().lower()
+	if not email:
+		frappe.throw(_("Não foi possível confirmar seu contato. Peça um novo código."))
+
+	criado = False
+	if not frappe.db.exists("User", email):
+		_criar_website_user(email, dados)
+		criado = True
+	# A sessão precisa estar gravada antes de login_as — mesmo cuidado de
+	# frappe/core/api/user_invitation.py:150.
+	frappe.db.commit()  # nosemgrep
+	_logar(email)
+	return email, criado
+
+
+def _garantir_usuario_por_celular(celular_verificado: str, dados: dict) -> tuple[str, bool]:
+	"""``celular_verificado`` é o WhatsApp que efetivamente recebeu e provou
+	o código — a ÂNCORA da conta é ele, nunca o e-mail digitado no mesmo
+	formulário (ninguém verificou aquele e-mail). Só cria conta nova com o
+	e-mail digitado quando esse e-mail ainda não pertence a ninguém; se já
+	pertencer, recusa — nunca loga em conta alheia por coincidência de
+	e-mail digitado."""
+	celular = _so_digitos(celular_verificado)
+	if not celular:
+		frappe.throw(_("Não foi possível confirmar seu contato. Peça um novo código."))
+
+	existente = frappe.db.get_value("User", {"mobile_no": celular}, "name")
+	if existente:
+		_logar(existente)
+		return existente, False
+
+	email = (dados.get("email") or "").strip().lower()
+	if not email:
+		frappe.throw(_("Informe um e-mail para concluir o cadastro."))
+	if frappe.db.exists("User", email):
+		# O celular verificado não é o desta conta — nunca cria/loga usando
+		# um e-mail que já pertence a outra pessoa (mensagem genérica: não
+		# confirma nem nega que o e-mail digitado existe).
+		frappe.throw(
+			_(
+				"Não foi possível concluir seu cadastro com estes dados. "
+				"Tente verificar por e-mail."
+			),
+			title=_("Verificação indisponível"),
+		)
+
+	_criar_website_user(email, dados, mobile_no=celular)
+	frappe.db.commit()  # nosemgrep
+	_logar(email)
+	return email, True
+
+
+def _garantir_usuario(dados: dict) -> tuple[str, bool]:
+	"""Cria (ou reaproveita) o Website User e o deixa logado. Devolve
+	``(usuario, criado)``.
+
+	A ÂNCORA da conta é sempre o CONTATO VERIFICADO — ``canal_verificado`` +
+	``destino_verificado``, gravados por ``solicitar_codigo`` em cima do que
+	``_resolver_envio`` decidiu — NUNCA um campo apenas digitado no
+	formulário. ``login_as``/``frappe.set_user`` não provam posse de nada
+	sozinhos: quem prova é o código de verificação, e só do canal que
+	efetivamente o entregou. Usar ``dados.get("email")`` (digitado, não
+	verificado) para decidir em qual conta logar permitiria a quem prova
+	controlar o próprio WhatsApp digitar o e-mail de OUTRA pessoa e sair
+	logado na conta dela — inclusive num System User interno (fix da
+	revisão 2026-09-01, Task 5 fix round 1).
+	"""
+	canal = dados.get("canal_verificado")
+	destino = dados.get("destino_verificado")
+
+	if canal == "whatsapp":
+		return _garantir_usuario_por_celular(destino, dados)
+	if canal == "email":
+		return _garantir_usuario_por_email(destino, dados)
+
+	# Sem canal_verificado (código emitido fora de solicitar_codigo — não
+	# deveria acontecer no fluxo real): recusa em vez de cair para o e-mail
+	# digitado, que é exatamente o furo que esta correção fecha.
+	frappe.throw(_("Não foi possível confirmar seu contato. Peça um novo código."))
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
@@ -271,7 +388,8 @@ def confirmar_codigo_e_agendar(
 	from imunocare_ecommerce.conta.codigo import conferir
 
 	dados = conferir(frappe.session.sid, codigo)
-	usuario = _garantir_usuario(dados)
+	_exigir_adulto_para_si_mesmo(dados)
+	usuario, conta_criada = _garantir_usuario(dados)
 
 	cpf = _so_digitos(
 		dados.get("paciente_cpf") if dados.get("para_outra_pessoa") else dados.get("cpf")
@@ -299,5 +417,5 @@ def confirmar_codigo_e_agendar(
 		modalidade=modalidade,
 		session_id=session_id,
 	)
-	resultado["conta_criada"] = True
+	resultado["conta_criada"] = conta_criada
 	return resultado
