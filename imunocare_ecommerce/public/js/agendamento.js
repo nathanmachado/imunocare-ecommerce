@@ -85,11 +85,23 @@ function imun_retomar_reserva_pendente() {
 // ---------------------------------------------------------------------------
 
 function imun_decidir_botao_pagina_item() {
-	var itemEl = document.querySelector("[data-item-code]");
-	if (!itemEl) {
-		return;
+	// Atividade 550 (fix): lê o item_code do NOSSO container primeiro
+	// (".imun-product-page[data-imun-item-code]", Atividade 540) e só cai para
+	// "[data-item-code]" do webshop como FALLBACK. O atributo do webshop vive
+	// no botão "Adicionar ao carrinho" (item_add_to_cart.html, upstream), que
+	// só renderiza se passar por uma cadeia de condições do carrinho
+	// (shopping_cart.cart_settings.enabled; product_info.price e
+	// in_stock/allow_items_not_in_stock) — nada disso tem relação com o item
+	// ser agendável. Quando essas condições falhavam, "[data-item-code]" não
+	// existia em NENHUM lugar da página, a função saía aqui na 1ª linha e o
+	// botão "Agendar" sumia silenciosamente, sem erro (bug confirmado no
+	// navegador). O nosso container não tem essa dependência.
+	var $productPage = $(".imun-product-page").first();
+	var item_code = $productPage.attr("data-imun-item-code");
+	if (!item_code) {
+		var itemEl = document.querySelector("[data-item-code]");
+		item_code = itemEl ? itemEl.getAttribute("data-item-code") : null;
 	}
-	var item_code = itemEl.getAttribute("data-item-code");
 	if (!item_code) {
 		return;
 	}
@@ -97,7 +109,6 @@ function imun_decidir_botao_pagina_item() {
 	// Sinal exposto pela Atividade 540 (templates/generators/item/item.html +
 	// catalogo.jinja_utils.imun_sinal_servico) — evita a ida ao backend no
 	// caso comum ("produto": mantém o botão nativo tal como já está na tela).
-	var $productPage = $(".imun-product-page").first();
 	var sinalServico = $productPage.length && $productPage.attr("data-imun-servico") === "1";
 	if (!sinalServico) {
 		return;

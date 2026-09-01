@@ -30,9 +30,17 @@
 	"Agendar" e o botão nativo do webshop, sem precisar recalcular a regra no
 	client. -#}
 {% set imun_sinal = imun_sinal_servico(doc) %}
+{#- Atividade 550 (fix): data-imun-item-code é a fonte de verdade do item_code
+	nesta página — NÃO usar o "[data-item-code]" do webshop
+	(item_add_to_cart.html, upstream) como primário. Aquele atributo só existe
+	se o botão "Adicionar ao carrinho" renderizar, e esse botão tem uma cadeia
+	de condições (cart_settings.enabled, product_info.price, in_stock/allow_items_not_in_stock)
+	que pode ficar falsa mesmo com a página funcionando normalmente — nesse
+	caso "Agendar" sumia silenciosamente (ver public/js/agendamento.js). -#}
 <div class="imun-product-page"
 	data-imun-servico="{{ 1 if imun_sinal.servico else 0 }}"
-	data-imun-appointment-type="{{ imun_sinal.appointment_type or '' }}">
+	data-imun-appointment-type="{{ imun_sinal.appointment_type or '' }}"
+	data-imun-item-code="{{ doc.item_code }}">
 	<span class="imun-eyebrow">Produto</span>
 	{#- H1 por produto (F2): visualmente oculto (mesmo texto do <title>) — o
 		título grande realmente exibido é o "product-title" nativo do webshop
