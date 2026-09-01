@@ -20,9 +20,14 @@ class TestCodigoVerificacao(FrappeTestCase):
 		self.assertEqual(mod.conferir(_SID, c), _DADOS)
 
 	def test_codigo_em_claro_nao_fica_no_redis(self):
+		# A chave é um Redis HASH (não mais um blob String) desde o fix do
+		# fatiamento atômico das tentativas — GET bruto daria WRONGTYPE.
 		c = mod.emitir(_SID, _DADOS)
-		cru = frappe.cache.get(mod._chave(_SID))
-		self.assertNotIn(c.encode(), cru, "o código em claro está guardado")
+		pipe = frappe.cache.pipeline()
+		pipe.hgetall(mod._chave(_SID))
+		cru = pipe.execute()[0]
+		bruto = b" ".join(cru.values())
+		self.assertNotIn(c.encode(), bruto, "o código em claro está guardado")
 
 	def test_codigo_errado_e_recusado(self):
 		mod.emitir(_SID, _DADOS)
@@ -53,3 +58,17 @@ class TestCodigoVerificacao(FrappeTestCase):
 	def test_chave_nasce_com_validade(self):
 		mod.emitir(_SID, _DADOS, ttl=600)
 		self.assertGreater(frappe.cache.ttl(mod._chave(_SID)), 0)
+
+	def test_tentativas_incrementa_exatamente_uma_vez_por_chamada(self):
+		# Prova que o HINCRBY é atômico: N chamadas erradas em sequência
+		# resultam em exatamente N no contador — nada some, nada dobra.
+		mod.emitir(_SID, _DADOS)
+		n = 3
+		for _ in range(n):
+			with self.assertRaises(mod.CodigoInvalido):
+				mod.conferir(_SID, "000000")
+
+		pipe = frappe.cache.pipeline()
+		pipe.hget(mod._chave(_SID), "tentativas")
+		tentativas = pipe.execute()[0]
+		self.assertEqual(int(tentativas), n)
