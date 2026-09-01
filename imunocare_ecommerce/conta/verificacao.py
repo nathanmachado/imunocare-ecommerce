@@ -5,9 +5,9 @@ código e sai daqui LOGADO, com User e Patient criados — e só então o
 agendamento é criado pela ``criar_agendamento`` de sempre, que continua
 recusando Guest. Nenhum caminho novo cria agendamento sem usuário.
 
-Organização do módulo (a Task 5 acrescenta funções aqui):
+Organização do módulo:
 - ``canais_disponiveis`` / ``solicitar_codigo``: Task 4 (este arquivo).
-- confirmação do código + criação de User/Patient: Task 5.
+- ``confirmar_codigo_e_agendar`` + montagem de User/Patient: Task 5 (este arquivo).
 """
 
 from __future__ import annotations
@@ -16,11 +16,13 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import getdate, nowdate
 
 from imunocare_ecommerce.conta import canais, codigo
 from imunocare_ecommerce.rate_limit import rate_limit
 
 _CANAIS = ("email", "whatsapp")
+MAIORIDADE = 18
 
 
 def _texto(valor) -> str:
@@ -150,3 +152,152 @@ def solicitar_codigo(canal: str, dados: str | dict) -> dict:
 		"destino_mascarado": canais.mascarar(canal_efetivo, destino),
 		"expira_em": codigo.TTL_PADRAO,
 	}
+
+
+# ---------------------------------------------------------------------------
+# Confirmação do código: cria User + Patient e agenda (Task 5)
+# ---------------------------------------------------------------------------
+
+
+def _idade(dob) -> int | None:
+	if not dob:
+		return None
+	nasc, hoje = getdate(dob), getdate(nowdate())
+	if nasc > hoje:
+		return None
+	return hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
+
+
+def _partir_nome(nome_completo: str) -> tuple[str, str, str]:
+	"""'Ana Souza' -> ('Ana', '', 'Souza'). middle_name deixou de ser
+	obrigatório justamente para o nome de duas palavras passar (ver
+	imunocare_clinic_ext commit 141f3f2)."""
+	partes = (nome_completo or "").split()
+	if not partes:
+		frappe.throw(_("Informe o nome completo."))
+	primeiro = partes[0]
+	ultimo = partes[-1] if len(partes) > 1 else ""
+	meio = " ".join(partes[1:-1]) if len(partes) > 2 else ""
+	return primeiro, meio, ultimo
+
+
+def _montar_paciente(dados: dict, adulto_user: str):
+	"""Monta (sem inserir) o Patient de QUEM VAI SER ATENDIDO.
+
+	O user_id é sempre o do adulto verificado — é assim que o portal dele
+	enxerga as consultas dos filhos. pais_nascimento não é setado aqui: o
+	default do campo já entrega 'Brazil'.
+	"""
+	para_outro = bool(dados.get("para_outra_pessoa"))
+	nome = dados.get("paciente_nome") if para_outro else dados.get("nome")
+	cpf = _so_digitos(dados.get("paciente_cpf") if para_outro else dados.get("cpf"))
+	dob = dados.get("paciente_dob") if para_outro else dados.get("dob")
+
+	primeiro, meio, ultimo = _partir_nome(nome)
+	p = frappe.new_doc("Patient")
+	p.first_name = primeiro
+	p.middle_name = meio
+	p.last_name = ultimo
+	p.sex = dados.get("paciente_sexo") if para_outro else dados.get("sexo")
+	p.dob = getdate(dob) if dob else None
+	p.cpf = cpf
+	# Contato é sempre o do adulto: é ele que recebe lembrete e confirmação.
+	p.mobile = dados.get("celular")
+	p.email = dados.get("email")
+	p.user_id = adulto_user
+	p.invite_user = 0
+
+	idade = _idade(dob)
+	if idade is not None and idade < MAIORIDADE:
+		p.nome_responsavel = dados.get("nome")
+		p.cpf_responsavel = _so_digitos(dados.get("cpf"))
+	return p
+
+
+def _garantir_usuario(dados: dict) -> str:
+	"""Cria (ou reaproveita) o Website User do adulto e o deixa logado.
+
+	Fora de um request HTTP de verdade (job, teste, console) o Frappe nunca
+	monta ``frappe.local.login_manager`` — ele só é criado no ciclo de
+	``auth.validate_auth_via_hooks``/``LoginManager.__init__`` durante uma
+	requisição real (``frappe/auth.py``). Chamar ``.login_as`` sem essa
+	checagem estoura ``AttributeError`` nos testes e em qualquer chamada
+	interna. Com request, delega ao login_manager (grava cookie de sessão,
+	dispara ``on_session_creation`` etc.); sem request, ``frappe.set_user``
+	troca só o contexto de execução do processo atual — suficiente para o
+	restante desta função e para o ``criar_agendamento`` que vem a seguir.
+	"""
+	email = (dados.get("email") or "").strip().lower()
+	if not frappe.db.exists("User", email):
+		primeiro, meio, ultimo = _partir_nome(dados.get("nome"))
+		u = frappe.new_doc("User")
+		u.email = email
+		u.first_name = primeiro
+		u.middle_name = meio
+		u.last_name = ultimo
+		u.mobile_no = dados.get("celular")
+		u.user_type = "Website User"
+		u.send_welcome_email = 0
+		u.flags.ignore_permissions = True
+		u.insert(ignore_permissions=True)
+		papel = frappe.get_single_value("Portal Settings", "default_role")
+		if papel:
+			u.add_roles(papel)
+	# A sessão precisa estar gravada antes de login_as — mesmo cuidado de
+	# frappe/core/api/user_invitation.py:150.
+	frappe.db.commit()  # nosemgrep
+
+	login_manager = getattr(frappe.local, "login_manager", None)
+	if login_manager is not None:
+		login_manager.login_as(email)
+	else:
+		frappe.set_user(email)
+	return email
+
+
+@frappe.whitelist(allow_guest=True, methods=["POST"])
+@rate_limit(limit=10, seconds=600)
+def confirmar_codigo_e_agendar(
+	codigo: str,
+	appointment_date: str,
+	appointment_time: str,
+	item_code: str | None = None,
+	appointment_type: str | None = None,
+	practitioner: str | None = None,
+	modalidade: str | None = None,
+	session_id: str | None = None,
+) -> dict:
+	from imunocare_ecommerce.agendamento.booking import criar_agendamento
+	from imunocare_ecommerce.conta.codigo import conferir
+
+	dados = conferir(frappe.session.sid, codigo)
+	usuario = _garantir_usuario(dados)
+
+	cpf = _so_digitos(
+		dados.get("paciente_cpf") if dados.get("para_outra_pessoa") else dados.get("cpf")
+	)
+	paciente = frappe.db.get_value("Patient", {"cpf": cpf}, "name")
+	if paciente:
+		if not frappe.db.get_value("Patient", paciente, "user_id"):
+			frappe.db.set_value("Patient", paciente, "user_id", usuario, update_modified=False)
+	else:
+		doc = _montar_paciente(dados, adulto_user=usuario)
+		doc.insert(ignore_permissions=True)
+		paciente = doc.name
+
+	# SEMPRE explícito: _resolver_paciente busca por {"user_id": user} e
+	# devolve UM paciente qualquer entre os vinculados — o que agendaria a
+	# vacina do filho mais velho no nome do caçula quando a mesma conta tem
+	# dois filhos cadastrados.
+	resultado = criar_agendamento(
+		appointment_date=appointment_date,
+		appointment_time=appointment_time,
+		item_code=item_code,
+		appointment_type=appointment_type,
+		practitioner=practitioner,
+		patient=paciente,
+		modalidade=modalidade,
+		session_id=session_id,
+	)
+	resultado["conta_criada"] = True
+	return resultado

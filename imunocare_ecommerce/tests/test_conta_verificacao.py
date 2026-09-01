@@ -3,6 +3,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from imunocare_ecommerce.conta import codigo as mod_codigo
 from imunocare_ecommerce.conta import verificacao
 
 _DADOS = {
@@ -24,6 +25,13 @@ def _limpar_rate_limit_solicitar_codigo():
 	# de test_rate_limit.py.
 	chave = frappe.cache.make_key(
 		f"imun_rl:imunocare_ecommerce.conta.verificacao.solicitar_codigo:{_IP_TESTE}"
+	)
+	frappe.cache.delete(chave)
+
+
+def _limpar_rate_limit_confirmar_codigo():
+	chave = frappe.cache.make_key(
+		f"imun_rl:imunocare_ecommerce.conta.verificacao.confirmar_codigo_e_agendar:{_IP_TESTE}"
 	)
 	frappe.cache.delete(chave)
 
@@ -192,3 +200,91 @@ class TestEntradaInvalida(FrappeTestCase):
 	def test_canal_com_tipo_inesperado_e_recusado(self):
 		with self.assertRaises(frappe.ValidationError):
 			verificacao.solicitar_codigo(["email"], dict(_DADOS))
+
+
+class TestConfirmarCodigo(FrappeTestCase):
+	def setUp(self):
+		frappe.local.request = frappe._dict(method="POST")
+		frappe.local.request_ip = _IP_TESTE
+		_limpar_rate_limit_confirmar_codigo()
+		# frappe.session.sid vale 'Administrator' fora de um request de
+		# verdade — todos os testes deste módulo compartilham o MESMO balde
+		# no Redis do código de verificação; sem isso um teste contamina o
+		# outro (código de sobra de um teste anterior, tentativas já gastas).
+		mod_codigo.descartar(frappe.session.sid)
+
+	def tearDown(self):
+		mod_codigo.descartar(frappe.session.sid)
+
+	def test_codigo_errado_nao_cria_nada(self):
+		antes_user = frappe.db.count("User")
+		antes_pac = frappe.db.count("Patient")
+		mod_codigo.emitir(frappe.session.sid, dict(_DADOS))
+		with self.assertRaises(mod_codigo.CodigoInvalido):
+			verificacao.confirmar_codigo_e_agendar(
+				codigo="000000", appointment_date="2030-01-10", appointment_time="09:00:00"
+			)
+		self.assertEqual(frappe.db.count("User"), antes_user)
+		self.assertEqual(frappe.db.count("Patient"), antes_pac)
+
+	def test_menor_de_idade_recebe_responsavel_do_adulto(self):
+		"""patient_hooks._validate_guardian exige nome+CPF do responsável."""
+		dados = dict(
+			_DADOS,
+			para_outra_pessoa=True,
+			paciente_nome="Joaquim Souza",
+			paciente_cpf="52998224725",
+			paciente_dob="2020-03-01",
+			paciente_sexo="Male",
+		)
+		p = verificacao._montar_paciente(dados, adulto_user="ana.nova@exemplo.com")
+		self.assertEqual(p.nome_responsavel, "Ana Souza")
+		self.assertEqual(p.cpf_responsavel, "39053344705")
+
+	def test_adulto_para_si_mesmo_nao_ganha_responsavel(self):
+		p = verificacao._montar_paciente(dict(_DADOS), adulto_user="ana.nova@exemplo.com")
+		self.assertFalse(p.get("nome_responsavel"))
+
+	def test_dois_filhos_geram_dois_pacientes(self):
+		"""Critério de aceite 4: o segundo filho não pode reusar o Patient do
+		primeiro. A busca por {"user_id": user} devolveria um deles ao acaso."""
+		adulto = "ana.nova@exemplo.com"
+		base = dict(
+			_DADOS, para_outra_pessoa=True, paciente_dob="2019-01-01", paciente_sexo="Female"
+		)
+
+		p1 = verificacao._montar_paciente(
+			dict(base, paciente_nome="Joaquim Souza", paciente_cpf="52998224725"),
+			adulto_user=adulto,
+		)
+		p1.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Patient", p1.name, force=True)
+
+		p2 = verificacao._montar_paciente(
+			dict(base, paciente_nome="Marina Souza", paciente_cpf="16899535009"),
+			adulto_user=adulto,
+		)
+		p2.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Patient", p2.name, force=True)
+
+		self.assertNotEqual(p1.name, p2.name)
+		self.assertEqual(p1.user_id, p2.user_id, "os dois pendurados no mesmo adulto")
+
+	def test_nome_de_duas_palavras_nao_quebra(self):
+		"""'Ana Souza' -> first/last preenchidos, middle vazio. Task 1 liberou."""
+		p = verificacao._montar_paciente(dict(_DADOS), adulto_user="ana.nova@exemplo.com")
+		self.assertEqual(p.first_name, "Ana")
+		self.assertEqual(p.last_name, "Souza")
+		p.insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Patient", p.name, force=True)
+
+
+class TestRegressaoCriarAgendamento(FrappeTestCase):
+	def test_criar_agendamento_continua_recusando_guest(self):
+		"""A porta de entrada do visitante é a função nova, não esta."""
+		from imunocare_ecommerce.agendamento.booking import criar_agendamento
+
+		frappe.set_user("Guest")
+		self.addCleanup(frappe.set_user, "Administrator")
+		with self.assertRaises(frappe.PermissionError):
+			criar_agendamento(appointment_date="2030-01-10", appointment_time="09:00:00")
