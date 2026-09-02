@@ -58,9 +58,16 @@ def enviar(canal: str, destino: str, codigo: str, nome: str) -> None:
 
 
 def _enviar_email(destino: str, codigo: str, nome: str) -> None:
+	# Item 7 da revisão 2026-09-02: o código NUNCA vai no assunto. O
+	# ``frappe.sendmail`` grava um ``Email Queue`` com assunto e corpo — um
+	# assunto com o código deixava o código legível em claro no banco (para
+	# quem tiver leitura do Email Queue), contradizendo o spec ("nada toca o
+	# banco antes do código conferir"). Assunto genérico; o código continua
+	# só no corpo (que também fica no Email Queue — ver risco no relatório
+	# ao CTO sobre expurgo de trilhas, fora do escopo desta correção).
 	frappe.sendmail(
 		recipients=[destino],
-		subject=_("Seu código Imunocare: {0}").format(codigo),
+		subject=_("Seu código de verificação Imunocare"),
 		message=_(
 			"<p>Olá, {0}!</p>"
 			"<p>Seu código de verificação é <b style='font-size:20px'>{1}</b>.</p>"

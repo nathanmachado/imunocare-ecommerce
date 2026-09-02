@@ -95,6 +95,17 @@ class TestCanais(FrappeTestCase):
 		self.assertEqual(kwargs["recipients"], ["ana@exemplo.com"])
 		self.assertIn("654321", kwargs["message"])
 
+	def test_enviar_email_nunca_poe_o_codigo_no_assunto(self):
+		"""Item 7 da revisão 2026-09-02: o Email Queue gravado pelo
+		frappe.sendmail persiste assunto E corpo — código no assunto ficava
+		legível em claro no banco para quem tiver leitura do doctype,
+		contradizendo "nada toca o banco antes do código conferir"."""
+		with patch("imunocare_ecommerce.conta.canais.frappe.sendmail") as mock_sendmail:
+			canais.enviar("email", "ana@exemplo.com", "654321", "Ana")
+
+		_args, kwargs = mock_sendmail.call_args
+		self.assertNotIn("654321", kwargs["subject"])
+
 	def test_enviar_whatsapp_insere_whatsapp_message_outgoing_com_codigo(self):
 		with (
 			patch.object(frappe.db, "get_value", return_value="codigo_verificacao-pt_BR"),
