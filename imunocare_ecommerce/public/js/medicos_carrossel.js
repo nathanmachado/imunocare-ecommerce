@@ -14,6 +14,15 @@
 // sistema, ver agendamento.booking._resolver_practitioner) porque o
 // carrossel pode ter vários médicos publicados ao mesmo tempo.
 //
+// Terceira parede de /login derrubada (Reserva como visitante — Task 6, fix
+// round 1 — achado da review 2026-09-01: o brief original só falava em
+// "dois redirects", mas este arquivo tinha um terceiro). ``logged_in``
+// agora reflete a SESSÃO REAL (antes vinha cravado em ``true``, porque só se
+// chegava aqui depois do redirect) — um Guest cai no mesmo ramo de
+// identificação/verificação de agendamento.js (imun_passo_identificacao),
+// em vez de bater em ``criar_agendamento`` como Guest (que lançaria
+// PermissionError) ou ser barrado aqui.
+//
 // Site-wide via hooks.web_include_js — no-op silencioso se a home não tiver
 // nenhum card publicado (medicos vazio -> seção some, ver www/index.html).
 frappe.ready(function () {
@@ -24,18 +33,15 @@ frappe.ready(function () {
 		if (!appointmentType || !practitioner) {
 			return;
 		}
-		if (!frappe.session.user || frappe.session.user === "Guest") {
-			window.location.href =
-				"/login?redirect-to=" +
-				encodeURIComponent(window.location.pathname + "#medicos-parceiros");
-			return;
-		}
 		if (!window.imunAbrirAgendamentoDialogo) {
 			return;
 		}
 		window.imunAbrirAgendamentoDialogo(
 			{ appointment_type: appointmentType },
-			{ practitioner: practitioner, logged_in: true }
+			{
+				practitioner: practitioner,
+				logged_in: !!(frappe.session.user && frappe.session.user !== "Guest"),
+			}
 		);
 	});
 });

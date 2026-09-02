@@ -24,7 +24,9 @@
   "retencao_eventos_dias",
   "retencao_sessoes_dias",
   "landing_pages_section",
-  "protocolo_emagrecimento_appointment_type"
+  "protocolo_emagrecimento_appointment_type",
+  "verificacao_section",
+  "whatsapp_otp_ativo"
  ],
  "fields": [
   {
@@ -144,6 +146,18 @@
    "fieldtype": "Link",
    "label": "Tipo de Agendamento — Avaliação de Emagrecimento",
    "options": "Appointment Type"
+  },
+  {
+   "fieldname": "verificacao_section",
+   "fieldtype": "Section Break",
+   "label": "Verificação de Conta por Código (OTP) — Governança"
+  },
+  {
+   "default": "0",
+   "description": "Trava explícita do canal WhatsApp para o código de verificação da reserva como visitante. Sem esta marcação, o WhatsApp continua OFERECIDO mesmo que exista um template AUTHENTICATION aprovado na Meta — aprovação de template é um evento fora do nosso deploy/revisão, e este canal nunca rodou de verdade em produção. Marque só depois de validar o envio manualmente.",
+   "fieldname": "whatsapp_otp_ativo",
+   "fieldtype": "Check",
+   "label": "Oferecer verificação por WhatsApp"
   }
  ],
  "links": [],

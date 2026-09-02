@@ -25,13 +25,13 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
+from imunocare_ecommerce.rate_limit import rate_limit
 
 _LOG_TITLE = "imunocare_ecommerce.landing.parceria_medicos"
 
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
-@rate_limit(key="imun_parceria_medicos", limit=5, seconds=60)
+@rate_limit(limit=5, seconds=60)
 def enviar_parceria(
 	nome: str,
 	crm_uf: str,
