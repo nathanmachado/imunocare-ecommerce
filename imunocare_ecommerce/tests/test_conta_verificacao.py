@@ -468,6 +468,19 @@ class TestConfirmarCodigo(FrappeTestCase):
 		self.assertEqual(p.nome_responsavel, "Ana Souza")
 		self.assertEqual(p.cpf_responsavel, "39053344705")
 
+	def test_email_do_paciente_e_ancorado_no_adulto_nao_no_digitado(self):
+		"""M4 da revisão 2026-09-02: o portal nativo do Healthcare acha o
+		Patient do usuário logado por ``Patient.email == session.user`` — se
+		``p.email`` viesse do campo digitado (``dados["email"]``), que pode
+		divergir da conta de verdade (``adulto_user``, ex.: CPF já
+		cadastrado redireciona o e-mail; canal whatsapp pode reaproveitar um
+		User com e-mail totalmente diferente do digitado), o portal do
+		cliente ficaria vazio."""
+		dados = dict(_DADOS, email="digitado-diferente@exemplo.com")
+		p = verificacao._montar_paciente(dados, adulto_user="conta.real@exemplo.com")
+		self.assertEqual(p.email, "conta.real@exemplo.com")
+		self.assertNotEqual(p.email, dados["email"])
+
 	def test_adulto_para_si_mesmo_nao_ganha_responsavel(self):
 		p = verificacao._montar_paciente(dict(_DADOS), adulto_user="ana.nova@exemplo.com")
 		self.assertFalse(p.get("nome_responsavel"))

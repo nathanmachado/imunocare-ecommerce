@@ -357,7 +357,16 @@ def _montar_paciente(dados: dict, adulto_user: str):
 	p.cpf = cpf
 	# Contato é sempre o do adulto: é ele que recebe lembrete e confirmação.
 	p.mobile = dados.get("celular")
-	p.email = dados.get("email")
+	# M4 da revisão 2026-09-02: p.email ANCORADO no mesmo contato que
+	# ``adulto_user`` (a conta) — nunca em ``dados.get("email")`` cru, que
+	# pode divergir dele (CPF já cadastrado redireciona o e-mail digitado
+	# para o do cadastro; canal whatsapp pode nem ter e-mail verificado
+	# nenhum, e reaproveitar um User já existente troca o e-mail de login
+	# por um totalmente diferente do digitado). O portal nativo do
+	# Healthcare acha o Patient do usuário logado por
+	# ``Patient.email == session.user`` — divergir os dois deixa o portal
+	# vazio para o cliente.
+	p.email = adulto_user
 	p.user_id = adulto_user
 	p.invite_user = 0
 
