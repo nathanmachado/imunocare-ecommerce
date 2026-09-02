@@ -271,16 +271,26 @@ def _validar_verificacao_id(verificacao_id) -> str:
 	return verificacao_id
 
 
-def _idade(dob) -> int | None:
-	if not dob:
+def _data_segura(valor):
+	"""``getdate(valor)`` sem nunca estourar — dado vindo do cliente, tipo ou
+	formato inválido vira ``None`` (igual a ausente), nunca 500. Usada tanto
+	por ``_idade`` (dob do adulto) quanto por ``_montar_paciente`` (dob do
+	paciente atendido, item BAIXA 2 da revisão 2026-09-02: ``paciente_dob``
+	era ``getdate()`` cru, sem guarda — formato inválido estourava DEPOIS do
+	commit da conta/usuário, deixando um User órfão para trás)."""
+	if not valor:
 		return None
 	try:
-		nasc, hoje = getdate(dob), getdate(nowdate())
+		return getdate(valor)
 	except Exception:
-		# dob de tipo/formato inválido (dado vindo do cliente): trata igual a
-		# "sem dob" — nunca estoura 500. Quem exige idade (_exigir_adulto)
-		# recusa igual a ausente (item 6 da revisão 2026-09-02).
 		return None
+
+
+def _idade(dob) -> int | None:
+	nasc = _data_segura(dob)
+	if nasc is None:
+		return None
+	hoje = getdate(nowdate())
 	if nasc > hoje:
 		return None
 	return hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
@@ -353,7 +363,7 @@ def _montar_paciente(dados: dict, adulto_user: str):
 	p.middle_name = meio
 	p.last_name = ultimo
 	p.sex = dados.get("paciente_sexo") if para_outro else dados.get("sexo")
-	p.dob = getdate(dob) if dob else None
+	p.dob = _data_segura(dob)
 	p.cpf = cpf
 	# Contato é sempre o do adulto: é ele que recebe lembrete e confirmação.
 	p.mobile = dados.get("celular")

@@ -518,6 +518,25 @@ class TestConfirmarCodigo(FrappeTestCase):
 		p.insert(ignore_permissions=True)
 		self.addCleanup(frappe.delete_doc, "Patient", p.name, force=True)
 
+	def test_paciente_dob_de_formato_invalido_nao_estoura_500(self):
+		"""BAIXA 2 da revisão 2026-09-02: ``paciente_dob`` mal formatado
+		estourava DEPOIS do commit da conta (User já persistido), deixando um
+		User órfão para trás — _montar_paciente roda depois de
+		_garantir_usuario em confirmar_codigo_e_agendar. Mesmo tratamento já
+		dado ao dob do adulto (_data_segura): formato inválido vira None, nunca
+		500."""
+		dados = dict(
+			_DADOS,
+			para_outra_pessoa=True,
+			paciente_nome="Bebe Teste",
+			paciente_cpf="52998224725",
+			paciente_dob="isto-nao-e-uma-data",
+			paciente_sexo="Male",
+			nome_responsavel="Ana Souza",
+		)
+		p = verificacao._montar_paciente(dados, adulto_user="ana.nova@exemplo.com")
+		self.assertIsNone(p.dob)
+
 	def test_menor_para_si_mesmo_e_recusado_e_nao_cria_nada(self):
 		"""Fix IMPORTANTE da revisão: sem para_outra_pessoa, quem se verifica
 		precisa ser maior de 18 — senão viraria responsável de si mesmo."""
