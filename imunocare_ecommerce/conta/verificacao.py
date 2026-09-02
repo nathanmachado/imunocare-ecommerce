@@ -26,6 +26,17 @@ _CANAIS = ("email", "whatsapp")
 MAIORIDADE = 18
 
 
+def _msg_envio_indisponivel() -> str:
+	"""Item 4 da revisão 2026-09-01: uma ÚNICA mensagem para os dois caminhos
+	que terminam sem destino para enviar o código — CPF novo sem contato
+	digitado E CPF de um Patient já cadastrado sem e-mail/celular
+	preenchidos. Duas mensagens diferentes ali seriam um oráculo (revelariam
+	se o CPF existe). Função (não constante de módulo) porque ``_()``
+	depende do idioma da requisição corrente — resolver no import fixaria a
+	tradução do processo, não da requisição."""
+	return _("Não foi possível enviar o código de verificação. Procure a clínica.")
+
+
 def _texto(valor) -> str:
 	"""Normaliza um campo de texto vindo do payload do cliente.
 
@@ -87,8 +98,13 @@ def _resolver_envio(canal: str, dados: dict) -> tuple[str, str]:
 	   muda de acordo, para que quem chama (``solicitar_codigo``) confira
 	   disponibilidade e envie pelo canal certo.
 	3. Se nem e-mail nem celular estiverem preenchidos no cadastro, recusa —
-	   caminho de EXCEÇÃO (nunca um fallback silencioso), com mensagem
-	   genérica que não confirma que aquele CPF existe.
+	   caminho de EXCEÇÃO (nunca um fallback silencioso), com a MESMA
+	   mensagem genérica que ``solicitar_codigo`` usa para "não informou
+	   contato" (ver ``_MSG_ENVIO_INDISPONIVEL``): antes deste fix o texto
+	   era diferente ("Procure a clínica" vs "Informe um e-mail válido."),
+	   e comparar as duas mensagens dava para inferir que aquele CPF existe
+	   — exatamente o que o spec proíbe ("nunca revelar se um e-mail ou CPF
+	   já existe").
 	"""
 	cpf = _so_digitos(dados.get("cpf"))
 	contato = (
@@ -110,10 +126,7 @@ def _resolver_envio(canal: str, dados: dict) -> tuple[str, str]:
 	if contato.get(campo_outro):
 		return canal_outro, contato[campo_outro]
 
-	frappe.throw(
-		_("Não foi possível enviar o código de verificação. Procure a clínica."),
-		title=_("Verificação indisponível"),
-	)
+	frappe.throw(_msg_envio_indisponivel(), title=_("Verificação indisponível"))
 
 
 def _destino_de_envio(canal: str, dados: dict) -> str:
@@ -153,11 +166,10 @@ def solicitar_codigo(
 	canal_efetivo, destino = _resolver_envio(canal, dados)
 
 	if not destino:
-		frappe.throw(
-			_("Informe um e-mail válido.")
-			if canal_efetivo == "email"
-			else _("Informe um celular válido.")
-		)
+		# Mesma mensagem de _resolver_envio quando o CPF já cadastrado não
+		# tem contato (item 4 da revisão 2026-09-01) — texto diferente
+		# aqui era um oráculo de existência de CPF (ver _msg_envio_indisponivel).
+		frappe.throw(_msg_envio_indisponivel(), title=_("Verificação indisponível"))
 
 	if not canais.disponiveis().get(canal_efetivo):
 		frappe.throw(_("Este canal de verificação está indisponível no momento."))
@@ -228,26 +240,26 @@ def _idade(dob) -> int | None:
 	return hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
 
 
-def _exigir_adulto_para_si_mesmo(dados: dict) -> None:
-	"""Quem se verifica PARA SI MESMO precisa ser maior de 18.
+def _exigir_adulto(dados: dict) -> None:
+	"""Quem CRIA A CONTA precisa ser maior de 18 — sempre, para si mesmo ou
+	para outra pessoa.
 
-	Sem esta checagem, um menor que reserva para si mesmo teria
-	``nome_responsavel``/``cpf_responsavel`` preenchidos com os PRÓPRIOS
-	dados (ver ``_montar_paciente``), satisfazendo
-	``patient_hooks._validate_guardian`` de forma vazia — o "responsável"
-	seria a própria criança. Quem precisa agendar para um menor usa a opção
-	"para outra pessoa" a partir da conta de um adulto responsável.
+	``dados["dob"]`` é sempre a data de nascimento de quem está se
+	verificando (nunca a do paciente atendido quando
+	``para_outra_pessoa=True`` — essa é ``paciente_dob``, um campo à parte).
+
+	Fix da revisão 2026-09-01 (item 2): a checagem antiga só rodava para
+	"para si mesmo" — quem marcava "a consulta é para outra pessoa" nunca
+	tinha a própria idade verificada, então um menor conseguia criar conta e
+	figurar como RESPONSÁVEL de um paciente (mesma classe do achado que a
+	checagem "para si mesmo" já corrigia, só que fechada pela metade). Regra
+	única e mais simples: sem ramo por ``para_outra_pessoa``, porque a
+	idade que importa é sempre a de quem está criando a conta.
 	"""
-	if dados.get("para_outra_pessoa"):
-		return
 	idade = _idade(dados.get("dob"))
 	if idade is not None and idade < MAIORIDADE:
 		frappe.throw(
-			_(
-				'Menores de 18 anos não podem se cadastrar sozinhos. Peça para um '
-				'responsável agendar por você ("Agendar para outra pessoa") ou '
-				"procure a clínica."
-			),
+			_("Menores de 18 anos não podem se cadastrar. Procure a clínica para agendar com a ajuda de um responsável."),
 			title=_("Cadastro não permitido"),
 		)
 
@@ -380,6 +392,24 @@ def _garantir_usuario_por_celular(celular_verificado: str, dados: dict) -> tuple
 		# O celular verificado não é o desta conta — nunca cria/loga usando
 		# um e-mail que já pertence a outra pessoa (mensagem genérica: não
 		# confirma nem nega que o e-mail digitado existe).
+		#
+		# Limitação CONSCIENTE (item 5 da revisão 2026-09-01): quem já provou
+		# controlar um celular novo ainda consegue, testando e-mails
+		# candidatos, distinguir "conta criada em silêncio" (sucesso) deste
+		# "erro específico" — um oráculo de existência de e-mail. Fechar essa
+		# distinção por completo exigiria SEMPRE "ter sucesso" aqui (ex.:
+		# criar a conta com um login sintético amarrado só ao celular,
+		# ignorando o e-mail que colidiu), mas isso pioraria o caminho
+		# honesto mais comum deste ramo: a pessoa digitou um e-mail que É
+		# dela mesma, de uma conta já existente criada por outro canal — hoje
+		# ela recebe a dica explícita "tente verificar por e-mail" e recupera
+		# a própria conta; com o login sintético ela perderia essa dica e
+		# ficaria com uma conta-fantasma extra, sem entender por quê. Fica
+		# como está — decisão consciente, não descuido — e a mitigação real
+		# é econômica: cada tentativa aqui exige resolver um código OTP novo
+		# por WhatsApp, e ambos os endpoints (solicitar_codigo e este) já são
+		# limitados por IP via ``rate_limit`` (Task 4/5), o que encarece a
+		# enumeração em massa sem bloquear o cliente honesto.
 		frappe.throw(
 			_(
 				"Não foi possível concluir seu cadastro com estes dados. "
@@ -441,7 +471,7 @@ def confirmar_codigo_e_agendar(
 
 	verificacao_id = _validar_verificacao_id(verificacao_id)
 	dados = conferir(verificacao_id, codigo)
-	_exigir_adulto_para_si_mesmo(dados)
+	_exigir_adulto(dados)
 	usuario, conta_criada = _garantir_usuario(dados)
 
 	cpf = _so_digitos(
@@ -471,4 +501,10 @@ def confirmar_codigo_e_agendar(
 		session_id=session_id,
 	)
 	resultado["conta_criada"] = conta_criada
+	# Item 1 da revisão 2026-09-01: o cliente lê frappe.session.user no
+	# carregamento da página — nunca fica sabendo, sozinho, que o backend
+	# logou outro usuário no meio desta chamada. Devolve explicitamente QUEM
+	# ficou logado para o JS atualizar o próprio estado (e o cabeçalho do
+	# site) em vez de adivinhar.
+	resultado["usuario"] = usuario
 	return resultado

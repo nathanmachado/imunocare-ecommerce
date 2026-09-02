@@ -18,6 +18,12 @@ class TestCanais(FrappeTestCase):
 		# inteiro, que é exatamente o que mascarar() existe para evitar.
 		self.assertEqual(canais.mascarar("whatsapp", "1234"), "****")
 
+	def test_mascara_celular_com_5_digitos_revela_os_4_ultimos(self):
+		# Item 8 da revisão 2026-09-01 — fronteira nunca testada: exatamente
+		# 5 dígitos cai no ramo "normal" (>= 5), não no "mascara tudo" (< 5).
+		# Comportamento ATUAL, fixado de propósito: revela 4 dos 5 dígitos.
+		self.assertEqual(canais.mascarar("whatsapp", "51999"), "*1999")
+
 	def test_mascara_celular_com_1_digito_mascara_tudo(self):
 		self.assertEqual(canais.mascarar("whatsapp", "5"), "*")
 

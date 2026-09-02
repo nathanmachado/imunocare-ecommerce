@@ -400,25 +400,75 @@ class TestConfirmarCodigo(FrappeTestCase):
 		self.assertEqual(frappe.db.count("User"), antes_user)
 		self.assertEqual(frappe.db.count("Patient"), antes_pac)
 
+	def test_menor_para_outra_pessoa_e_recusado_e_nao_cria_nada(self):
+		"""Item 2 da revisão 2026-09-01, mesmo teste acima mas pelo caminho
+		"para outra pessoa": um menor não pode criar conta nem figurar como
+		responsável de outro paciente, mesmo que o paciente informado
+		(paciente_dob) seja adulto — a idade que bloqueia é a de quem está
+		se cadastrando (dob), sempre."""
+		antes_user = frappe.db.count("User")
+		antes_pac = frappe.db.count("Patient")
+		dados = dict(
+			_DADOS,
+			email="crianca.responsavel@exemplo.com",
+			dob="2015-06-01",
+			canal_verificado="email",
+			destino_verificado="crianca.responsavel@exemplo.com",
+			para_outra_pessoa=True,
+			paciente_nome="Avó Souza",
+			paciente_cpf="52998224725",
+			paciente_dob="1950-01-01",
+			paciente_sexo="Female",
+		)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.confirmar_codigo_e_agendar(
+				codigo=c,
+				verificacao_id=token,
+				appointment_date="2030-01-10",
+				appointment_time="09:00:00",
+			)
+		self.assertEqual(frappe.db.count("User"), antes_user)
+		self.assertEqual(frappe.db.count("Patient"), antes_pac)
 
-class TestExigirAdultoParaSiMesmo(FrappeTestCase):
-	"""Fix IMPORTANTE da revisão (verificacao.py, adulto menor virava
-	responsável de si mesmo): sem para_outra_pessoa, a idade computada é a
-	da PRÓPRIA pessoa que está se verificando — precisa ser maior de 18."""
+
+class TestExigirAdulto(FrappeTestCase):
+	"""Item 2 da revisão 2026-09-01 (fechando pela metade o fix anterior):
+	quem CRIA A CONTA precisa ser maior de 18 SEMPRE — para si mesmo ou para
+	outra pessoa. Antes, ``para_outra_pessoa=True`` pulava a checagem por
+	completo, e um menor conseguia criar conta e figurar como responsável de
+	um paciente. Regra única: a idade que importa é sempre a de ``dob``
+	(quem está se verificando), nunca a de ``paciente_dob``."""
 
 	def test_menor_de_idade_para_si_mesmo_e_recusado(self):
 		dados = dict(_DADOS, dob="2015-01-01")
 		with self.assertRaises(frappe.ValidationError):
-			verificacao._exigir_adulto_para_si_mesmo(dados)
+			verificacao._exigir_adulto(dados)
 
 	def test_adulto_para_si_mesmo_passa(self):
-		verificacao._exigir_adulto_para_si_mesmo(dict(_DADOS))  # não lança
+		verificacao._exigir_adulto(dict(_DADOS))  # não lança
 
-	def test_para_outra_pessoa_ignora_a_idade_de_quem_verifica(self):
-		"""A idade que importa aqui é a do ADULTO (dob), não a do paciente
-		(paciente_dob) — quando para_outra_pessoa=True a função sai cedo."""
+	def test_menor_de_idade_para_outra_pessoa_tambem_e_recusado(self):
+		"""O achado do item 2: sem para_outra_pessoa=True como escapatória,
+		um menor não pode mais se cadastrar como responsável de ninguém —
+		mesmo que o PACIENTE (paciente_dob) seja um bebê, sem relação com a
+		idade de quem estaria criando a conta."""
+		dados = dict(
+			_DADOS,
+			dob="2015-01-01",
+			para_outra_pessoa=True,
+			paciente_dob="2020-01-01",
+		)
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._exigir_adulto(dados)
+
+	def test_adulto_para_outra_pessoa_passa(self):
+		"""A idade que importa é a de quem verifica (dob), não a do paciente
+		atendido (paciente_dob) — um bebê como paciente não bloqueia um
+		adulto responsável por ele."""
 		dados = dict(_DADOS, para_outra_pessoa=True, paciente_dob="2020-01-01")
-		verificacao._exigir_adulto_para_si_mesmo(dados)  # não lança
+		verificacao._exigir_adulto(dados)  # não lança
 
 
 class TestGarantirUsuarioAncoraContatoVerificado(FrappeTestCase):
@@ -632,6 +682,69 @@ class TestConfirmarCodigoEAgendarFimAFim(FrappeTestCase):
 			frappe.db.get_value("Patient", pac2, "user_id"),
 			"os dois pendurados na mesma conta do adulto",
 		)
+
+	def test_solicitar_codigo_seguido_de_confirmar_agenda_de_ponta_a_ponta(self):
+		"""Item 3 da revisão 2026-09-01: até aqui, TODO teste de
+		``confirmar_codigo_e_agendar`` ancorava chamando ``mod_codigo.emitir``
+		direto (ver ``_confirmar`` acima) — pulando o endpoint
+		``solicitar_codigo`` por completo. A costura entre os dois endpoints
+		(o ``verificacao_id`` que um devolve e o outro exige de volta —
+		exatamente o que a correção do token opaco criou) nunca era
+		exercitada por um teste. Este chama os DOIS endpoints públicos em
+		sequência, como o navegador faz de verdade: pede o código de
+		verdade (envio mockado, sem rede), captura o ``verificacao_id`` do
+		retorno, e confirma com ele."""
+		# Esta classe só reseta o balde de confirmar_codigo_e_agendar no
+		# setUp (ver acima) — solicitar_codigo é uma chamada NOVA aqui, e o
+		# balde é compartilhado por IP entre TODAS as classes deste módulo;
+		# reset explícito para este teste não depender da ordem de execução
+		# das classes vizinhas.
+		_limpar_rate_limit_solicitar_codigo()
+		email, celular = _identidade_unica("ciclo.real.task3")
+		dados = dict(_DADOS, email=email, celular=celular)
+
+		codigos_enviados = []
+		with (
+			patch.object(
+				verificacao.canais, "disponiveis", return_value={"email": True, "whatsapp": False}
+			),
+			patch(
+				"imunocare_ecommerce.conta.canais.enviar",
+				side_effect=lambda canal, destino, codigo, nome: codigos_enviados.append(codigo),
+			),
+		):
+			resposta = verificacao.solicitar_codigo("email", dados)
+
+		self.assertEqual(len(codigos_enviados), 1)
+		self.assertIn("verificacao_id", resposta)
+
+		resultado = verificacao.confirmar_codigo_e_agendar(
+			codigo=codigos_enviados[0],
+			verificacao_id=resposta["verificacao_id"],
+			appointment_date="2030-02-15",
+			appointment_time="11:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+		)
+		self.addCleanup(_apagar_definitivamente, "User", email)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		paciente = frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient")
+		self.addCleanup(_limpar_contatos_vinculados, "Patient", paciente)
+		self.addCleanup(_apagar_definitivamente, "Patient", paciente)
+		# create_customer (hook nativo do Healthcare) cria um Customer de
+		# mesmo nome do Patient — órfão se não limpar.
+		self.addCleanup(_apagar_definitivamente, "Customer", paciente)
+
+		self.assertTrue(resultado["conta_criada"])
+		self.assertEqual(resultado["usuario"], email)
+		self.assertEqual(frappe.session.user, email)
+
+		# A verificação da PRIMEIRA emissão foi consumida — confirmar de
+		# novo com o mesmo par código/token tem que ser recusado (prova que
+		# passamos pelo Redis de verdade, não por um atalho de teste).
+		with self.assertRaises(mod_codigo.CodigoInvalido):
+			mod_codigo.conferir(resposta["verificacao_id"], codigos_enviados[0])
 
 
 class TestConcorrenciaEntreVisitantesAnonimos(FrappeTestCase):

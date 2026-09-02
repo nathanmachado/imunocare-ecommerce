@@ -734,10 +734,15 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 					}
 					recarregando = true;
 					d3.hide();
+					// Item 6 da revisão 2026-09-01: OverlapError do healthcare
+					// (patient_appointment.py:validate_overlaps) não significa só
+					// "outra pessoa preencheu esse horário" — o mesmo erro cobre
+					// "você (o mesmo paciente) já tem uma consulta nesse dia". A
+					// mensagem cobre os dois sentidos sem afirmar qual foi.
 					frappe.msgprint({
-						title: __("Esse horário acabou de ser preenchido"),
+						title: __("Não foi possível confirmar este horário"),
 						message: __(
-							"Sua conta já está criada e você está conectado. Escolha outro horário — agora é só um clique."
+							"Esse horário pode ter sido preenchido por outra pessoa, ou você já tem uma consulta marcada para esse dia. Sua conta já está criada e você está conectado — escolha outro horário."
 						),
 						indicator: "orange",
 					});
@@ -818,11 +823,30 @@ function imun_mensagem_confirmacao_guest(resultado) {
 	if (resultado.aviso_domiciliar) {
 		mensagem += "<br><br>" + frappe.utils.escape_html(resultado.aviso_domiciliar);
 	}
-	frappe.msgprint({
+
+	// Item 1 da revisão 2026-09-01: frappe.session.user foi lido no
+	// carregamento da página e continua "Guest" no cliente mesmo depois de
+	// confirmar_codigo_e_agendar logar a pessoa no servidor — o cabeçalho do
+	// site seguiria mostrando "Entrar" para quem acabou de criar conta.
+	// Atualiza o valor em memória com o que o backend REALMENTE logou
+	// (``resultado.usuario`` — nunca adivinhado no cliente) e recarrega a
+	// página para o cabeçalho refletir a sessão nova. O reload só acontece
+	// quando este diálogo FECHA (custom_onhide, disparado por qualquer jeito
+	// de fechar — botão OK, X, clique fora, ESC): a pessoa sempre lê a
+	// mensagem de sucesso antes, nunca pisca.
+	if (resultado.usuario) {
+		frappe.session.user = resultado.usuario;
+	}
+	var dialogo = frappe.msgprint({
 		title: __("Reserva confirmada"),
 		message: mensagem,
 		indicator: "green",
 	});
+	if (resultado.usuario && dialogo) {
+		dialogo.custom_onhide = function () {
+			window.location.reload();
+		};
+	}
 }
 
 // Reuso site-wide (R2/Feature 70 — carrossel de médicos na home,

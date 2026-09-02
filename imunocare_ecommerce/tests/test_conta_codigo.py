@@ -59,9 +59,15 @@ class TestCodigoVerificacao(FrappeTestCase):
 		mod.emitir(_SID, _DADOS, ttl=600)
 		self.assertGreater(frappe.cache.ttl(mod._chave(_SID)), 0)
 
-	def test_tentativas_incrementa_exatamente_uma_vez_por_chamada(self):
-		# Prova que o HINCRBY é atômico: N chamadas erradas em sequência
-		# resultam em exatamente N no contador — nada some, nada dobra.
+	def test_tentativas_bate_com_o_numero_de_chamadas_sequenciais(self):
+		# Item 7 da revisão 2026-09-01: este teste é sequencial (uma chamada
+		# de cada vez) — ele prova o VALOR FINAL do contador depois de N
+		# chamadas em sequência, não atomicidade sob concorrência. A
+		# implementação antiga (ler o JSON inteiro, somar em Python, regravar
+		# o blob) também passaria neste teste sequencial; quem garante que o
+		# contador não perde/dobra tentativa sob chamadas CONCORRENTES é a
+		# atomicidade do HINCRBY no servidor Redis, não este teste — este é
+		# só regressão do valor final.
 		mod.emitir(_SID, _DADOS)
 		n = 3
 		for _ in range(n):
