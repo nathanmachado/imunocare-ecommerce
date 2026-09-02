@@ -642,6 +642,136 @@ class TestGarantirUsuarioAncoraContatoVerificado(FrappeTestCase):
 		self.assertTrue(criado)
 		self.assertEqual(frappe.session.user, email)
 
+	def test_conta_criada_pela_loja_ganha_a_role_patient(self):
+		"""M1 da revisão 2026-09-02: critério de aceite 3 exige a role nativa
+		"Patient" — ``Portal Settings.default_role`` é config GERAL do site
+		(qualquer Website User, não só quem se cadastra pela loja) e pode
+		divergir sem relação nenhuma com este fluxo."""
+		email, celular = _identidade_unica("role.patient.task5")
+		dados = dict(
+			_DADOS,
+			celular=celular,
+			canal_verificado="email",
+			destino_verificado=email,
+		)
+		usuario, criado = verificacao._garantir_usuario(dados)
+		self.addCleanup(_apagar_definitivamente, "User", usuario)
+
+		self.assertTrue(criado)
+		self.assertIn("Patient", frappe.get_roles(usuario))
+
+	def test_canal_email_de_usuario_desabilitado_e_recusado(self):
+		"""Item 3 da revisão 2026-09-02: ``LoginManager.post_login`` não
+		valida ``enabled`` sozinho — um ex-funcionário desabilitado cujo
+		e-mail bata com o contato verificado não pode ganhar sessão pela
+		loja sem senha/2FA."""
+		email_desabilitado, _c = _identidade_unica("desabilitado.email.task5")
+		usuario_desabilitado = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email_desabilitado,
+				"first_name": "Ex",
+				"last_name": "Funcionario",
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+				"enabled": 0,
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", usuario_desabilitado.name)
+
+		dados = dict(
+			_DADOS,
+			canal_verificado="email",
+			destino_verificado=email_desabilitado,
+		)
+		usuario_antes = frappe.session.user
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._garantir_usuario(dados)
+		self.assertEqual(frappe.session.user, usuario_antes, "não pode logar em conta desabilitada")
+
+	def test_canal_email_de_system_user_e_recusado(self):
+		"""Mesmo achado, para um System User interno (existem contas de
+		e-mail internas no próprio ERP) cujo e-mail bata com o contato
+		verificado — nunca ganha sessão pela loja."""
+		email_interno, _c = _identidade_unica("system.user.email.task5")
+		interno = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email_interno,
+				"first_name": "Interno",
+				"last_name": "ERP",
+				"send_welcome_email": 0,
+				"enabled": 1,
+				# user_type é CALCULADO por User.validate a partir de
+				# has_desk_access() (ver frappe/core/doctype/user/user.py) —
+				# sem role de acesso ao Desk, viraria "Website User" mesmo
+				# sem passar nada explícito. Uma role real de acesso ao Desk
+				# é o que efetivamente simula um System User interno.
+				"roles": [{"role": "System Manager"}],
+			}
+		).insert(ignore_permissions=True)
+		self.assertEqual(interno.user_type, "System User", "precondição do teste")
+		self.addCleanup(_apagar_definitivamente, "User", interno.name)
+
+		dados = dict(
+			_DADOS,
+			canal_verificado="email",
+			destino_verificado=email_interno,
+		)
+		usuario_antes = frappe.session.user
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._garantir_usuario(dados)
+		self.assertEqual(frappe.session.user, usuario_antes, "não pode logar num System User")
+
+	def test_canal_whatsapp_com_celular_de_usuario_desabilitado_e_recusado(self):
+		"""Mesmo achado do ramo por e-mail, pelo ramo por WhatsApp: um
+		celular verificado que bate com um User desabilitado não ganha
+		sessão."""
+		email_dono, celular_dono = _identidade_unica("desabilitado.celular.task5")
+		dono = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email_dono,
+				"first_name": "Dono",
+				"last_name": "Desabilitado",
+				"mobile_no": celular_dono,
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+				"enabled": 0,
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", dono.name)
+
+		dados = dict(_DADOS, canal_verificado="whatsapp", destino_verificado=celular_dono)
+		usuario_antes = frappe.session.user
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._garantir_usuario(dados)
+		self.assertEqual(frappe.session.user, usuario_antes, "não pode logar em conta desabilitada")
+
+	def test_canal_whatsapp_com_celular_de_system_user_e_recusado(self):
+		email_interno, celular_interno = _identidade_unica("system.user.celular.task5")
+		interno = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email_interno,
+				"first_name": "Interno",
+				"last_name": "ERP Celular",
+				"mobile_no": celular_interno,
+				"send_welcome_email": 0,
+				"enabled": 1,
+				# ver comentário equivalente no teste por e-mail acima.
+				"roles": [{"role": "System Manager"}],
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", interno.name)
+		self.assertEqual(interno.user_type, "System User", "precondição do teste")
+
+		dados = dict(_DADOS, canal_verificado="whatsapp", destino_verificado=celular_interno)
+		usuario_antes = frappe.session.user
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._garantir_usuario(dados)
+		self.assertEqual(frappe.session.user, usuario_antes, "não pode logar num System User")
+
 	def test_canal_whatsapp_com_celular_de_usuario_existente_loga_na_conta_certa(self):
 		email_dono, celular_dono = _identidade_unica("dono.celular.task5")
 		dono = frappe.get_doc(

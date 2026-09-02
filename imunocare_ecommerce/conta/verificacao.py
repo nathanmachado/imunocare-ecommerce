@@ -330,6 +330,19 @@ def _logar(email: str) -> None:
 		frappe.set_user(email)
 
 
+def _usuario_elegivel_para_login(nome_usuario: str) -> bool:
+	"""IMPORTANTE 3 da revisão 2026-09-02: ``LoginManager.post_login`` NÃO
+	valida ``enabled``/``user_type`` sozinho — quem chama ``login_as`` é
+	quem tem que garantir isso. Sem esta checagem, um ``User`` desabilitado
+	(ex-funcionário) ou um **System User** interno (existem contas de
+	e-mail internas no próprio ERP) cujo e-mail/celular batesse com o
+	digitado ganhava sessão pela loja, sem senha e sem 2FA, só por controlar
+	aquele contato. Só ``Website User`` habilitado pode ganhar sessão por
+	este fluxo de OTP."""
+	info = frappe.db.get_value("User", nome_usuario, ["enabled", "user_type"], as_dict=True)
+	return bool(info and info.enabled and info.user_type == "Website User")
+
+
 def _criar_website_user(email: str, dados: dict, mobile_no: str | None = None):
 	primeiro, meio, ultimo = _partir_nome(dados.get("nome"))
 	u = frappe.new_doc("User")
@@ -342,9 +355,15 @@ def _criar_website_user(email: str, dados: dict, mobile_no: str | None = None):
 	u.send_welcome_email = 0
 	u.flags.ignore_permissions = True
 	u.insert(ignore_permissions=True)
-	papel = frappe.get_single_value("Portal Settings", "default_role")
-	if papel:
-		u.add_roles(papel)
+	# M1 da revisão 2026-09-02: o critério de aceite 3 exige a role nativa
+	# "Patient" (healthcare.setup.default_portal_role) — ``Portal
+	# Settings.default_role`` é uma config GERAL do site (vale para
+	# QUALQUER Website User, não só quem se cadastra como paciente pela
+	# loja) e pode ser trocada por outro motivo, sem relação com este fluxo,
+	# quebrando o critério de aceite silenciosamente. Garante a role certa
+	# direto, sem depender daquela config.
+	if frappe.db.exists("Role", "Patient"):
+		u.add_roles("Patient")
 	return u
 
 
@@ -362,6 +381,11 @@ def _garantir_usuario_por_email(email_verificado: str, dados: dict) -> tuple[str
 	if not frappe.db.exists("User", email):
 		_criar_website_user(email, dados)
 		criado = True
+	elif not _usuario_elegivel_para_login(email):
+		# Item 3: mesma mensagem genérica de "peça um novo código" — nunca
+		# confirma nem nega que aquele e-mail já é de uma conta (interna ou
+		# desabilitada), só recusa o login.
+		frappe.throw(_("Não foi possível confirmar seu contato. Peça um novo código."))
 	# A sessão precisa estar gravada antes de login_as — mesmo cuidado de
 	# frappe/core/api/user_invitation.py:150.
 	frappe.db.commit()  # nosemgrep
@@ -382,6 +406,15 @@ def _garantir_usuario_por_celular(celular_verificado: str, dados: dict) -> tuple
 
 	existente = frappe.db.get_value("User", {"mobile_no": celular}, "name")
 	if existente:
+		if not _usuario_elegivel_para_login(existente):
+			# Item 3: mesmo caso do ramo por e-mail — um celular que bate com
+			# um User desabilitado/System User não ganha sessão.
+			frappe.throw(_("Não foi possível confirmar seu contato. Peça um novo código."))
+		# M3 da revisão 2026-09-02: mesmo cuidado do ramo "cria conta nova"
+		# logo abaixo (sessão gravada ANTES de login_as, mesmo padrão de
+		# frappe/core/api/user_invitation.py:150) — reaproveitar uma conta
+		# existente também dispara login_as, não só criar uma nova.
+		frappe.db.commit()  # nosemgrep
 		_logar(existente)
 		return existente, False
 
