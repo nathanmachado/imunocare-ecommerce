@@ -264,6 +264,92 @@ class TestSolicitarCodigo(FrappeTestCase):
 				self.assertIn("verificacao_id", r)
 
 
+class TestFormatoDoContatoAntesDoCpf(FrappeTestCase):
+	"""Item 5 da revisão 2026-09-02: valida o FORMATO do e-mail/celular ANTES
+	de qualquer consulta ao CPF — a resposta depende só do que a pessoa
+	digitou (nunca do estado de cadastro), e o caso comum (erro de
+	digitação) volta a ganhar uma mensagem específica em vez do genérico
+	único que a leva anterior (unificação de mensagens) deixou para todo
+	mundo."""
+
+	def setUp(self):
+		frappe.local.request = frappe._dict(method="POST")
+		frappe.local.request_ip = _IP_TESTE
+		_limpar_rate_limit_solicitar_codigo()
+
+	def test_email_mal_formatado_e_recusado_com_mensagem_especifica(self):
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			verificacao.solicitar_codigo("email", dict(_DADOS, email="nao-e-email"))
+		self.assertIn("e-mail válido", str(ctx.exception))
+
+	def test_email_ausente_e_recusado_com_mensagem_especifica(self):
+		dados = dict(_DADOS)
+		dados.pop("email")
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			verificacao.solicitar_codigo("email", dados)
+		self.assertIn("e-mail válido", str(ctx.exception))
+
+	def test_celular_mal_formatado_e_recusado_com_mensagem_especifica(self):
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			verificacao.solicitar_codigo("whatsapp", dict(_DADOS, celular="123"))
+		self.assertIn("celular válido", str(ctx.exception))
+
+	def test_formato_invalido_nao_consulta_o_cpf(self):
+		"""A checagem de formato tem que estourar ANTES de qualquer leitura
+		do Patient pelo CPF — prova indireta: mesmo com um CPF de um Patient
+		JÁ cadastrado (que mudaria canal/destino via _resolver_envio), o
+		erro continua sendo o genérico de formato, nunca algo que dependa do
+		cadastro."""
+		paciente = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Elisa",
+				"middle_name": "de",
+				"last_name": "Matos",
+				"sex": "Female",
+				"dob": "1979-03-03",
+				"cpf": "52998224725",
+				"mobile": "51988776655",
+				"email": "elisa.dono@exemplo.com",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Patient", paciente.name, force=True)
+
+		with patch("imunocare_ecommerce.conta.verificacao._resolver_envio") as mock_resolver:
+			with self.assertRaises(frappe.ValidationError):
+				verificacao.solicitar_codigo(
+					"email", dict(_DADOS, cpf="52998224725", email="nao-e-email")
+				)
+			mock_resolver.assert_not_called()
+
+	def test_formato_valido_segue_para_a_mensagem_generica_dali_em_diante(self):
+		"""Depois do formato validado, um CPF já cadastrado sem contato
+		nenhum registrado no canal pedido nem no outro volta a usar a
+		mensagem GENÉRICA (item 4 da revisão 2026-09-01) — a validação de
+		formato não reabre o oráculo que aquele fix fechou."""
+		paciente = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Fabio",
+				"middle_name": "de",
+				"last_name": "Rocha",
+				"sex": "Male",
+				"dob": "1979-03-03",
+				"cpf": "16899535009",
+				"mobile": "",
+				"email": "",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		self.addCleanup(frappe.delete_doc, "Patient", paciente.name, force=True)
+
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			verificacao.solicitar_codigo(
+				"email", dict(_DADOS, cpf="16899535009", email="invasor@exemplo.com")
+			)
+		self.assertNotIn("e-mail válido", str(ctx.exception))
+		self.assertIn("Procure a clínica", str(ctx.exception))
+
+
 class TestResolverEnvio(FrappeTestCase):
 	"""Fix crítico da revisão da Task 4: quando o CPF já é de um Patient, o
 	contato SEMPRE vem do cadastro — nunca do que foi digitado, mesmo que o

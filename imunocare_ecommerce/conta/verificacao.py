@@ -13,6 +13,7 @@ Organização do módulo:
 from __future__ import annotations
 
 import json
+import re
 import secrets
 
 import frappe
@@ -24,6 +25,7 @@ from imunocare_ecommerce.rate_limit import rate_limit
 
 _CANAIS = ("email", "whatsapp")
 MAIORIDADE = 18
+_RE_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 def _msg_envio_indisponivel() -> str:
@@ -75,6 +77,18 @@ def _so_digitos(valor) -> str:
 	return "".join(c for c in _texto(valor) if c.isdigit())
 
 
+def _formato_valido(canal: str, dados: dict) -> bool:
+	"""Item 5 da revisão 2026-09-02: só o FORMATO do que foi digitado, nunca
+	consulta nada (nem o CPF) — por isso é seguro rodar isto ANTES de
+	``_resolver_envio``. A mensagem que ``solicitar_codigo`` mostra quando
+	isto falha depende só do que a pessoa digitou, então não é um oráculo de
+	CPF: um e-mail/celular mal formatado recebe a mesma recusa não importa
+	se o CPF digitado já existe ou não."""
+	if canal == "email":
+		return bool(_RE_EMAIL.match(_texto(dados.get("email")).strip()))
+	return len(_so_digitos(dados.get("celular"))) in (10, 11)
+
+
 @frappe.whitelist(allow_guest=True)
 def canais_disponiveis() -> dict:
 	return canais.disponiveis()
@@ -100,11 +114,14 @@ def _resolver_envio(canal: str, dados: dict) -> tuple[str, str]:
 	3. Se nem e-mail nem celular estiverem preenchidos no cadastro, recusa —
 	   caminho de EXCEÇÃO (nunca um fallback silencioso), com a MESMA
 	   mensagem genérica que ``solicitar_codigo`` usa para "não informou
-	   contato" (ver ``_MSG_ENVIO_INDISPONIVEL``): antes deste fix o texto
-	   era diferente ("Procure a clínica" vs "Informe um e-mail válido."),
-	   e comparar as duas mensagens dava para inferir que aquele CPF existe
-	   — exatamente o que o spec proíbe ("nunca revelar se um e-mail ou CPF
-	   já existe").
+	   contato" (ver ``_msg_envio_indisponivel``): duas mensagens diferentes
+	   aqui dariam para inferir que aquele CPF existe — exatamente o que o
+	   spec proíbe ("nunca revelar se um e-mail ou CPF já existe"). Note que
+	   ``solicitar_codigo`` já validou o FORMATO do que foi digitado (item 5
+	   da revisão 2026-09-02, ``_formato_valido``) ANTES de chamar esta
+	   função — daqui em diante toda mensagem é essa genérica única, nunca
+	   "Informe um e-mail válido." (essa já foi decidida lá atrás, sem tocar
+	   CPF nenhum).
 	"""
 	cpf = _so_digitos(dados.get("cpf"))
 	contato = (
@@ -159,6 +176,18 @@ def solicitar_codigo(
 		frappe.throw(_("Canal de verificação inválido."), title=_("Requisição inválida"))
 
 	dados = _como_dict(dados)
+
+	# Item 5 da revisão 2026-09-02: valida o FORMATO do contato ANTES de
+	# qualquer consulta ao CPF. A resposta desta checagem depende só do que
+	# a pessoa digitou (nunca do estado de cadastro) — não é um oráculo, e
+	# devolve de volta a mensagem específica que ajuda o caso comum (erro de
+	# digitação). Ordem obrigatória: formato -> CPF -> destino -> daí em
+	# diante SÓ mensagem genérica (ver _msg_envio_indisponivel).
+	if not _formato_valido(canal, dados):
+		frappe.throw(
+			_("Informe um e-mail válido.") if canal == "email" else _("Informe um celular válido."),
+			title=_("Requisição inválida"),
+		)
 
 	# canal_efetivo pode divergir do pedido (ver _resolver_envio) — toda
 	# checagem daqui em diante (disponibilidade, envio, máscara) usa o
