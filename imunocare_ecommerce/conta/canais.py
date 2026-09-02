@@ -1,9 +1,12 @@
 """Entrega do código de verificação por e-mail ou WhatsApp.
 
 ``disponiveis()`` é o que tira o lançamento das mãos da Meta: o seletor do
-modal só oferece o canal que está de fato operacional agora. Quando o template
-AUTHENTICATION for aprovado, o WhatsApp acende sozinho — sem tocar em código.
-"""
+modal só oferece o canal que está de fato operacional agora. O WhatsApp exige
+DOIS sinais para acender — o template AUTHENTICATION aprovado na Meta **e**
+``Imunocare Ecommerce Settings.whatsapp_otp_ativo`` ligado explicitamente
+(default DESLIGADO, ver ``_whatsapp_habilitado`` — governança da revisão
+2026-09-02: aprovação de template sozinha não basta mais, ela é um evento
+fora do nosso deploy/revisão)."""
 
 from __future__ import annotations
 
@@ -43,10 +46,16 @@ def _whatsapp_habilitado() -> bool:
 
 
 def mascarar(canal: str, destino: str) -> str:
-	"""Confirma ao cliente PARA ONDE o código foi, sem expor o contato inteiro.
+	"""Só mascara ``destino`` — quem decide QUAL contato vira máscara é quem
+	chama (``conta/verificacao.solicitar_codigo``).
 
-	Importa no caso do CPF já cadastrado: o código vai para o contato do
-	cadastro, que pode não ser o que a pessoa digitou."""
+	Item 4 da revisão 2026-09-02: até então, quando o CPF digitado já era de
+	um Patient conhecido, o chamador passava aqui o contato DO CADASTRO (o
+	que de fato recebe o código — ver ``_resolver_envio``), e a máscara
+	acabava vazando (a) que aquele CPF já existe e (b) um pedaço do contato
+	da vítima. Fechado no chamador: ``solicitar_codigo`` agora sempre passa o
+	que a PESSOA DIGITOU, nunca o do cadastro — esta função não sabe (nem
+	precisa saber) a diferença."""
 	if canal not in _CANAIS:
 		frappe.throw(_("Canal de verificação inválido."))
 	destino = (destino or "").strip()
