@@ -169,6 +169,49 @@ class TestSolicitarCodigo(FrappeTestCase):
 			verificacao._destino_de_envio("email", dados), "bruno.dono@exemplo.com"
 		)
 
+	def test_destino_mascarado_nunca_revela_o_contato_do_cadastro_alheio(self):
+		"""Item 4 da revisão 2026-09-02: quando o CPF digitado já é de um
+		Patient, ``_resolver_envio`` manda o código de verdade para o contato
+		DO CADASTRO (comportamento correto e mantido — ver teste acima), mas a
+		máscara devolvida na resposta HTTP tem que refletir o que a PESSOA
+		DIGITOU, nunca o contato do cadastro. Antes deste fix, a máscara
+		revelava (a) que aquele CPF já existe e (b) a 1ª letra+domínio do
+		e-mail da vítima — um oráculo mais barato que resolver um OTP."""
+		paciente = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Carlos",
+				"middle_name": "de",
+				"last_name": "Prado",
+				"sex": "Male",
+				"dob": "1985-02-02",
+				"cpf": "16899535009",
+				"mobile": "51988776655",
+				"email": "carlos.dono@exemplo.com",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Patient", paciente.name, force=True)
+
+		codigos_enviados = []
+		with patch(
+			"imunocare_ecommerce.conta.canais.enviar",
+			side_effect=lambda canal, destino, codigo, nome: codigos_enviados.append(
+				(canal, destino, codigo)
+			),
+		):
+			r = verificacao.solicitar_codigo(
+				"email", dict(_DADOS, cpf="16899535009", email="invasor@exemplo.com")
+			)
+
+		# O código de verdade foi para o DONO do cadastro — a entrega em si
+		# não muda (ver _resolver_envio).
+		self.assertEqual(len(codigos_enviados), 1)
+		self.assertEqual(codigos_enviados[0][1], "carlos.dono@exemplo.com")
+
+		# A máscara devolvida ao invasor reflete o que ELE digitou, nunca o
+		# e-mail da vítima — "i***@exemplo.com", não "c***@exemplo.com".
+		self.assertEqual(r["destino_mascarado"], "i***@exemplo.com")
+
 	def test_canal_indisponivel_e_recusado(self):
 		# Precondição montada no teste (não depende do ambiente ter ou não
 		# WhatsApp configurado) — mesmo padrão de test_conta_canais.py: afirma

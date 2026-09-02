@@ -205,9 +205,20 @@ def solicitar_codigo(
 	valor = codigo.emitir(verificacao_id, dados)
 	canais.enviar(canal_efetivo, destino, valor, _texto(dados.get("nome")))
 
+	# Item 4 da revisão 2026-09-02: a máscara devolvida é SEMPRE do que a
+	# PESSOA DIGITOU para o canal pedido — nunca do contato efetivamente
+	# usado (``destino``), que só diverge do digitado justamente quando o
+	# CPF já era de um Patient cadastrado (ver _resolver_envio). Devolver a
+	# máscara do cadastro nesse caso vazava (a) que aquele CPF já existe e
+	# (b) a 1ª letra+domínio do e-mail da vítima, ou os 4 últimos dígitos do
+	# celular — um oráculo bem mais barato que o do item 1 (5 CPFs por IP a
+	# cada 10 min, sem precisar resolver OTP nenhum). Quando o CPF é novo,
+	# ``digitado`` e ``destino`` são o MESMO valor (ver _resolver_envio) —
+	# nenhuma perda de fidelidade no caso comum.
+	digitado = dados.get("email") if canal == "email" else dados.get("celular")
 	return {
 		"verificacao_id": verificacao_id,
-		"destino_mascarado": canais.mascarar(canal_efetivo, destino),
+		"destino_mascarado": canais.mascarar(canal, _texto(digitado)),
 		"expira_em": codigo.TTL_PADRAO,
 	}
 
