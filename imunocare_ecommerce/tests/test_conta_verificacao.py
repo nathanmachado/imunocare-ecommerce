@@ -26,7 +26,7 @@ def _token() -> str:
 	fora de um request de verdade ele vale sempre 'Administrator', e mesmo
 	num request real todo visitante anônimo compartilha o MESMO sid literal
 	('Guest') — foi exatamente esse compartilhamento que causou o bug que
-	``TestConcorrenciaEntreVisitantesAnonimos`` reproduz abaixo."""
+	``TestIsolamentoEntreVisitantesAnonimosPorToken`` reproduz abaixo."""
 	return secrets.token_urlsafe(32)
 
 
@@ -1001,6 +1001,71 @@ class TestGarantirUsuarioAncoraContatoVerificado(FrappeTestCase):
 		self.assertFalse(frappe.db.get_value("User", terceiro.name, "mobile_no"))
 
 
+def _montar_login_manager_de_verdade():
+	"""T1 da revisão 2026-09-02: até aqui, NENHUM teste deste módulo exercitava
+	``_logar`` pelo ramo de PRODUÇÃO (``login_manager.login_as``) — fora de
+	um request de verdade, ``frappe.local.login_manager`` nunca existe, e
+	``_logar`` sempre caía no fallback ``frappe.set_user`` (ver ``_logar``).
+	Isso deixava o caminho que grava sessão/cookie de verdade sem cobertura
+	nenhuma.
+
+	Monta o MÍNIMO de contexto real para que um ``frappe.auth.LoginManager``
+	de verdade (não mock) rode ``login_as`` até o fim — ``object.__new__``
+	pula só o ``__init__`` (que espera ``frappe.local.request.path``/``cmd``
+	de um HTTP request de login de verdade, que não é o caso aqui); o
+	método ``login_as``/``post_login`` que importa roda 100% real."""
+	frappe.local.request = frappe._dict(method="POST", path="/", cmd=None, cookies={})
+	frappe.local.cookie_manager = frappe.auth.CookieManager()
+	lm = object.__new__(frappe.auth.LoginManager)
+	lm.user = None
+	lm.info = None
+	lm.full_name = None
+	lm.user_type = None
+	frappe.local.login_manager = lm
+	return lm
+
+
+class TestLogarUsaLoginManagerDeVerdadeQuandoPresente(FrappeTestCase):
+	"""Prova, com um ``LoginManager`` REAL (não ``Mock``/``patch``), que
+	``_garantir_usuario`` grava sessão/cookie de verdade quando roda dentro
+	de um request — o caminho que a produção usa de fato, nunca exercitado
+	pelos demais testes deste módulo (que rodam fora de request e sempre
+	caem no fallback ``frappe.set_user``, suficiente para testar o resto
+	da lógica, mas não este ramo específico)."""
+
+	def setUp(self):
+		self._login_manager_antes = getattr(frappe.local, "login_manager", None)
+		self._request_antes = getattr(frappe.local, "request", None)
+		self._cookie_manager_antes = getattr(frappe.local, "cookie_manager", None)
+		_limpar_rate_limit_confirmar_codigo()
+
+	def tearDown(self):
+		frappe.local.login_manager = self._login_manager_antes
+		frappe.local.request = self._request_antes
+		frappe.local.cookie_manager = self._cookie_manager_antes
+		frappe.set_user("Administrator")
+
+	def test_conta_nova_por_email_grava_sessao_e_cookie_pelo_login_manager_real(self):
+		_montar_login_manager_de_verdade()
+		email, celular = _identidade_unica("login.manager.real")
+		dados = dict(_DADOS, celular=celular, canal_verificado="email", destino_verificado=email)
+
+		usuario, criado = verificacao._garantir_usuario(dados)
+		self.addCleanup(_apagar_definitivamente, "User", usuario)
+
+		self.assertTrue(criado)
+		self.assertEqual(frappe.session.user, email)
+		# Só quem passou por ``login_manager.login_as`` de verdade chega em
+		# ``set_user_info``, que grava o cookie "system_user" — o fallback
+		# ``frappe.set_user`` nunca toca ``cookie_manager``. Prova indireta
+		# de que rodamos o ramo de PRODUÇÃO, não o de teste/console.
+		self.assertIn("system_user", frappe.local.cookie_manager.cookies)
+		self.assertEqual(frappe.local.cookie_manager.cookies["system_user"]["value"], "no")
+		# sid de sessão de verdade, gravado pela Session nativa.
+		self.assertTrue(frappe.session.sid)
+		self.assertNotEqual(frappe.session.sid, "Guest")
+
+
 class TestConfirmarCodigoEAgendarFimAFim(FrappeTestCase):
 	"""Fecha a lacuna de spec da revisão: prova o critério de aceite 4 pelo
 	ENDPOINT inteiro (não só por _montar_paciente isolada). Dois filhos do
@@ -1187,20 +1252,28 @@ class TestConfirmarCodigoEAgendarFimAFim(FrappeTestCase):
 			mod_codigo.conferir(resposta["verificacao_id"], codigos_enviados[0])
 
 
-class TestConcorrenciaEntreVisitantesAnonimos(FrappeTestCase):
+class TestIsolamentoEntreVisitantesAnonimosPorToken(FrappeTestCase):
 	"""Prova o defeito CRÍTICO (comprovado por HTTP, não hipótese):
 	``frappe.session.sid`` vale a MESMA string literal ("Guest") para
 	QUALQUER visitante anônimo. Usá-lo como chave no Redis fazia dois
-	visitantes concorrentes dividirem UMA ÚNICA chave — o segundo a pedir
+	visitantes DIFERENTES dividirem UMA ÚNICA chave — o segundo a pedir
 	código apagava o do primeiro (``codigo.emitir`` faz DELETE+HSET antes de
 	regravar), e a pessoa que pediu primeiro via "Código incorreto" mesmo
 	digitando certo.
 
+	T2 da revisão 2026-09-02: apesar do nome sugerir uma corrida, este teste
+	NÃO exercita concorrência de verdade (as duas chamadas rodam em
+	SEQUÊNCIA, no mesmo thread) — ele prova ISOLAMENTO por token (a chave de
+	cada verificação é o ``verificacao_id`` opaco, nunca o sid compartilhado
+	entre visitantes), o que já basta para reproduzir e fechar o incidente
+	relatado (a ordem "Ana pede -> Bruno pede -> Ana confirma" nem precisa de
+	paralelismo real para colidir na chave antiga).
+
 	Sem sid nenhum aqui de propósito: os testes deste módulo rodam fora de
 	um request de verdade, onde ``frappe.session.sid`` vale sempre
 	'Administrator' — um valor FIXO que mascararia justamente o bug (dois
-	pedidos "simultâneos" cairiam na mesma chave por acidentes de ambiente
-	de teste, não pela causa real). Este teste passa pelos DOIS endpoints
+	pedidos em sequência cairiam na mesma chave por acidente de ambiente de
+	teste, não pela causa real). Este teste passa pelos DOIS endpoints
 	públicos (``solicitar_codigo`` + ``confirmar_codigo_e_agendar``), com o
 	token opaco (``verificacao_id``) que cada um devolve/recebe — a mesma
 	superfície que o navegador do visitante usa. Tem que FALHAR no código
@@ -1272,7 +1345,7 @@ class TestConcorrenciaEntreVisitantesAnonimos(FrappeTestCase):
 	def tearDown(self):
 		frappe.set_user("Administrator")
 
-	def test_dois_visitantes_pedem_codigo_em_sequencia_sem_se_atropelar(self):
+	def test_dois_visitantes_pedem_codigo_em_sequencia_isolados_por_token(self):
 		email_ana, celular_ana = _identidade_unica("ana.concorrencia")
 		email_bruno, celular_bruno = _identidade_unica("bruno.concorrencia")
 
