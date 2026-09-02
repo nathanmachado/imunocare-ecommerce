@@ -7,6 +7,19 @@ from imunocare_ecommerce.conta import canais
 
 
 class TestCanais(FrappeTestCase):
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		# Campo novo (whatsapp_otp_ativo, governança 2026-09-02) — sincroniza
+		# só ESTE doctype a partir do .json em disco, sem depender de um
+		# `bench migrate` completo (fora do escopo permitido desta correção).
+		frappe.reload_doctype("Imunocare Ecommerce Settings", force=True)
+
+	def setUp(self):
+		# Cada teste começa com a trava no estado DEFAULT (desligada) —
+		# nenhum teste deste módulo pode vazar o valor para o próximo.
+		frappe.db.set_single_value("Imunocare Ecommerce Settings", "whatsapp_otp_ativo", 0)
+
 	def test_mascara_email_preservando_a_primeira_letra(self):
 		self.assertEqual(canais.mascarar("email", "ana@exemplo.com"), "a***@exemplo.com")
 
@@ -67,7 +80,7 @@ class TestCanais(FrappeTestCase):
 		# anterior limpa a que cria); confirma o ramo negativo de verdade.
 		self.assertIs(canais.disponiveis()["email"], False)
 
-	def test_whatsapp_disponivel_com_template_authentication_aprovado(self):
+	def test_whatsapp_disponivel_com_template_aprovado_e_trava_ligada(self):
 		# Criar um WhatsApp Templates de verdade dispara o hook
 		# after_insert do frappe_whatsapp, que faz POST real para a API da
 		# Meta (frappe_whatsapp/doctype/whatsapp_templates/whatsapp_templates.py,
@@ -75,11 +88,22 @@ class TestCanais(FrappeTestCase):
 		# teste pode tocar rede", então mockamos frappe.db.exists — que é o
 		# único ponto de leitura de disponiveis() para este canal — em vez
 		# de inserir o documento.
+		frappe.db.set_single_value("Imunocare Ecommerce Settings", "whatsapp_otp_ativo", 1)
 		with patch.object(frappe.db, "exists", return_value=True):
 			self.assertIs(canais.disponiveis()["whatsapp"], True)
 
-	def test_whatsapp_indisponivel_sem_template_aprovado(self):
+	def test_whatsapp_indisponivel_sem_template_aprovado_mesmo_com_trava_ligada(self):
+		frappe.db.set_single_value("Imunocare Ecommerce Settings", "whatsapp_otp_ativo", 1)
 		with patch.object(frappe.db, "exists", return_value=False):
+			self.assertIs(canais.disponiveis()["whatsapp"], False)
+
+	def test_whatsapp_indisponivel_com_trava_desligada_mesmo_com_template_aprovado(self):
+		"""GOVERNANÇA (revisão 2026-09-02): antes desta trava, um template
+		AUTHENTICATION aprovado na Meta acendia o canal sozinho, sem deploy e
+		sem revisão humana. Default DESLIGADO — aprovação de template
+		sozinha não basta mais."""
+		frappe.db.set_single_value("Imunocare Ecommerce Settings", "whatsapp_otp_ativo", 0)
+		with patch.object(frappe.db, "exists", return_value=True):
 			self.assertIs(canais.disponiveis()["whatsapp"], False)
 
 	def test_canal_desconhecido_e_recusado(self):

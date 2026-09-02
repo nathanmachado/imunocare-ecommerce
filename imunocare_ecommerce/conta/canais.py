@@ -20,13 +20,26 @@ _CANAIS = ("email", "whatsapp")
 def disponiveis() -> dict:
 	return {
 		"email": bool(frappe.db.exists("Email Account", {"default_outgoing": 1})),
-		"whatsapp": bool(
-			frappe.db.exists(
-				"WhatsApp Templates",
-				{"category": "AUTHENTICATION", "status": "APPROVED"},
-			)
-		),
+		"whatsapp": _whatsapp_habilitado(),
 	}
+
+
+def _whatsapp_habilitado() -> bool:
+	"""GOVERNANÇA (revisão 2026-09-02): antes desta trava, o WhatsApp acendia
+	sozinho assim que um template AUTHENTICATION fosse aprovado na Meta —
+	sem deploy e sem revisão humana. Ótimo para lançar, péssimo para
+	governança de um canal que nunca rodou de verdade em produção (os
+	testes mockam o envio). Agora exige os DOIS: template aprovado E a
+	config ``Imunocare Ecommerce Settings.whatsapp_otp_ativo`` ligada
+	explicitamente — com DEFAULT DESLIGADO."""
+	if not frappe.db.get_single_value("Imunocare Ecommerce Settings", "whatsapp_otp_ativo"):
+		return False
+	return bool(
+		frappe.db.exists(
+			"WhatsApp Templates",
+			{"category": "AUTHENTICATION", "status": "APPROVED"},
+		)
+	)
 
 
 def mascarar(canal: str, destino: str) -> str:
