@@ -472,12 +472,46 @@ def confirmar_codigo_e_agendar(
 	verificacao_id = _validar_verificacao_id(verificacao_id)
 	dados = conferir(verificacao_id, codigo)
 	_exigir_adulto(dados)
+
+	para_outro = bool(dados.get("para_outra_pessoa"))
+	cpf = _so_digitos(dados.get("paciente_cpf") if para_outro else dados.get("cpf"))
+	paciente = frappe.db.get_value("Patient", {"cpf": cpf}, "name")
+
+	# CRÍTICO 1 da revisão 2026-09-02 (takeover de prontuário): um Patient
+	# PRÉ-EXISTENTE encontrado por ``paciente_cpf`` (para_outra_pessoa=1)
+	# nunca é vinculado à conta de quem está se verificando — mesmo que
+	# esteja órfão (``user_id`` vazio). CPF não é segredo, e quem digita o
+	# CPF de outra pessoa como "paciente" não passou por NENHUMA prova de
+	# posse do contato daquele registro (a prova de posse aqui é só do
+	# ADULTO que está se verificando — dados["cpf"], nunca paciente_cpf).
+	# Decisão (b) do relatório da revisão: recusa e orienta a procurar a
+	# clínica, em vez de (a) estender a verificação de posse a paciente_cpf
+	# — mais simples, e "para outra pessoa" É justamente o caso em que o
+	# adulto normalmente NÃO consegue provar posse do contato do paciente
+	# (uma criança não tem contato próprio). Checagem ANTES de
+	# ``_garantir_usuario`` de propósito: nenhuma conta/registro chega a ser
+	# criado quando a reserva vai ser recusada de qualquer jeito (mesmo
+	# padrão "não cria nada" dos outros throws deste endpoint).
+	#
+	# Risco residual ACEITO (documentado no relatório ao CTO): quem já
+	# completa a verificação do PRÓPRIO contato (dados["cpf"]/canal
+	# verificado) ainda consegue, por tentativa e erro, inferir se um dado
+	# paciente_cpf já é de um Patient cadastrado (sucesso cria vs. este
+	# throw). É um oráculo mais lento que o do item 4 (exige resolver um
+	# código OTP de verdade a cada tentativa, já limitado por IP via
+	# rate_limit) — fechar por completo exigiria a opção (a), descartada
+	# acima por complexidade desproporcional ao ganho.
+	if paciente and para_outro:
+		frappe.throw(
+			_(
+				"Não foi possível concluir o cadastro dessa pessoa por aqui. "
+				"Procure a clínica para agendar."
+			),
+			title=_("Cadastro não permitido"),
+		)
+
 	usuario, conta_criada = _garantir_usuario(dados)
 
-	cpf = _so_digitos(
-		dados.get("paciente_cpf") if dados.get("para_outra_pessoa") else dados.get("cpf")
-	)
-	paciente = frappe.db.get_value("Patient", {"cpf": cpf}, "name")
 	if paciente:
 		if not frappe.db.get_value("Patient", paciente, "user_id"):
 			frappe.db.set_value("Patient", paciente, "user_id", usuario, update_modified=False)

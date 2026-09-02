@@ -433,6 +433,151 @@ class TestConfirmarCodigo(FrappeTestCase):
 		self.assertEqual(frappe.db.count("Patient"), antes_pac)
 
 
+class TestParaOutraPessoaNaoAdotaPatientExistente(FrappeTestCase):
+	"""CRÍTICO 1 da revisão 2026-09-02 — takeover de prontuário.
+
+	Cadeia de ataque fechada aqui: um atacante pede o código com o PRÓPRIO
+	CPF/contato (prova posse de si mesmo, recebe e confirma o código
+	normalmente) mas com ``para_outra_pessoa=1`` e ``paciente_cpf`` = CPF de
+	OUTRA pessoa (adivinhável — CPF não é segredo). Antes do fix,
+	``confirmar_codigo_e_agendar`` resolvia o paciente por ``paciente_cpf``
+	e adotava qualquer Patient encontrado sem ``user_id`` (todos os 12
+	Patients de produção estavam nesse estado) — vinculando o prontuário da
+	vítima à conta do atacante. Decisão (b) do relatório da revisão: recusa
+	SEMPRE que ``paciente_cpf`` (não ``cpf``) encontra um Patient
+	pré-existente, mesmo órfão — nunca adota."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls._appointment_type = frappe.get_doc(
+			{
+				"doctype": "Appointment Type",
+				"appointment_type": "Teste Takeover CPF Paciente",
+				"allow_booking_for": "Practitioner",
+				"default_duration": 30,
+			}
+		).insert(ignore_permissions=True)
+		cls._practitioner = frappe.get_doc(
+			{
+				"doctype": "Healthcare Practitioner",
+				"first_name": "Praticante Teste Takeover",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_apagar_definitivamente("Appointment Type", cls._appointment_type.name)
+		_apagar_definitivamente("Healthcare Practitioner", cls._practitioner.name)
+		super().tearDownClass()
+
+	def setUp(self):
+		frappe.local.request = frappe._dict(method="POST")
+		frappe.local.request_ip = _IP_TESTE
+		_limpar_rate_limit_confirmar_codigo()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def test_paciente_cpf_de_patient_orfao_pre_existente_nao_e_adotado(self):
+		vitima = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Vítima",
+				"middle_name": "de",
+				"last_name": "Alvo",
+				"sex": "Female",
+				"dob": "1980-01-01",
+				"cpf": "52998224725",
+				"mobile": "51999990000",
+				"email": "vitima.alvo@exemplo.com",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(frappe.delete_doc, "Patient", vitima.name, force=True)
+		self.assertFalse(vitima.user_id, "precondição: Patient órfão, igual aos 12 de produção")
+
+		email_atacante, celular_atacante = _identidade_unica("atacante.takeover")
+		dados = dict(
+			_DADOS,
+			email=email_atacante,
+			celular=celular_atacante,
+			cpf="39053344705",  # CPF do PRÓPRIO atacante — novo, provado por ele mesmo
+			canal_verificado="email",
+			destino_verificado=email_atacante,
+			para_outra_pessoa=True,
+			paciente_nome="Vítima Alvo",
+			paciente_cpf="52998224725",  # CPF da vítima, adivinhado
+			paciente_dob="1980-01-01",
+			paciente_sexo="Female",
+		)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.confirmar_codigo_e_agendar(
+				codigo=c,
+				verificacao_id=token,
+				appointment_date="2030-01-10",
+				appointment_time="09:00:00",
+			)
+
+		# O prontuário da vítima NUNCA é vinculado à conta do atacante.
+		self.assertFalse(frappe.db.get_value("Patient", vitima.name, "user_id"))
+		# A checagem acontece ANTES de criar a conta do atacante — nenhum
+		# rastro fica para trás de uma tentativa recusada.
+		self.assertFalse(frappe.db.exists("User", email_atacante))
+
+	def test_cpf_proprio_pre_existente_continua_sendo_adotado_normalmente(self):
+		"""Regressão: a checagem nova é só para ``paciente_cpf``
+		(``para_outra_pessoa``) — quem já tem um Patient órfão cadastrado com
+		o PRÓPRIO CPF (dados["cpf"]) continua vinculando normalmente, porque
+		a prova de posse aí é o próprio contato verificado (ver
+		_resolver_envio)."""
+		email, celular = _identidade_unica("dono.cpf.proprio")
+		orfao = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Gustavo",
+				"middle_name": "de",
+				"last_name": "Neto",
+				"sex": "Male",
+				"dob": "1990-05-10",
+				"cpf": "39053344705",
+				"mobile": celular,
+				"email": email,
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_limpar_contatos_vinculados, "Patient", orfao.name)
+		self.addCleanup(_apagar_definitivamente, "Patient", orfao.name)
+		self.addCleanup(_apagar_definitivamente, "Customer", "Gustavo Neto")
+
+		dados = dict(
+			_DADOS,
+			email=email,
+			celular=celular,
+			canal_verificado="email",
+			destino_verificado=email,
+		)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
+		resultado = verificacao.confirmar_codigo_e_agendar(
+			codigo=c,
+			verificacao_id=token,
+			appointment_date="2030-01-10",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+		)
+		self.addCleanup(_apagar_definitivamente, "User", email)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		self.assertEqual(
+			frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient"),
+			orfao.name,
+		)
+		self.assertEqual(frappe.db.get_value("Patient", orfao.name, "user_id"), email)
+
+
 class TestExigirAdulto(FrappeTestCase):
 	"""Item 2 da revisão 2026-09-01 (fechando pela metade o fix anterior):
 	quem CRIA A CONTA precisa ser maior de 18 SEMPRE — para si mesmo ou para

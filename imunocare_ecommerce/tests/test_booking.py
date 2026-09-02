@@ -23,6 +23,99 @@ def _apagar_definitivamente(doctype: str, name: str) -> None:
 		frappe.db.commit()
 
 
+class TestResolverPacienteNaoAdotaOrfaoPorNomeInformado(FrappeTestCase):
+	"""CRÍTICO 2 da revisão 2026-09-02 — adoção de Patient órfão por nome
+	adivinhável.
+
+	``criar_agendamento`` é ``@frappe.whitelist()`` (não ``allow_guest``,
+	mas QUALQUER Website User autenticado pode chamá-la direto, fora do
+	fluxo da loja) e aceitava um ``patient`` informado pelo cliente,
+	adotando-o para a sessão sempre que aquele Patient não tivesse
+	``user_id`` — o nome (``HLC-PAT-AAAA-#####``) é enumerável, e "sem
+	user_id" não é prova de posse nenhuma (era o estado de TODOS os 12
+	Patients de produção). Fix: um ``patient`` explícito só é aceito se JÁ
+	pertencer à sessão atual."""
+
+	def setUp(self):
+		self._usuario_antes = frappe.session.user
+
+	def tearDown(self):
+		frappe.set_user(self._usuario_antes)
+
+	def _novo_website_user(self, prefixo: str):
+		email = f"{prefixo}.{frappe.generate_hash(length=6)}@exemplo.com"
+		u = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Teste",
+				"last_name": prefixo,
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", u.name)
+		return u.name
+
+	def _novo_patient_orfao(self, prefixo: str, user_id: str | None = None):
+		p = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": prefixo,
+				"middle_name": "de",
+				"last_name": "Teste",
+				"sex": "Male",
+				"dob": "1990-01-01",
+				"user_id": user_id,
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
+		return p
+
+	def test_patient_orfao_informado_pelo_cliente_e_recusado_e_nao_e_adotado(self):
+		vitima = self._novo_patient_orfao("VitimaOrfao")
+		self.assertFalse(vitima.user_id, "precondição: órfão, igual aos 12 de produção")
+
+		atacante = self._novo_website_user("atacante.booking")
+		frappe.set_user(atacante)
+
+		with self.assertRaises(frappe.ValidationError):
+			booking._resolver_paciente(vitima.name, None)
+
+		# nunca adota — user_id continua vazio, não vira o do atacante.
+		self.assertFalse(frappe.db.get_value("Patient", vitima.name, "user_id"))
+
+	def test_patient_de_outra_conta_continua_recusado(self):
+		"""Regressão: Patient já vinculado a OUTRA conta (não órfão) já era
+		recusado antes deste fix — continua sendo."""
+		dono = self._novo_website_user("dono.booking")
+		patient_do_dono = self._novo_patient_orfao("PatientDoDono", user_id=dono)
+
+		outro = self._novo_website_user("outro.booking")
+		frappe.set_user(outro)
+
+		with self.assertRaises(frappe.ValidationError):
+			booking._resolver_paciente(patient_do_dono.name, None)
+
+	def test_patient_que_ja_pertence_a_sessao_e_aceito(self):
+		"""Caminho legítimo: o fluxo interno de verificação (Task 5) grava
+		``user_id`` no Patient ANTES de chamar ``criar_agendamento`` — por
+		isso ``pac.user_id == user`` já bate quando chega aqui, e não pode
+		quebrar."""
+		usuario = self._novo_website_user("proprio.booking")
+		patient_proprio = self._novo_patient_orfao("PatientProprio", user_id=usuario)
+		frappe.set_user(usuario)
+
+		resultado = booking._resolver_paciente(patient_proprio.name, None)
+		self.assertEqual(resultado, patient_proprio.name)
+
+	def test_patient_inexistente_e_recusado(self):
+		usuario = self._novo_website_user("nome.invalido.booking")
+		frappe.set_user(usuario)
+		with self.assertRaises(frappe.ValidationError):
+			booking._resolver_paciente("HLC-PAT-0000-99999", None)
+
+
 class TestBootDatas(FrappeTestCase):
 	"""Unidade: ``_boot_datas`` nunca lança e sempre devolve os 3 campos, com o
 	fuso correto conforme haja (ou não) usuário logado com fuso próprio."""
