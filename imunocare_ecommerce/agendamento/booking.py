@@ -38,9 +38,42 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import get_time, getdate, now_datetime
+from frappe.utils import get_system_timezone, get_time, getdate, now_datetime
 
 _LOG_TITLE = "imunocare_ecommerce.agendamento.booking"
+
+
+def _boot_datas() -> dict:
+	"""Fuso/formato de data-hora que o controle ``Date`` do Desk (``frappe.ui.Dialog``
+	com ``fieldtype: "Date"``) precisa para montar sem quebrar.
+
+	Bug real (bench e produção, visitante e logado): nosso diálogo de
+	agendamento é montado numa página da LOJA (storefront), não no Desk. Lá
+	``frappe.boot`` existe (o site injeta), mas ``frappe.boot.time_zone`` e
+	``frappe.boot.sysdefaults``/``frappe.sys_defaults`` vêm ausentes —
+	``frappe.sys_defaults`` só é preenchido a partir de ``frappe.boot.sysdefaults``
+	no bootstrap do Desk (``frappe/public/js/frappe/desk.js:321``). O controle
+	Date (``frappe/public/js/frappe/form/controls/date.js:make_picker`` →
+	``get_now_date`` → ``frappe.datetime.now_date`` → ``_date``,
+	``frappe/public/js/frappe/utils/datetime.js:237``) lê
+	``frappe.boot.time_zone?.system || frappe.sys_defaults.time_zone`` — com os
+	dois ausentes, estoura ``Cannot read properties of undefined (reading
+	'time_zone')`` e o diálogo nunca abre. Por isso devolvemos aqui o que o JS
+	da loja (``imun_garantir_boot_datas``, agendamento.js) usa para PREENCHER
+	(nunca sobrescrever) o boot antes de montar qualquer diálogo com campo Date.
+
+	Mesmo formato que ``frappe.website.utils.get_boot_data`` já usa para
+	``time_zone`` (system/user) — não inventamos um shape novo."""
+	time_zone_usuario = None
+	if frappe.session.user != "Guest":
+		time_zone_usuario = frappe.db.get_value("User", frappe.session.user, "time_zone")
+
+	sistema = get_system_timezone()
+	return {
+		"time_zone": {"system": sistema, "user": time_zone_usuario or sistema},
+		"date_format": frappe.get_system_settings("date_format") or "yyyy-mm-dd",
+		"time_format": frappe.get_system_settings("time_format") or "HH:mm:ss",
+	}
 
 
 # ---------------------------------------------------------------------------
@@ -221,12 +254,14 @@ def info_agendamento(item_code: str) -> dict:
 	except frappe.exceptions.ValidationError:
 		return {"agendavel": False}
 
-	return {
+	resultado = {
 		"agendavel": True,
 		"appointment_type": appointment_type,
 		"practitioner": practitioner,
 		"logged_in": frappe.session.user != "Guest",
 	}
+	resultado.update(_boot_datas())
+	return resultado
 
 
 @frappe.whitelist(allow_guest=True)
@@ -243,12 +278,14 @@ def info_agendamento_tipo(appointment_type: str) -> dict:
 	except frappe.exceptions.ValidationError:
 		return {"agendavel": False}
 
-	return {
+	resultado = {
 		"agendavel": True,
 		"appointment_type": appointment_type,
 		"practitioner": practitioner,
 		"logged_in": frappe.session.user != "Guest",
 	}
+	resultado.update(_boot_datas())
+	return resultado
 
 
 # ---------------------------------------------------------------------------

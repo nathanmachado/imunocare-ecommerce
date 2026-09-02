@@ -274,7 +274,75 @@ function imun_abrir_dialogo_agendamento(params, info, preset) {
 	});
 }
 
+// PORQUÊ ISTO EXISTE (fix crítico 2026-09-01 — "Agendar" não abria nada, nem
+// para visitante nem para cliente logado, no bench E em produção):
+//
+// ``frappe.ui.Dialog`` com campo ``fieldtype: "Date"`` é um CONTROLE DE DESK
+// (``ControlDate``). Ao montar, ele chama
+// ``frappe.datetime.now_date()`` -> ``_date()``
+// (frappe/public/js/frappe/utils/datetime.js:237), que lê
+// ``frappe.boot.time_zone?.system || frappe.sys_defaults.time_zone``. No
+// Desk, ``frappe.sys_defaults`` é atribuído a partir de
+// ``frappe.boot.sysdefaults`` no bootstrap (frappe/public/js/frappe/desk.js:321)
+// — mas ISSO NUNCA RODA numa página pública da loja. Lá ``frappe.boot`` existe
+// (o site injeta), porém sem ``time_zone`` e sem ``sysdefaults``, e
+// ``frappe.sys_defaults`` fica simplesmente indefinido. Resultado real:
+// ``Cannot read properties of undefined (reading 'time_zone')`` dentro de
+// ``make_picker``/``get_now_date``, o diálogo estoura ANTES de exibir
+// qualquer coisa (``.modal.show`` nunca aparece no DOM) — não é paranoia,
+// foi reproduzido no bench e em produção.
+//
+// A correção não reimplementa nada do Desk: só PREENCHE o que falta usando o
+// que o backend (agendamento.booking.info_agendamento/info_agendamento_tipo,
+// função ``_boot_datas``) já devolve — mesmo formato que
+// ``frappe.website.utils.get_boot_data`` usa para ``time_zone``
+// (system/user). NUNCA sobrescreve valor já existente: no Desk esses campos
+// vêm certos e não podem ser mexidos; aqui só entram quando ausentes.
+//
+// Precisa rodar ANTES de qualquer ``new frappe.ui.Dialog(...)`` que tenha
+// campo Date — não só o de agendamento (``appointment_date``), também o de
+// identificação do visitante (``dob``/``paciente_dob``, mais abaixo).
+function imun_garantir_boot_datas(info) {
+	info = info || {};
+	frappe.boot = frappe.boot || {};
+
+	if (!frappe.boot.time_zone) {
+		if (info.time_zone) {
+			frappe.boot.time_zone = info.time_zone;
+		} else {
+			// Alguns chamadores (ex.: public/js/medicos_carrossel.js — carrossel
+			// de médicos da home) montam o ``info`` localmente, SEM passar pelo
+			// backend, e por isso nunca trazem time_zone. Sem isso o mesmo
+			// ControlDate quebraria ali também. Fuso do navegador é aproximação
+			// razoável só para o widget de calendário abrir em "hoje" — a data
+			// escolhida vira uma string ``yyyy-mm-dd`` de qualquer forma
+			// (get_horarios/criar_agendamento não dependem de fuso).
+			var fuso_navegador =
+				(window.Intl && Intl.DateTimeFormat().resolvedOptions().timeZone) || "America/Sao_Paulo";
+			frappe.boot.time_zone = { system: fuso_navegador, user: fuso_navegador };
+		}
+	}
+
+	frappe.boot.sysdefaults = frappe.boot.sysdefaults || {};
+	if (!frappe.boot.sysdefaults.date_format && info.date_format) {
+		frappe.boot.sysdefaults.date_format = info.date_format;
+	}
+	if (!frappe.boot.sysdefaults.time_format && info.time_format) {
+		frappe.boot.sysdefaults.time_format = info.time_format;
+	}
+
+	// frappe.sys_defaults é o que datetime.js realmente lê em vários pontos
+	// (fallback de time_zone, first_day_of_the_week etc.) — só é espelhado a
+	// partir de frappe.boot.sysdefaults no bootstrap do Desk, que a loja
+	// nunca executa.
+	frappe.sys_defaults = frappe.sys_defaults || {};
+	frappe.sys_defaults.date_format = frappe.sys_defaults.date_format || frappe.boot.sysdefaults.date_format;
+	frappe.sys_defaults.time_format = frappe.sys_defaults.time_format || frappe.boot.sysdefaults.time_format;
+	frappe.sys_defaults.time_zone = frappe.sys_defaults.time_zone || frappe.boot.time_zone.system;
+}
+
 function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) {
+	imun_garantir_boot_datas(info);
 	var fields = [
 		{
 			fieldname: "appointment_date",
@@ -450,6 +518,11 @@ function imun_render_horarios(d, res) {
 // profissional em ``confirmar_codigo_e_agendar`` sem depender do "só existe
 // 1 Practitioner Ativo" (ver agendamento.booking._resolver_practitioner).
 function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
+	// Este diálogo também tem campos Date (dob/paciente_dob) — mesma
+	// quebra do ControlDate na loja (ver imun_garantir_boot_datas acima).
+	// Idempotente/nunca sobrescreve: repetir aqui é seguro mesmo já tendo
+	// rodado ao montar o diálogo de agendamento.
+	imun_garantir_boot_datas(info);
 	var escolha = {
 		item_code: params.item_code,
 		appointment_type: params.appointment_type,
