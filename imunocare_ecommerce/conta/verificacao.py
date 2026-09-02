@@ -534,6 +534,50 @@ def _garantir_usuario_por_celular(celular_verificado: str, dados: dict) -> tuple
 	return email, True
 
 
+def _usuario_previsto(dados: dict) -> str | None:
+	"""Resolve, SEM efeito colateral nenhum (sem criar User, sem logar), qual
+	seria o ``usuario`` que ``_garantir_usuario`` devolveria — mesma lógica de
+	``_garantir_usuario_por_email``/``_por_celular``, só que em modo leitura.
+
+	Regressão da revisão 2026-09-02 (achado do re-review pós-CRÍTICO 1): a
+	recusa de "Patient pré-existente encontrado por paciente_cpf" não podia
+	isentar a 2ª dose do mesmo filho (Patient já com ``user_id`` = a conta do
+	pai) sem saber QUEM é a conta que está se verificando — e resolver isso
+	de verdade (``_garantir_usuario``) já cria/loga a conta, o que não pode
+	acontecer numa reserva que ainda pode ser recusada. Esta função prevê o
+	resultado sem tocar em nada:
+
+	- canal email: o ``usuario`` final É sempre ``destino_verificado``
+	  normalizado (novo ou existente, ``_garantir_usuario_por_email`` nunca
+	  devolve outra coisa).
+	- canal whatsapp: se já existe um User com aquele celular, o ``usuario``
+	  final é o NOME desse User (mesma leitura que
+	  ``_garantir_usuario_por_celular`` faz); senão, será o e-mail digitado
+	  (conta nova, ainda não criada).
+
+	Devolve ``None`` quando não dá para prever com segurança (canal ausente/
+	desconhecido, ou nenhum contato) — tratado como "não bate" por quem
+	chama, nunca como uma isenção."""
+	canal = dados.get("canal_verificado")
+	destino = dados.get("destino_verificado")
+
+	if canal == "email":
+		email = (destino or "").strip().lower()
+		return email or None
+
+	if canal == "whatsapp":
+		celular = _so_digitos(destino)
+		if not celular:
+			return None
+		existente = frappe.db.get_value("User", {"mobile_no": celular}, "name")
+		if existente:
+			return existente
+		email = (dados.get("email") or "").strip().lower()
+		return email or None
+
+	return None
+
+
 def _garantir_usuario(dados: dict) -> tuple[str, bool]:
 	"""Cria (ou reaproveita) o Website User e o deixa logado. Devolve
 	``(usuario, criado)``.
@@ -590,35 +634,50 @@ def confirmar_codigo_e_agendar(
 	# CRÍTICO 1 da revisão 2026-09-02 (takeover de prontuário): um Patient
 	# PRÉ-EXISTENTE encontrado por ``paciente_cpf`` (para_outra_pessoa=1)
 	# nunca é vinculado à conta de quem está se verificando — mesmo que
-	# esteja órfão (``user_id`` vazio). CPF não é segredo, e quem digita o
-	# CPF de outra pessoa como "paciente" não passou por NENHUMA prova de
-	# posse do contato daquele registro (a prova de posse aqui é só do
-	# ADULTO que está se verificando — dados["cpf"], nunca paciente_cpf).
-	# Decisão (b) do relatório da revisão: recusa e orienta a procurar a
-	# clínica, em vez de (a) estender a verificação de posse a paciente_cpf
-	# — mais simples, e "para outra pessoa" É justamente o caso em que o
-	# adulto normalmente NÃO consegue provar posse do contato do paciente
-	# (uma criança não tem contato próprio). Checagem ANTES de
-	# ``_garantir_usuario`` de propósito: nenhuma conta/registro chega a ser
-	# criado quando a reserva vai ser recusada de qualquer jeito (mesmo
-	# padrão "não cria nada" dos outros throws deste endpoint).
+	# esteja órfão (``user_id`` vazio) ou pertença a OUTRA conta. CPF não é
+	# segredo, e quem digita o CPF de outra pessoa como "paciente" não passou
+	# por NENHUMA prova de posse do contato daquele registro (a prova de
+	# posse aqui é só do ADULTO que está se verificando — dados["cpf"], nunca
+	# paciente_cpf). Decisão (b) do relatório da revisão: recusa e orienta a
+	# procurar a clínica, em vez de (a) estender a verificação de posse a
+	# paciente_cpf — mais simples, e "para outra pessoa" É justamente o caso
+	# em que o adulto normalmente NÃO consegue provar posse do contato do
+	# paciente (uma criança não tem contato próprio).
+	#
+	# EXCEÇÃO (regressão achada no re-review, mesma revisão): se o Patient
+	# encontrado JÁ pertence à conta que está se verificando, não há nada a
+	# provar — o vínculo já existe. É o caminho mais comum de uma clínica de
+	# vacinas (2ª dose do mesmo filho: pai reserva a 1ª, o Patient nasce com
+	# ``user_id`` = conta do pai; volta semanas depois deslogado, marca "para
+	# outra pessoa" com o CPF do mesmo filho). Sem esta isenção, o pai recebia
+	# "procure a clínica" — e pior, o código OTP já tinha sido QUEIMADO em
+	# ``conferir`` antes do throw, perdendo o código junto.
+	#
+	# ``_usuario_previsto`` resolve quem SERIA a conta sem criar/logar nada —
+	# a checagem continua rodando ANTES de ``_garantir_usuario``, então uma
+	# reserva recusada continua "não cria nada" (mesmo padrão dos outros
+	# throws deste endpoint; é o que ``assertFalse(exists("User", ...))``
+	# prova no teste do CRÍTICO 1 e não pode regredir).
 	#
 	# Risco residual ACEITO (documentado no relatório ao CTO): quem já
 	# completa a verificação do PRÓPRIO contato (dados["cpf"]/canal
 	# verificado) ainda consegue, por tentativa e erro, inferir se um dado
-	# paciente_cpf já é de um Patient cadastrado (sucesso cria vs. este
-	# throw). É um oráculo mais lento que o do item 4 (exige resolver um
-	# código OTP de verdade a cada tentativa, já limitado por IP via
+	# paciente_cpf já é de um Patient cadastrado por OUTRA conta (sucesso cria
+	# vs. este throw). É um oráculo mais lento que o do item 4 (exige resolver
+	# um código OTP de verdade a cada tentativa, já limitado por IP via
 	# rate_limit) — fechar por completo exigiria a opção (a), descartada
 	# acima por complexidade desproporcional ao ganho.
 	if paciente and para_outro:
-		frappe.throw(
-			_(
-				"Não foi possível concluir o cadastro dessa pessoa por aqui. "
-				"Procure a clínica para agendar."
-			),
-			title=_("Cadastro não permitido"),
-		)
+		dono_atual = frappe.db.get_value("Patient", paciente, "user_id")
+		usuario_previsto = _usuario_previsto(dados)
+		if not usuario_previsto or dono_atual != usuario_previsto:
+			frappe.throw(
+				_(
+					"Não foi possível concluir o cadastro dessa pessoa por aqui. "
+					"Procure a clínica para agendar."
+				),
+				title=_("Cadastro não permitido"),
+			)
 
 	usuario, conta_criada = _garantir_usuario(dados)
 

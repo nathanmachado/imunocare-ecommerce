@@ -604,9 +604,11 @@ class TestParaOutraPessoaNaoAdotaPatientExistente(FrappeTestCase):
 	``confirmar_codigo_e_agendar`` resolvia o paciente por ``paciente_cpf``
 	e adotava qualquer Patient encontrado sem ``user_id`` (todos os 12
 	Patients de produção estavam nesse estado) — vinculando o prontuário da
-	vítima à conta do atacante. Decisão (b) do relatório da revisão: recusa
-	SEMPRE que ``paciente_cpf`` (não ``cpf``) encontra um Patient
-	pré-existente, mesmo órfão — nunca adota."""
+	vítima à conta do atacante. Recusa SEMPRE que ``paciente_cpf`` encontra
+	um Patient pré-existente que NÃO pertence à conta que está se
+	verificando (órfão ou de outra conta) — exceto quando já é dela (ver
+	``test_segunda_dose_do_mesmo_filho_e_aceita``: regressão achada no
+	re-review, a 2ª dose do mesmo filho não pode ser bloqueada)."""
 
 	@classmethod
 	def setUpClass(cls):
@@ -686,6 +688,137 @@ class TestParaOutraPessoaNaoAdotaPatientExistente(FrappeTestCase):
 		self.assertFalse(frappe.db.get_value("Patient", vitima.name, "user_id"))
 		# A checagem acontece ANTES de criar a conta do atacante — nenhum
 		# rastro fica para trás de uma tentativa recusada.
+		self.assertFalse(frappe.db.exists("User", email_atacante))
+
+	def test_segunda_dose_do_mesmo_filho_e_aceita(self):
+		"""Regressão achada no re-review pós-CRÍTICO 1: o caminho mais comum de
+		uma clínica de vacinas é justamente ESTE — pai reserva a 1ª dose do
+		filho (Patient criado com user_id = conta do pai), volta semanas
+		depois DESLOGADO, marca "para outra pessoa" com o mesmo CPF do filho.
+		O Patient encontrado por paciente_cpf já pertence à conta que está se
+		verificando — não há nada a provar, e isto tem que funcionar."""
+		email_pai, celular_pai = _identidade_unica("pai.segunda.dose")
+		pai = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email_pai,
+				"first_name": "Pai",
+				"last_name": "SegundaDose",
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", pai.name)
+
+		filho = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Filho",
+				"middle_name": "de",
+				"last_name": "SegundaDose",
+				"sex": "Male",
+				"dob": "2020-03-01",
+				"cpf": "16899535009",
+				"user_id": pai.name,
+				# menor de idade: patient_hooks._validate_guardian exige responsável.
+				"nome_responsavel": "Pai SegundaDose",
+				"cpf_responsavel": "39053344705",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		self.addCleanup(_limpar_contatos_vinculados, "Patient", filho.name)
+		self.addCleanup(_apagar_definitivamente, "Patient", filho.name)
+
+		dados = dict(
+			_DADOS,
+			email=email_pai,
+			celular=celular_pai,
+			canal_verificado="email",
+			destino_verificado=email_pai,
+			para_outra_pessoa=True,
+			paciente_nome="Filho SegundaDose",
+			paciente_cpf="16899535009",
+			paciente_dob="2020-03-01",
+			paciente_sexo="Male",
+		)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
+		resultado = verificacao.confirmar_codigo_e_agendar(
+			codigo=c,
+			verificacao_id=token,
+			appointment_date="2030-01-11",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+		)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		self.assertEqual(
+			frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient"),
+			filho.name,
+		)
+		# user_id do filho continua o mesmo (não regravado à toa, mas
+		# sobretudo: não foi bloqueado).
+		self.assertEqual(frappe.db.get_value("Patient", filho.name, "user_id"), pai.name)
+
+	def test_paciente_cpf_de_patient_de_outra_conta_continua_recusado(self):
+		"""A isenção é só para "já é meu" — Patient com user_id de OUTRA conta
+		continua recusado (não é a 2ª dose do mesmo filho, é outra família)."""
+		email_dono, _c = _identidade_unica("dono.outra.conta")
+		dono = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email_dono,
+				"first_name": "Dono",
+				"last_name": "OutraConta",
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", dono.name)
+
+		filho_do_dono = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Filho",
+				"middle_name": "de",
+				"last_name": "OutraConta",
+				"sex": "Male",
+				"dob": "2020-03-01",
+				"cpf": "16899535009",
+				"user_id": dono.name,
+				# menor de idade: patient_hooks._validate_guardian exige responsável.
+				"nome_responsavel": "Dono OutraConta",
+				"cpf_responsavel": "39053344705",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		self.addCleanup(_limpar_contatos_vinculados, "Patient", filho_do_dono.name)
+		self.addCleanup(_apagar_definitivamente, "Patient", filho_do_dono.name)
+
+		email_atacante, celular_atacante = _identidade_unica("atacante.outra.conta")
+		dados = dict(
+			_DADOS,
+			email=email_atacante,
+			celular=celular_atacante,
+			cpf="39053344705",
+			canal_verificado="email",
+			destino_verificado=email_atacante,
+			para_outra_pessoa=True,
+			paciente_nome="Filho OutraConta",
+			paciente_cpf="16899535009",
+			paciente_dob="2020-03-01",
+			paciente_sexo="Male",
+		)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.confirmar_codigo_e_agendar(
+				codigo=c,
+				verificacao_id=token,
+				appointment_date="2030-01-10",
+				appointment_time="09:00:00",
+			)
+
+		self.assertEqual(frappe.db.get_value("Patient", filho_do_dono.name, "user_id"), dono.name)
 		self.assertFalse(frappe.db.exists("User", email_atacante))
 
 	def test_cpf_proprio_pre_existente_continua_sendo_adotado_normalmente(self):
@@ -798,6 +931,64 @@ class TestExigirAdulto(FrappeTestCase):
 		dados = dict(_DADOS, dob="isto-nao-e-uma-data")
 		with self.assertRaises(frappe.ValidationError):
 			verificacao._exigir_adulto(dados)
+
+
+class TestUsuarioPrevisto(FrappeTestCase):
+	"""``_usuario_previsto`` — prevê, SEM efeito colateral, quem
+	``_garantir_usuario`` resolveria. Base da correção da regressão do
+	CRÍTICO 1 (2ª dose do mesmo filho): tem que prever o MESMO valor que o
+	caminho real (com efeito colateral) resolveria, senão a isenção
+	divergiria do que de fato acontece."""
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def test_canal_email_preve_o_destino_verificado_normalizado(self):
+		dados = {"canal_verificado": "email", "destino_verificado": "  Ana@Exemplo.COM  "}
+		self.assertEqual(verificacao._usuario_previsto(dados), "ana@exemplo.com")
+
+	def test_canal_whatsapp_com_celular_de_usuario_existente_preve_o_dono(self):
+		email_dono, celular_dono = _identidade_unica("previsto.dono.celular")
+		dono = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email_dono,
+				"first_name": "Dono",
+				"last_name": "Previsto",
+				"mobile_no": celular_dono,
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", dono.name)
+
+		dados = {"canal_verificado": "whatsapp", "destino_verificado": celular_dono}
+		self.assertEqual(verificacao._usuario_previsto(dados), dono.name)
+
+	def test_canal_whatsapp_sem_usuario_existente_preve_o_email_digitado(self):
+		_e, celular_novo = _identidade_unica("previsto.celular.novo")
+		dados = {
+			"canal_verificado": "whatsapp",
+			"destino_verificado": celular_novo,
+			"email": "Novo@Exemplo.com",
+		}
+		self.assertEqual(verificacao._usuario_previsto(dados), "novo@exemplo.com")
+
+	def test_sem_canal_verificado_nao_preve_nada(self):
+		self.assertIsNone(verificacao._usuario_previsto({}))
+
+	def test_bate_com_o_resultado_real_de_garantir_usuario(self):
+		"""A prova que importa: previsão e resultado real precisam ser o MESMO
+		valor — senão a isenção do CRÍTICO 1 libera um caso que
+		``_garantir_usuario`` resolveria diferente."""
+		email, celular = _identidade_unica("previsto.bate.real")
+		dados = dict(_DADOS, celular=celular, canal_verificado="email", destino_verificado=email)
+
+		previsto = verificacao._usuario_previsto(dados)
+		usuario, _criado = verificacao._garantir_usuario(dados)
+		self.addCleanup(_apagar_definitivamente, "User", usuario)
+
+		self.assertEqual(previsto, usuario)
 
 
 class TestGarantirUsuarioAncoraContatoVerificado(FrappeTestCase):
