@@ -274,7 +274,13 @@ def _validar_verificacao_id(verificacao_id) -> str:
 def _idade(dob) -> int | None:
 	if not dob:
 		return None
-	nasc, hoje = getdate(dob), getdate(nowdate())
+	try:
+		nasc, hoje = getdate(dob), getdate(nowdate())
+	except Exception:
+		# dob de tipo/formato inválido (dado vindo do cliente): trata igual a
+		# "sem dob" — nunca estoura 500. Quem exige idade (_exigir_adulto)
+		# recusa igual a ausente (item 6 da revisão 2026-09-02).
+		return None
 	if nasc > hoje:
 		return None
 	return hoje.year - nasc.year - ((hoje.month, hoje.day) < (nasc.month, nasc.day))
@@ -295,9 +301,21 @@ def _exigir_adulto(dados: dict) -> None:
 	checagem "para si mesmo" já corrigia, só que fechada pela metade). Regra
 	única e mais simples: sem ramo por ``para_outra_pessoa``, porque a
 	idade que importa é sempre a de quem está criando a conta.
+
+	Item 6 da revisão 2026-09-02 (terceira rodada sobre a mesma regra): a
+	checagem antiga era ``idade is not None and idade < MAIORIDADE`` — quem
+	OMITISSE ``dob`` (o ``reqd`` do diálogo é só client-side) passava direto,
+	``para_outra_pessoa=1`` e tudo. ``dob`` do adulto agora é OBRIGATÓRIO
+	aqui: sem ele (ausente ou de formato inválido), recusa igual a menor de
+	idade.
 	"""
 	idade = _idade(dados.get("dob"))
-	if idade is not None and idade < MAIORIDADE:
+	if idade is None:
+		frappe.throw(
+			_("Informe sua data de nascimento para continuar."),
+			title=_("Cadastro não permitido"),
+		)
+	if idade < MAIORIDADE:
 		frappe.throw(
 			_("Menores de 18 anos não podem se cadastrar. Procure a clínica para agendar com a ajuda de um responsável."),
 			title=_("Cadastro não permitido"),

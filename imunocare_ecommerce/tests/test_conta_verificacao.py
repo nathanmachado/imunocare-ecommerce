@@ -744,6 +744,29 @@ class TestExigirAdulto(FrappeTestCase):
 		dados = dict(_DADOS, para_outra_pessoa=True, paciente_dob="2020-01-01")
 		verificacao._exigir_adulto(dados)  # não lança
 
+	def test_dob_omitido_para_si_mesmo_e_recusado(self):
+		"""Item 6 da revisão 2026-09-02 (terceira rodada sobre a mesma regra):
+		a checagem antiga era ``idade is not None and idade < MAIORIDADE`` —
+		bastava OMITIR ``dob`` (o ``reqd`` do diálogo é só client-side) para
+		``idade`` virar ``None`` e passar direto, sem provar idade nenhuma."""
+		dados = dict(_DADOS)
+		dados.pop("dob")
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._exigir_adulto(dados)
+
+	def test_dob_omitido_para_outra_pessoa_e_recusado(self):
+		"""Mesmo achado, pelo caminho que o revisor descreveu como o
+		contorno real: omitir ``dob`` com ``para_outra_pessoa=1``."""
+		dados = dict(_DADOS, para_outra_pessoa=True, paciente_dob="2020-01-01")
+		dados.pop("dob")
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._exigir_adulto(dados)
+
+	def test_dob_de_formato_invalido_e_recusado_sem_estourar_500(self):
+		dados = dict(_DADOS, dob="isto-nao-e-uma-data")
+		with self.assertRaises(frappe.ValidationError):
+			verificacao._exigir_adulto(dados)
+
 
 class TestGarantirUsuarioAncoraContatoVerificado(FrappeTestCase):
 	"""Fix CRÍTICO da revisão: a âncora da conta é o CONTATO VERIFICADO
