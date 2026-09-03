@@ -35,6 +35,7 @@ mensagem clara ao cliente — nunca em erro 500 "cru".
 from __future__ import annotations
 
 import json
+import re
 
 import frappe
 from frappe import _
@@ -261,6 +262,11 @@ def info_agendamento(item_code: str) -> dict:
 		"logged_in": frappe.session.user != "Guest",
 	}
 	resultado.update(_boot_datas())
+	# Item B do spec 2026-09-02-loja-mitigacao-fluxos.md: {} para Guest (o
+	# passo de identificação do visitante já coleta tudo); para logado,
+	# {tem_patient, campos_faltantes} — agendamento.js só pede os campos que
+	# realmente faltam, e só quando faltam.
+	resultado["cadastro_paciente"] = _status_cadastro_paciente_logado()
 	return resultado
 
 
@@ -285,12 +291,227 @@ def info_agendamento_tipo(appointment_type: str) -> dict:
 		"logged_in": frappe.session.user != "Guest",
 	}
 	resultado.update(_boot_datas())
+	# Item B do spec 2026-09-02-loja-mitigacao-fluxos.md: {} para Guest (o
+	# passo de identificação do visitante já coleta tudo); para logado,
+	# {tem_patient, campos_faltantes} — agendamento.js só pede os campos que
+	# realmente faltam, e só quando faltam.
+	resultado["cadastro_paciente"] = _status_cadastro_paciente_logado()
 	return resultado
 
 
 # ---------------------------------------------------------------------------
 # Paciente — "PF sob demanda" (mesmo padrão do imunocare_clinic_ext)
 # ---------------------------------------------------------------------------
+
+
+def _reqd_fields_patient() -> list[str]:
+	"""Campos obrigatórios do Patient, lidos DINAMICAMENTE do meta (nunca uma
+	lista fixa hardcoded) — o Healthcare core + os custom fields do
+	imunocare_clinic_ext (cpf, pais_nascimento) podem mudar sem este módulo
+	saber. Base do item B do spec 2026-09-02-loja-mitigacao-fluxos.md:
+	"descubra dinamicamente os reqd do Patient que _resolver_paciente não
+	consegue preencher a partir do User"."""
+	return [f.fieldname for f in frappe.get_meta("Patient").fields if f.reqd]
+
+
+def _rotulos_amigaveis_campos_paciente(campos: list[str]) -> list[str]:
+	"""Rótulos amigáveis (label do próprio DocType, nunca o nome técnico do
+	fieldname) para uma lista de campos faltantes — usado tanto na mensagem
+	de erro (nunca mais o ``MandatoryError`` cru, que vaza o nome interno do
+	doc, ex. "[Patient, Nathan Jorge Machado - 1]: dob, cpf") quanto,
+	potencialmente, por quem consome ``info_agendamento`` no client. first_name
+	e last_name viram um único "Nome completo" (é assim que o cliente pensa
+	no próprio nome, não em "nome" x "sobrenome")."""
+	meta = frappe.get_meta("Patient")
+	rotulos: list[str] = []
+	if "first_name" in campos or "last_name" in campos:
+		rotulos.append(_("Nome completo"))
+	for campo in campos:
+		if campo in ("first_name", "last_name"):
+			continue
+		rotulos.append(_(meta.get_label(campo)) if meta.has_field(campo) else campo)
+	return rotulos
+
+
+def _montar_patient_doc(dados: "frappe._dict", usr) -> "frappe.model.document.Document":
+	"""Monta (SEM inserir) o Patient "PF sob demanda" a partir do usuário
+	logado + ``patient_data`` complementar. Fatorado de ``_resolver_paciente``
+	(que só insere) para ser reusado por ``_campos_faltantes_paciente_novo``
+	— checagem ANTES de tentar inserir, para nunca deixar vazar
+	``frappe.MandatoryError`` cru (item B do spec
+	2026-09-02-loja-mitigacao-fluxos.md)."""
+	partes_nome = (dados.get("nome_completo") or usr.full_name or "").split()
+
+	p = frappe.new_doc("Patient")
+	p.first_name = dados.get("first_name") or (partes_nome[0] if partes_nome else usr.first_name)
+	p.last_name = dados.get("last_name") or (partes_nome[-1] if len(partes_nome) > 1 else usr.last_name or "")
+	if len(partes_nome) > 2:
+		p.middle_name = dados.get("middle_name") or " ".join(partes_nome[1:-1])
+	elif dados.get("middle_name"):
+		p.middle_name = dados.get("middle_name")
+	p.email = dados.get("email") or usr.email or usr.name
+	p.mobile = dados.get("mobile") or usr.get("mobile_no")
+	sexo = dados.get("sex") or usr.get("gender")
+	if sexo:
+		p.sex = sexo
+	if dados.get("dob"):
+		p.dob = getdate(dados.get("dob"))
+	# Campos customizados do imunocare_clinic_ext (cpf/país/cidade de nascimento):
+	# só setamos se o DocType os tiver (não assumimos a lista de reqd, que pode mudar).
+	meta = frappe.get_meta("Patient")
+	for campo in ("cpf", "pais_nascimento", "cidade_nascimento"):
+		if dados.get(campo) and meta.has_field(campo):
+			p.set(campo, dados.get(campo))
+	p.user_id = usr.name
+	p.invite_user = 0
+	return p
+
+
+def _campos_faltantes_paciente_novo(patient_data: dict | str | None = None) -> list[str]:
+	"""``[]`` quando o usuário logado ATUAL já tem, entre ``User`` +
+	``patient_data`` informado, tudo que o Patient exige — ou a lista de
+	fieldnames que ainda faltariam se criássemos agora. Nunca insere nada."""
+	if isinstance(patient_data, str):
+		patient_data = json.loads(patient_data) if patient_data else {}
+	dados = frappe._dict(patient_data or {})
+	usr = frappe.get_doc("User", frappe.session.user)
+	p = _montar_patient_doc(dados, usr)
+	return [f for f in _reqd_fields_patient() if not p.get(f)]
+
+
+def _campos_faltantes_paciente_existente(patient_name: str) -> list[str]:
+	reqd = _reqd_fields_patient()
+	valores = frappe.db.get_value("Patient", patient_name, reqd, as_dict=True) or {}
+	return [f for f in reqd if not valores.get(f)]
+
+
+def _completar_paciente_existente(patient_name: str, patient_data: dict | str | None) -> None:
+	"""Preenche no Patient EXISTENTE só os campos reqd que ainda estiverem
+	VAZIOS, a partir de ``patient_data`` — nunca sobrescreve o que já está
+	preenchido.
+
+	Fix da revisão 2026-09-03 (regra fechada pela metade, de novo):
+	``_resolver_paciente`` retornava cedo no ramo "Patient já existe" e
+	DESCARTAVA ``patient_data`` por completo — ``_status_cadastro_paciente_logado``
+	já pedia dob/cpf no diálogo para um Patient existente incompleto (ver
+	``_campos_faltantes_paciente_existente``), o cliente preenchia, nada era
+	salvo, e TODO agendamento seguinte pedia os mesmos campos de novo.
+
+	Usa ``get_doc`` + ``save`` (nunca ``db.set_value`` cru) para as validações
+	do ``imunocare_clinic_ext`` (formato de CPF etc. — ``patient_hooks.py``)
+	rodarem normalmente; essas validações já são amigáveis (``frappe.throw``
+	com mensagem em pt-BR, ex. "CPF inválido: {0}"), então deixamos propagar
+	sem embrulhar de novo."""
+	if not patient_data:
+		return
+	if isinstance(patient_data, str):
+		patient_data = json.loads(patient_data) if patient_data else {}
+	dados = frappe._dict(patient_data or {})
+	if not dados:
+		return
+
+	doc = frappe.get_doc("Patient", patient_name)
+	mudou = False
+
+	if not doc.get("first_name"):
+		partes_nome = (dados.get("nome_completo") or "").split()
+		primeiro = dados.get("first_name") or (partes_nome[0] if partes_nome else None)
+		if primeiro:
+			doc.first_name = primeiro
+			if not doc.get("last_name"):
+				ultimo = dados.get("last_name") or (partes_nome[-1] if len(partes_nome) > 1 else None)
+				if ultimo:
+					doc.last_name = ultimo
+			if not doc.get("middle_name") and len(partes_nome) > 2:
+				doc.middle_name = " ".join(partes_nome[1:-1])
+			mudou = True
+	elif not doc.get("last_name") and dados.get("last_name"):
+		doc.last_name = dados.get("last_name")
+		mudou = True
+
+	meta = frappe.get_meta("Patient")
+	for campo in _reqd_fields_patient():
+		if campo in ("first_name", "last_name"):
+			continue
+		if doc.get(campo):
+			# NUNCA sobrescreve o que já está preenchido.
+			continue
+		valor = dados.get(campo)
+		if not valor:
+			continue
+		if campo == "dob":
+			valor = getdate(valor)
+		if meta.has_field(campo):
+			doc.set(campo, valor)
+			mudou = True
+
+	if not mudou:
+		return
+
+	# Descoberta da revisão 2026-09-03: o validate() do Patient
+	# (imunocare_clinic_ext.patient_hooks) também exige Address vinculado em
+	# QUALQUER save de um doc EXISTENTE (_validate_address — "pulado no 1º
+	# insert, obrigatório depois"), regra ORTOGONAL ao que este diálogo pede.
+	# Confirmado no bench: a maioria dos Patients criados pela loja (guest ou
+	# logado) não tem endereço nenhum (nem embutido nem Address vinculado) —
+	# sem a pré-checagem de CPF abaixo, um erro de DIGITAÇÃO de CPF ficaria
+	# indistinguível do erro de endereço (ambos ValidationError no mesmo
+	# save()), e o cliente nunca saberia qual dos dois é o problema real.
+	# Reusa o validador PÚBLICO do clinic_ext (mesma regra/mensagem que
+	# ``patient_hooks._validate_and_normalize_cpf`` usaria) — nunca reimplementa
+	# o algoritmo do dígito verificador aqui.
+	if doc.get("cpf"):
+		try:
+			from imunocare_clinic_ext.patient_hooks import is_valid_cpf
+		except ImportError:
+			is_valid_cpf = None
+		if is_valid_cpf is not None:
+			digitos = re.sub(r"\D", "", doc.cpf)
+			if not is_valid_cpf(digitos):
+				frappe.throw(_("CPF inválido: {0}").format(doc.cpf))
+			doc.cpf = digitos
+
+	try:
+		doc.save(ignore_permissions=True)
+	except frappe.MandatoryError:
+		# Rede de segurança (mesmo padrão do ramo "Patient novo" em
+		# _resolver_paciente): nunca deixa a exceção crua vazar.
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		frappe.throw(
+			_(
+				"Não foi possível concluir seu cadastro de paciente. Fale com a clínica "
+				"para continuar."
+			),
+			title=_("Cadastro incompleto"),
+		)
+	except frappe.ValidationError:
+		# CPF já foi conferido acima — o que sobrar aqui é uma regra ORTOGONAL
+		# ao que este diálogo pede (ex.: Address obrigatório — ver comentário
+		# acima). NUNCA bloqueia o AGENDAMENTO por causa disso: o cliente
+		# completa esse requisito depois (recepção/portal); o diálogo volta a
+		# pedir os mesmos campos no próximo agendamento (persistência não
+		# confirmada desta vez) — preferível a travar a reserva por um
+		# requisito que este fluxo nunca pediu.
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+def _status_cadastro_paciente_logado() -> dict:
+	"""Devolve ``{}`` para Guest (o passo de identificação do visitante — ver
+	``imunocare_ecommerce.conta.verificacao`` — já coleta tudo). Para usuário
+	logado: ``{"tem_patient": bool, "campos_faltantes": [...]}`` —
+	``campos_faltantes`` vazio significa que ``criar_agendamento`` conclui sem
+	precisar de ``patient_data`` nenhum. Consumido por ``info_agendamento``/
+	``info_agendamento_tipo`` (item B do spec 2026-09-02-loja-mitigacao-fluxos.md)
+	para o storefront (``public/js/agendamento.js``) decidir se pede
+	dob/cpf/etc. ANTES de chamar ``criar_agendamento``."""
+	if frappe.session.user == "Guest":
+		return {}
+	existente = frappe.db.get_value("Patient", {"user_id": frappe.session.user}, "name") or frappe.db.get_value(
+		"Patient", {"email": frappe.session.user}, "name"
+	)
+	if existente:
+		return {"tem_patient": True, "campos_faltantes": _campos_faltantes_paciente_existente(existente)}
+	return {"tem_patient": False, "campos_faltantes": _campos_faltantes_paciente_novo()}
 
 
 def _resolver_paciente(patient: str | None, patient_data: dict | str | None) -> str:
@@ -322,6 +543,12 @@ def _resolver_paciente(patient: str | None, patient_data: dict | str | None) -> 
 	if existente:
 		if not frappe.db.get_value("Patient", existente, "user_id"):
 			frappe.db.set_value("Patient", existente, "user_id", user, update_modified=False)
+		# Fix 2026-09-03: Patient existente mas INCOMPLETO (ver
+		# _status_cadastro_paciente_logado/_campos_faltantes_paciente_existente)
+		# não pode mais descartar o patient_data que o cliente acabou de
+		# preencher no diálogo — senão todo agendamento seguinte pede os
+		# mesmos campos de novo.
+		_completar_paciente_existente(existente, patient_data)
 		return existente
 
 	if isinstance(patient_data, str):
@@ -329,39 +556,39 @@ def _resolver_paciente(patient: str | None, patient_data: dict | str | None) -> 
 	dados = frappe._dict(patient_data or {})
 
 	usr = frappe.get_doc("User", user)
-	partes_nome = (dados.get("nome_completo") or usr.full_name or "").split()
+	p = _montar_patient_doc(dados, usr)
 
-	p = frappe.new_doc("Patient")
-	p.first_name = dados.get("first_name") or (partes_nome[0] if partes_nome else usr.first_name)
-	p.last_name = dados.get("last_name") or (partes_nome[-1] if len(partes_nome) > 1 else usr.last_name or "")
-	if len(partes_nome) > 2:
-		p.middle_name = dados.get("middle_name") or " ".join(partes_nome[1:-1])
-	elif dados.get("middle_name"):
-		p.middle_name = dados.get("middle_name")
-	p.email = dados.get("email") or usr.email or user
-	p.mobile = dados.get("mobile") or usr.get("mobile_no")
-	sexo = dados.get("sex") or usr.get("gender")
-	if sexo:
-		p.sex = sexo
-	if dados.get("dob"):
-		p.dob = getdate(dados.get("dob"))
-	# Campos customizados do imunocare_clinic_ext (cpf/país/cidade de nascimento):
-	# só setamos se o DocType os tiver (não assumimos a lista de reqd, que pode mudar).
-	meta = frappe.get_meta("Patient")
-	for campo in ("cpf", "pais_nascimento", "cidade_nascimento"):
-		if dados.get(campo) and meta.has_field(campo):
-			p.set(campo, dados.get(campo))
-	p.user_id = user
-	p.invite_user = 0
-
-	try:
-		p.insert(ignore_permissions=True)
-	except frappe.MandatoryError as e:
+	# Item B do spec 2026-09-02-loja-mitigacao-fluxos.md: NUNCA mais deixa o
+	# ``frappe.MandatoryError`` cru (que embute o nome interno do doc, ex.
+	# "[Patient, Nathan Jorge Machado - 1]: dob, cpf") chegar ao cliente —
+	# checa os reqd ANTES de inserir e, se algo ainda faltar (usuário logado
+	# sem ``patient_data``, ou ``patient_data`` incompleto), avisa com os
+	# RÓTULOS amigáveis dos campos. O caminho normal da loja (agendamento.js)
+	# já evita cair aqui: consulta ``info_agendamento``/``_status_cadastro_paciente_logado``
+	# antes de abrir o passo de Confirmar e só pede esses mesmos campos.
+	faltando = [f for f in _reqd_fields_patient() if not p.get(f)]
+	if faltando:
 		frappe.throw(
 			_(
 				"Para concluir seu primeiro agendamento online precisamos completar seu "
-				"cadastro de paciente. Dados faltando: {0}"
-			).format(str(e)),
+				"cadastro de paciente. Informe: {0}."
+			).format(", ".join(_rotulos_amigaveis_campos_paciente(faltando))),
+			title=_("Cadastro incompleto"),
+		)
+
+	try:
+		p.insert(ignore_permissions=True)
+	except frappe.MandatoryError:
+		# Rede de segurança: em tese inalcançável (já validamos os reqd acima),
+		# mas nunca deixa a exceção crua vazar se um campo reqd NOVO for
+		# adicionado ao Patient sem este módulo saber (ver _reqd_fields_patient,
+		# que é dinâmico mas só é chamado por NÓS, não pelo controller nativo).
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		frappe.throw(
+			_(
+				"Não foi possível concluir seu cadastro de paciente. Fale com a clínica "
+				"para continuar."
+			),
 			title=_("Cadastro incompleto"),
 		)
 	return p.name

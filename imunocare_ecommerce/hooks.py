@@ -101,29 +101,43 @@ fixtures = [
 # jornada first-party (Feature 56 / A2.1 — banner de consentimento LGPD +
 # captura de origem/UTM/navegação/carrinho, nunca antes do aceite). Todos
 # site-wide e "no-op" silencioso quando não se aplicam à página atual.
+#
+# Atividade E (spec 2026-09-02-loja-mitigacao-fluxos.md): cada arquivo é um
+# bundle esbuild próprio (`*.bundle.js`, nome BARE — sem `/assets/.../js/` —
+# mesma convenção que o webshop já usa para o dele, `web_include_js =
+# "web.bundle.js"`). O Frappe resolve o nome para o caminho HASHEADO via
+# `assets.json` (`include_script`/`bundled_asset`, ver
+# frappe/utils/jinja_globals.py) — deploy novo gera hash novo, o navegador
+# NUNCA mais serve JS velho em cache (raiz do sintoma 1 do diagnóstico:
+# `web_include_js` sem hash/Cache-Control prendia o navegador numa cópia
+# velha de `agendamento.js` indefinidamente). Cada arquivo continua um bundle
+# SEPARADO (não fundidos num só) justamente para preservar a ORDEM DE CARGA
+# comentada abaixo — a fusão do webshop em `web.bundle.js` continua
+# acontecendo ANTES desta lista pela ordem de instalação dos apps (webshop
+# antes de imunocare_ecommerce), não pela ordem dentro desta lista.
 web_include_js = [
-	"/assets/imunocare_ecommerce/js/agendamento.js",
-	"/assets/imunocare_ecommerce/js/seo_jsonld.js",
-	"/assets/imunocare_ecommerce/js/rastreio.js",
-	"/assets/imunocare_ecommerce/js/domiciliar_cart.js",
+	"agendamento.bundle.js",
+	"seo_jsonld.bundle.js",
+	"rastreio.bundle.js",
+	"domiciliar_cart.bundle.js",
 	# R2 (Feature 70): botão "Agendar" do carrossel de médicos parceiros na
 	# home — reusa o diálogo de agendamento.js (window.imunAbrirAgendamentoDialogo),
 	# carregado depois dele por clareza (a chamada só acontece no clique, a
 	# ordem de carregamento em si não é estritamente necessária).
-	"/assets/imunocare_ecommerce/js/medicos_carrossel.js",
+	"medicos_carrossel.bundle.js",
 	# Reestiliza o card nativo do webshop (grid all-products/categoria) para o
 	# DESIGN_ALVO_v1 — monkey-patch de webshop.ProductGrid, ver comentário no
 	# próprio arquivo. Precisa carregar DEPOIS do "web.bundle.js" do webshop
 	# (garantido pela ordem de instalação dos apps — webshop antes deste).
-	"/assets/imunocare_ecommerce/js/product_grid_style.js",
+	"product_grid_style.bundle.js",
 	# Item 3 — "Carregar mais" (append) nas páginas de listagem, no lugar da
 	# paginação nativa Prev/Next. Carregado DEPOIS do product_grid_style.js
 	# (mesma razão: usa webshop.ProductGrid/ProductList, precisa do
 	# "web.bundle.js" do webshop já definido).
-	"/assets/imunocare_ecommerce/js/product_list_more.js",
+	"product_list_more.bundle.js",
 	# Item 4 — barra de chips de categoria no topo das páginas de listagem
 	# (independente do item 3, mas registrado na mesma leva "loja").
-	"/assets/imunocare_ecommerce/js/product_category_nav.js",
+	"product_category_nav.bundle.js",
 ]
 
 # include custom scss in every website theme (without file extension ".scss")
@@ -194,6 +208,7 @@ after_install = [
 	"imunocare_ecommerce.catalogo.importar_prod.importar_catalogo_prod",
 	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
 	"imunocare_ecommerce.loja.setup.setup_webshop_settings",
+	"imunocare_ecommerce.loja.setup.curar_portal_menu",
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
 	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
 	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
@@ -229,6 +244,7 @@ after_migrate = [
 	"imunocare_ecommerce.catalogo.importar_prod.importar_catalogo_prod",
 	"imunocare_ecommerce.catalogo.setup.setup_catalogo",
 	"imunocare_ecommerce.loja.setup.setup_webshop_settings",
+	"imunocare_ecommerce.loja.setup.curar_portal_menu",
 	"imunocare_ecommerce.pagamento.setup.setup_pagamento",
 	"imunocare_ecommerce.agendamento.setup.setup_agendamento",
 	"imunocare_ecommerce.agendamento.domiciliar.setup_domiciliar",
@@ -295,9 +311,19 @@ after_migrate = [
 # CRM (CRM Lead). No-op silencioso para Sales Orders que não vieram do webshop
 # (order_type != "Shopping Cart"): não interfere em nenhum outro fluxo da
 # clínica (B2B, walk-in, etc.).
+#
+# Atividade C (spec 2026-09-02-loja-mitigacao-fluxos.md): serviço (item
+# agendável) nunca entra no carrinho — o Frappe MESCLA doc_events de vários
+# apps para o mesmo doctype/evento (frappe.append_hook), então este
+# "Quotation.validate" se soma ao que o webshop já registra (validate_shopping_cart_items),
+# sem tocar upstream. Ver imunocare_ecommerce.catalogo.carrinho para o
+# porquê/reuso.
 doc_events = {
 	"Sales Order": {
 		"on_submit": "imunocare_ecommerce.rastreio.funil.on_sales_order_submit",
+	},
+	"Quotation": {
+		"validate": "imunocare_ecommerce.catalogo.carrinho.bloquear_servico_no_carrinho",
 	},
 }
 
