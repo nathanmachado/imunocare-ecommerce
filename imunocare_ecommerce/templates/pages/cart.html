@@ -1,0 +1,36 @@
+{#- Override do template nativo do webshop (apps/webshop/webshop/templates/
+	pages/cart.html) — SEM tocar upstream. Mesmo mecanismo do override de
+	generator (item.html/item_group.html): o resolvedor de PÁGINAS do Frappe
+	(frappe.website.page_renderers.template_page.TemplatePage.set_template_path)
+	varre `templates/pages/<rota>` em `reversed(frappe.get_installed_apps())` e
+	usa o PRIMEIRO app que tiver o arquivo — imunocare_ecommerce foi instalado
+	DEPOIS de webshop, então nosso arquivo vence (confirmado empiricamente no
+	bench local: HTML de /cart passou a sair com este template).
+
+	Diferença do generator: uma PÁGINA (templates/pages/) também resolve um
+	controller python colocado (mesmo nome, .py) e um JS colocado (mesmo nome,
+	.js) A PARTIR DO APP ONDE O .HTML FOI ENCONTRADO — ou seja, do NOSSO app,
+	não do webshop. Por isso este override precisa de `cart.py` (delega 100%
+	para `webshop.templates.pages.cart.get_context`, incluindo o JS colocado
+	do webshop lido em runtime — ver comentário lá). O HTML em si usa
+	`{% extends %}` com o PREFIXO do app (`"webshop/templates/pages/cart.html"`),
+	que força o ChoiceLoader (PrefixLoader) a pegar a versão do webshop
+	especificamente, mesmo essa página sendo a mais "profunda" da cadeia de
+	resolução por nome — reuso total do HTML/JS/lógica do carrinho nativo, só
+	o bloco `base_scripts` é substituído (Atividade A do spec
+	2026-09-02-loja-mitigacao-fluxos.md — restaura `frappe.boot`/`frappe.sys_defaults`,
+	derrubados pelo `{% block base_scripts %}` do webshop, que reescreve o
+	bloco original de `frappe/templates/base.html` sem essas duas linhas). -#}
+{% extends "webshop/templates/pages/cart.html" %}
+
+{% block base_scripts %}
+<!-- js should be loaded in body! -->
+<script>
+	frappe.boot = {{ boot | json }}
+	// for backward compatibility of some libs
+	frappe.sys_defaults = frappe.boot.sysdefaults;
+</script>
+{{ include_script("frappe-web.bundle.js") }}
+{{ include_script("controls.bundle.js") }}
+{{ include_script("dialog.bundle.js") }}
+{% endblock %}

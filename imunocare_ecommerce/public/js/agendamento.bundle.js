@@ -380,6 +380,56 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 		});
 	}
 
+	// Item B do spec 2026-09-02-loja-mitigacao-fluxos.md: cliente LOGADO sem
+	// Patient completo (ou sem Patient nenhum) — o backend
+	// (agendamento.booking.info_agendamento/_status_cadastro_paciente_logado)
+	// já devolveu QUAIS campos faltam (dob/cpf/... nunca são deriváveis do
+	// User). Em vez de deixar `criar_agendamento` estourar um MandatoryError,
+	// coleta esses campos no PRÓPRIO diálogo (mesmos campos/rótulos do passo
+	// de identificação do visitante, `imun_passo_identificacao` abaixo) e
+	// manda como `patient_data` — o backend já aceita isso para qualquer
+	// ramo (ver `agendamento.booking._resolver_paciente`).
+	var camposFaltantes =
+		(info.logged_in && info.cadastro_paciente && info.cadastro_paciente.campos_faltantes) || [];
+	if (camposFaltantes.length) {
+		fields.push({ fieldname: "imun_cadastro_sb", fieldtype: "Section Break", label: __("Complete seu cadastro") });
+		if (camposFaltantes.indexOf("first_name") !== -1 || camposFaltantes.indexOf("last_name") !== -1) {
+			fields.push({ fieldname: "imun_nome_completo", fieldtype: "Data", label: __("Nome completo"), reqd: 1 });
+		}
+		if (camposFaltantes.indexOf("dob") !== -1) {
+			fields.push({ fieldname: "imun_dob", fieldtype: "Date", label: __("Data de nascimento"), reqd: 1 });
+		}
+		if (camposFaltantes.indexOf("cpf") !== -1) {
+			fields.push({ fieldname: "imun_cpf", fieldtype: "Data", label: __("CPF"), reqd: 1 });
+		}
+		if (camposFaltantes.indexOf("mobile") !== -1) {
+			fields.push({
+				fieldname: "imun_mobile",
+				fieldtype: "Data",
+				label: __("Celular / WhatsApp"),
+				reqd: 1,
+			});
+		}
+		if (camposFaltantes.indexOf("email") !== -1) {
+			fields.push({
+				fieldname: "imun_email",
+				fieldtype: "Data",
+				options: "Email",
+				label: __("E-mail"),
+				reqd: 1,
+			});
+		}
+		if (camposFaltantes.indexOf("sex") !== -1) {
+			fields.push({
+				fieldname: "imun_sex",
+				fieldtype: "Select",
+				label: __("Sexo"),
+				options: "\nMale\nFemale\nOther",
+				reqd: 1,
+			});
+		}
+	}
+
 	var d = new frappe.ui.Dialog({
 		// Título genérico (Feature 72): este diálogo compartilhado agenda
 		// vacina/vitamina/terapia/consulta — não só "Consulta" (mesmo botão
@@ -405,6 +455,33 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 				return;
 			}
 
+			// Monta patient_data SOMENTE com o que o backend disse faltar
+			// (camposFaltantes, calculado ao montar o diálogo) — nunca manda
+			// campos que o Patient/User já resolveria sozinho, e nunca
+			// sobrescreve dado existente do cliente.
+			var patient_data = null;
+			if (camposFaltantes.length) {
+				patient_data = {};
+				if (values.imun_nome_completo) {
+					patient_data.nome_completo = values.imun_nome_completo;
+				}
+				if (values.imun_dob) {
+					patient_data.dob = values.imun_dob;
+				}
+				if (values.imun_cpf) {
+					patient_data.cpf = values.imun_cpf;
+				}
+				if (values.imun_mobile) {
+					patient_data.mobile = values.imun_mobile;
+				}
+				if (values.imun_email) {
+					patient_data.email = values.imun_email;
+				}
+				if (values.imun_sex) {
+					patient_data.sex = values.imun_sex;
+				}
+			}
+
 			frappe.call({
 				method: "imunocare_ecommerce.agendamento.booking.criar_agendamento",
 				args: Object.assign(
@@ -413,6 +490,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 						appointment_time: values.appointment_time,
 						practitioner: info.practitioner,
 						modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
+						patient_data: patient_data,
 						// Rastreio da jornada (Feature 56 / A2.4) — null se o cliente não
 						// consentiu, e o agendamento segue normalmente sem UTM/origem.
 						session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,

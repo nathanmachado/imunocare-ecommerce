@@ -118,7 +118,19 @@
 
 {% block base_scripts %}
 <!-- js should be loaded in body! -->
+<!-- Atividade A (spec 2026-09-02-loja-mitigacao-fluxos.md): este bloco
+	sobrescrevia o base_scripts original de frappe/templates/base.html e
+	derrubava "frappe.boot = {{ boot | json }}" + "frappe.sys_defaults" —
+	página do item rodava sem frappe.boot.assets_json (exceção
+	"Cannot read properties of undefined (reading 'file_uploader.bundle.js')")
+	e sem sysdefaults/lang (datepicker do modal de agendamento em inglês).
+	Restaurado aqui igual ao base.html original. -->
 <script type="text/javascript" src="/assets/frappe/js/lib/jquery/jquery.min.js"></script>
+<script>
+	frappe.boot = {{ boot | json }}
+	// for backward compatibility of some libs
+	frappe.sys_defaults = frappe.boot.sysdefaults;
+</script>
 {{ include_script("frappe-web.bundle.js") }}
 {{ include_script("controls.bundle.js") }}
 {{ include_script("dialog.bundle.js") }}

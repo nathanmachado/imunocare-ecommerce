@@ -9,6 +9,7 @@ diálogo de agendamento nem abria (``Cannot read properties of undefined
 from unittest.mock import patch
 
 import frappe
+from frappe import _
 from frappe.tests.utils import FrappeTestCase
 
 from imunocare_ecommerce.agendamento import booking
@@ -289,3 +290,349 @@ class TestInfoAgendamentoItemTrazBootDatas(FrappeTestCase):
 		self.assertEqual(r["time_zone"]["system"], frappe.utils.get_system_timezone())
 		self.assertIn("date_format", r)
 		self.assertIn("time_format", r)
+
+
+class TestCadastroCompletoParaUsuarioLogado(FrappeTestCase):
+	"""Item B do spec 2026-09-02-loja-mitigacao-fluxos.md — "Cadastro
+	incompleto … [Patient, Nathan Jorge Machado - 1]: dob, cpf" vazava a
+	``MandatoryError`` crua (com o nome interno do doc) para o cliente
+	sempre que um usuário LOGADO sem Patient completo tentava agendar sem
+	``patient_data`` — o passo de identificação do guest sempre coletava
+	dob/cpf, mas o ramo logado nunca pedia nada.
+
+	Fixture: mesmo padrão mínimo de
+	``TestConfirmarCodigoEAgendarFimAFim`` (test_conta_verificacao.py) —
+	Appointment Type "Practitioner" + Healthcare Practitioner Active, sem
+	depender de dado de ambiente."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls._appointment_type = frappe.get_doc(
+			{
+				"doctype": "Appointment Type",
+				"appointment_type": "Teste Cadastro Completo Logado",
+				"allow_booking_for": "Practitioner",
+				"default_duration": 30,
+			}
+		).insert(ignore_permissions=True)
+		cls._practitioner = frappe.get_doc(
+			{
+				"doctype": "Healthcare Practitioner",
+				"first_name": "Praticante Teste Cadastro Completo",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_apagar_definitivamente("Appointment Type", cls._appointment_type.name)
+		_apagar_definitivamente("Healthcare Practitioner", cls._practitioner.name)
+		super().tearDownClass()
+
+	def setUp(self):
+		self._usuario_antes = frappe.session.user
+
+	def tearDown(self):
+		frappe.set_user(self._usuario_antes)
+
+	def _novo_website_user_sem_patient(self, prefixo: str) -> str:
+		"""Website User "pelado" — sem mobile_no/gender — para que dob/cpf/sex/
+		mobile fiquem TODOS fora do que ``_montar_patient_doc`` conseguiria
+		derivar sozinho a partir do User (reproduz o caso real relatado)."""
+		email = f"{prefixo}.{frappe.generate_hash(length=6)}@exemplo.com"
+		u = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Teste",
+				"last_name": prefixo,
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", u.name)
+		return u.name
+
+	def test_status_cadastro_logado_sem_patient_aponta_dob_e_cpf_faltando(self):
+		usuario = self._novo_website_user_sem_patient("status.cadastro")
+		frappe.set_user(usuario)
+
+		status = booking._status_cadastro_paciente_logado()
+
+		self.assertFalse(status["tem_patient"])
+		self.assertIn("dob", status["campos_faltantes"])
+		self.assertIn("cpf", status["campos_faltantes"])
+
+	def test_status_cadastro_guest_e_vazio(self):
+		frappe.set_user("Guest")
+		self.assertEqual(booking._status_cadastro_paciente_logado(), {})
+
+	def test_logado_sem_patient_completo_conclui_agendamento_com_patient_data(self):
+		usuario = self._novo_website_user_sem_patient("agenda.com.dados")
+		frappe.set_user(usuario)
+
+		resultado = booking.criar_agendamento(
+			appointment_date="2030-04-01",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+			patient_data={
+				"dob": "1990-01-01",
+				"cpf": "39053344705",
+				"sex": "Male",
+				"mobile": "51999112233",
+			},
+		)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		paciente = frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient")
+		self.addCleanup(_apagar_definitivamente, "Patient", paciente)
+		self.assertEqual(frappe.db.get_value("Patient", paciente, "cpf"), "39053344705")
+		self.assertEqual(str(frappe.db.get_value("Patient", paciente, "dob")), "1990-01-01")
+		self.assertEqual(frappe.db.get_value("Patient", paciente, "user_id"), usuario)
+
+	def test_logado_sem_patient_data_recebe_erro_amigavel_sem_vazar_doc_cru(self):
+		usuario = self._novo_website_user_sem_patient("agenda.sem.dados")
+		frappe.set_user(usuario)
+
+		with self.assertRaises(frappe.ValidationError) as cm:
+			booking.criar_agendamento(
+				appointment_date="2030-04-02",
+				appointment_time="09:00:00",
+				appointment_type=self._appointment_type.name,
+				practitioner=self._practitioner.name,
+			)
+
+		mensagem = str(cm.exception)
+		# Nunca mais o formato cru do MandatoryError ("[Patient, <nome>]: ...").
+		self.assertNotIn("[Patient", mensagem)
+		# A mensagem amigável cita os RÓTULOS reais do DocType (traduzidos),
+		# nunca os fieldnames técnicos ("dob", "cpf") nem o nome interno do doc.
+		meta = frappe.get_meta("Patient")
+		self.assertIn(_(meta.get_label("cpf")), mensagem)
+		self.assertIn(_(meta.get_label("dob")), mensagem)
+		self.assertNotIn("dob,", mensagem)
+
+		# Nenhum Patient/User órfão fica para trás quando a validação recusa
+		# ANTES de inserir.
+		self.assertFalse(frappe.db.exists("Patient", {"user_id": usuario}))
+
+
+class TestPatientExistenteIncompletoNaoDescartaPatientData(FrappeTestCase):
+	"""Regressão da revisão 2026-09-03 (regra fechada pela metade, de novo):
+	``_status_cadastro_paciente_logado`` já dizia que faltava dob/cpf para um
+	Patient EXISTENTE incompleto, o diálogo pedia esses campos, mas
+	``_resolver_paciente`` retornava cedo no ramo "Patient já existe" e
+	DESCARTAVA ``patient_data`` inteiro — nada era persistido, e o cliente
+	seria interrogado de novo em TODO agendamento seguinte."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls._appointment_type = frappe.get_doc(
+			{
+				"doctype": "Appointment Type",
+				"appointment_type": "Teste Patient Existente Incompleto",
+				"allow_booking_for": "Practitioner",
+				"default_duration": 30,
+			}
+		).insert(ignore_permissions=True)
+		cls._practitioner = frappe.get_doc(
+			{
+				"doctype": "Healthcare Practitioner",
+				"first_name": "Praticante Teste Patient Existente",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_apagar_definitivamente("Appointment Type", cls._appointment_type.name)
+		_apagar_definitivamente("Healthcare Practitioner", cls._practitioner.name)
+		super().tearDownClass()
+
+	def setUp(self):
+		self._usuario_antes = frappe.session.user
+
+	def tearDown(self):
+		frappe.set_user(self._usuario_antes)
+
+	def _usuario_com_patient_incompleto(self, prefixo: str, com_endereco: bool = True) -> tuple[str, str]:
+		"""Website User JÁ COM Patient vinculado (user_id), mas sem dob/cpf —
+		reproduz o estado real relatado (2ª dose/2º agendamento de um cliente
+		que nunca completou o cadastro).
+
+		``com_endereco`` (default True — o caminho mais comum de quem já foi
+		atendido na clínica ao menos uma vez): descoberta da revisão
+		2026-09-03 — ``imunocare_clinic_ext.patient_hooks._validate_address``
+		exige Address (embutido OU vinculado) em QUALQUER save de um Patient
+		JÁ EXISTENTE (só é pulado no 1º insert). Sem isso, ``doc.save()`` em
+		``_completar_paciente_existente`` bloquearia mesmo com CPF/dob
+		válidos — regra ortogonal ao que este diálogo pede. Use
+		``com_endereco=False`` para reproduzir o caso "cliente 100% online,
+		nunca deu endereço nenhum" (confirmado como o estado real do único
+		Patient de loja deste bench)."""
+		email = f"{prefixo}.{frappe.generate_hash(length=6)}@exemplo.com"
+		u = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Teste",
+				"last_name": prefixo,
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", u.name)
+
+		dados_patient = {
+			"doctype": "Patient",
+			"first_name": "Teste",
+			"last_name": prefixo,
+			"user_id": u.name,
+			"email": email,
+		}
+		if com_endereco:
+			dados_patient["imun_cep"] = "90000000"
+			dados_patient["imun_logradouro"] = "Rua de Teste, 123"
+		p = frappe.get_doc(dados_patient).insert(ignore_permissions=True, ignore_mandatory=True)
+		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
+		return u.name, p.name
+
+	def test_patient_data_e_persistido_no_patient_existente_e_agendamento_conclui(self):
+		usuario, paciente = self._usuario_com_patient_incompleto("existente.persiste")
+		frappe.set_user(usuario)
+
+		status_antes = booking._status_cadastro_paciente_logado()
+		self.assertTrue(status_antes["tem_patient"])
+		self.assertIn("dob", status_antes["campos_faltantes"])
+		self.assertIn("cpf", status_antes["campos_faltantes"])
+		self.assertIn("mobile", status_antes["campos_faltantes"])
+
+		resultado = booking.criar_agendamento(
+			appointment_date="2030-05-01",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+			patient_data={
+				"dob": "1988-02-02",
+				"cpf": "16899535009",
+				"sex": "Male",
+				"mobile": "51999223344",
+			},
+		)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		# O agendamento aponta para o MESMO Patient (não cria um novo).
+		self.assertEqual(
+			frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient"),
+			paciente,
+		)
+		# Os dados foram REALMENTE persistidos no Patient (não descartados).
+		self.assertEqual(frappe.db.get_value("Patient", paciente, "cpf"), "16899535009")
+		self.assertEqual(str(frappe.db.get_value("Patient", paciente, "dob")), "1988-02-02")
+
+		# O próximo agendamento NÃO pede mais nada.
+		status_depois = booking._status_cadastro_paciente_logado()
+		self.assertEqual(status_depois["campos_faltantes"], [])
+
+	def test_patient_data_nunca_sobrescreve_campo_ja_preenchido(self):
+		usuario, paciente = self._usuario_com_patient_incompleto("existente.protege")
+		frappe.db.set_value("Patient", paciente, "cpf", "16899535009", update_modified=False)
+		frappe.set_user(usuario)
+
+		resultado = booking.criar_agendamento(
+			appointment_date="2030-05-02",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+			# Tenta mandar um CPF diferente do já cadastrado — deve ser ignorado.
+			patient_data={
+				"dob": "1988-02-02",
+				"cpf": "39053344705",
+				"sex": "Male",
+				"mobile": "51999223344",
+			},
+		)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		self.assertEqual(frappe.db.get_value("Patient", paciente, "cpf"), "16899535009")
+		self.assertEqual(str(frappe.db.get_value("Patient", paciente, "dob")), "1988-02-02")
+
+	def test_patient_existente_completo_nao_pede_nada(self):
+		usuario, paciente = self._usuario_com_patient_incompleto("existente.completo")
+		doc = frappe.get_doc("Patient", paciente)
+		doc.dob = "1990-01-01"
+		doc.cpf = "16899535009"
+		doc.sex = "Male"
+		doc.mobile = "51999001122"
+		doc.save(ignore_permissions=True)
+
+		frappe.set_user(usuario)
+		status = booking._status_cadastro_paciente_logado()
+		self.assertTrue(status["tem_patient"])
+		self.assertEqual(status["campos_faltantes"], [])
+
+	def test_cpf_invalido_e_recusado_mesmo_sem_endereco(self):
+		"""A pré-checagem de CPF (reuso de
+		``imunocare_clinic_ext.patient_hooks.is_valid_cpf``) roda ANTES do
+		``doc.save()`` — precisa recusar CPF mal digitado mesmo quando o
+		Patient também não tem endereço (senão os dois problemas ficariam
+		indistinguíveis: o cliente corrigiria o endereço achando que era o
+		problema, e o CPF errado passaria batido)."""
+		usuario, paciente = self._usuario_com_patient_incompleto(
+			"existente.cpf.invalido", com_endereco=False
+		)
+		frappe.set_user(usuario)
+
+		with self.assertRaises(frappe.ValidationError) as cm:
+			booking.criar_agendamento(
+				appointment_date="2030-05-03",
+				appointment_time="09:00:00",
+				appointment_type=self._appointment_type.name,
+				practitioner=self._practitioner.name,
+				patient_data={
+					"dob": "1988-02-02",
+					"cpf": "11111111111",
+					"sex": "Male",
+					"mobile": "51999223344",
+				},
+			)
+		self.assertIn("CPF inválido", str(cm.exception))
+		# Nada foi persistido (o save nem chegou a ser tentado).
+		self.assertFalse(frappe.db.get_value("Patient", paciente, "cpf"))
+
+	def test_patient_sem_endereco_nao_bloqueia_agendamento_ainda_que_nao_persista(self):
+		"""Descoberta da revisão 2026-09-03: ``imunocare_clinic_ext.patient_hooks.
+		_validate_address`` exige Address vinculado em QUALQUER save de um
+		Patient EXISTENTE — regra ortogonal ao que este diálogo pede, e o
+		estado real da imensa maioria dos Patients criados pela loja (sem
+		endereço nenhum). O agendamento NUNCA pode travar por causa disso —
+		só a persistência do cadastro fica pendente para uma próxima vez
+		(pela recepção, ou quando o cliente informar endereço por outro
+		canal)."""
+		usuario, paciente = self._usuario_com_patient_incompleto(
+			"existente.sem.endereco", com_endereco=False
+		)
+		frappe.set_user(usuario)
+
+		resultado = booking.criar_agendamento(
+			appointment_date="2030-05-04",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+			patient_data={
+				"dob": "1988-02-02",
+				"cpf": "16899535009",
+				"sex": "Male",
+				"mobile": "51999223344",
+			},
+		)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		# O agendamento CONCLUIU normalmente, apontando pro Patient certo.
+		self.assertEqual(
+			frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient"),
+			paciente,
+		)

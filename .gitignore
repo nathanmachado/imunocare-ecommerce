@@ -7,6 +7,11 @@ tags
 node_modules
 .venv
 .idea/
+# Atividade E (spec 2026-09-02-loja-mitigacao-fluxos.md): saída do `bench
+# build` para os bundles esbuild (*.bundle.js -> dist/js/*.HASH.js) — gerada
+# no deploy, nunca versionada (mesmo padrão do próprio webshop, que ignora
+# "webshop/public/dist").
+imunocare_ecommerce/public/dist/
 # catálogo real extraído de produção — contém PREÇOS (dado de negócio, nunca versionar)
 imunocare_ecommerce/catalogo/catalogo_prod.json
 # Imagens-FONTE de produtos (originais ~1MB cada, ~58MB no total). O site usa

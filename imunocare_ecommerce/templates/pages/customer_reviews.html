@@ -1,0 +1,24 @@
+{#- Override do template nativo do webshop (apps/webshop/webshop/templates/
+	pages/customer_reviews.html) — mesmo mecanismo/motivo do override de
+	cart.html (ver comentário lá): restaura `frappe.boot`/`frappe.sys_defaults`
+	(Atividade A do spec 2026-09-02-loja-mitigacao-fluxos.md). Página acessada
+	pelo link "View all reviews" da página do item
+	(webshop/templates/generators/item/item_reviews.html). De quebra, os 5
+	scripts do bloco original (jquery.min.js + frappe-web.min.js/control.min.js/
+	dialog.min.js/bootstrap-4-web.min.js) já apontavam para arquivos que não
+	existem mais no v15 (bundle esbuild renomeou tudo) — trocados pelos
+	equivalentes atuais (mesmos 3 bundles que item.html/cart.html usam), sem
+	relação com o bug do boot (upstream, fora do escopo desta atividade). -#}
+{% extends "webshop/templates/pages/customer_reviews.html" %}
+
+{% block base_scripts %}
+<!-- js should be loaded in body! -->
+<script>
+	frappe.boot = {{ boot | json }}
+	// for backward compatibility of some libs
+	frappe.sys_defaults = frappe.boot.sysdefaults;
+</script>
+{{ include_script("frappe-web.bundle.js") }}
+{{ include_script("controls.bundle.js") }}
+{{ include_script("dialog.bundle.js") }}
+{% endblock %}
