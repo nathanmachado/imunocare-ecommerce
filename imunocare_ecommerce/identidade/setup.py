@@ -145,6 +145,18 @@ a:hover {{ color: var(--imun-coral); }}
 	background-color: var(--imun-coral-hover) !important;
 	border-color: var(--imun-coral-hover) !important;
 }}
+// Regressão achada na verificação ao vivo (2026-09-03): o
+// `display: inline-flex !important` acima (especificidade .btn.btn-primary =
+// 0,2,0) VENCE o `.d-none {{display:none !important}}` do webshop (0,1,0) — logo
+// qualquer botão primário que o JS tente esconder com `d-none` (o "Adicionar
+// ao carrinho" nativo na página de SERVIÇO, ver agendamento.bundle.js) volta a
+// aparecer, recriando os DOIS botões que o dono reportou. Reafirmamos o
+// `d-none`/`hide` para botões primários com especificidade maior (0,3,0) e
+// depois na ordem — a utilitária de esconder tem que vencer sempre.
+.btn-primary.d-none, .btn.btn-primary.d-none,
+.btn-primary.hide, .btn.btn-primary.hide {{
+	display: none !important;
+}}
 
 // ---- Header: logomarca oficial (ajuste 2026-08-10, item 5) — lockup
 // horizontal completo (símbolo/anel de pontos + wordmark "IMUNOCARE"), um
