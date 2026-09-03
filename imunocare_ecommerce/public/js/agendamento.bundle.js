@@ -323,6 +323,17 @@ function imun_garantir_boot_datas(info) {
 		}
 	}
 
+	// O datepicker (ControlDate, frappe/form/controls/date.js:50) lê o idioma
+	// de ``frappe.boot.user.language`` — que só existe no boot do DESK. No boot
+	// de página web (frappe.website.utils.get_boot_data) vem ``lang``, mas não
+	// ``user``: sem este espelho o calendário abre em inglês ("September,
+	// Su/Mo/Tu") mesmo com o site inteiro em pt-BR. O locale pt-BR JÁ está no
+	// controls.bundle ($.fn.datepicker.language["pt-BR"], verificado em prod
+	// 2026-09-03) — só falta o ponteiro.
+	if (!frappe.boot.user && frappe.boot.lang) {
+		frappe.boot.user = { language: frappe.boot.lang };
+	}
+
 	frappe.boot.sysdefaults = frappe.boot.sysdefaults || {};
 	if (!frappe.boot.sysdefaults.date_format && info.date_format) {
 		frappe.boot.sysdefaults.date_format = info.date_format;
