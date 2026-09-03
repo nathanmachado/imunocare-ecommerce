@@ -461,7 +461,10 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 	var fields = [
 		{
 			fieldname: "appointment_date",
-			label: __("Data"),
+			// Fonte inglesa "Date" (traduz para "Data" em pt-BR) — NUNCA a fonte
+			// ambigua "Data", que colide com o ingles "Data" (=dados/registros) e,
+			// com o dicionario de traducao agora injetado na loja, virava "Dados".
+			label: __("Date"),
 			fieldtype: "Date",
 			reqd: 1,
 		},
