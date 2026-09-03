@@ -687,3 +687,105 @@ def nav_categorias_loja() -> list[dict]:
 	chips de categoria nas páginas de listagem do webshop) para não expor o
 	nome do grupo-pai fora deste módulo nem duplicar a lista de categorias."""
 	return nav_categorias(_GRUPO_PAI)
+
+
+# ---------------------------------------------------------------------------
+# Tarefa E (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md) —
+# backfill de taxonomia: Item.item_group genérico ("Aplicação de Vacinas")
+# em brincos/vitaminas/etc.
+# ---------------------------------------------------------------------------
+
+
+def backfill_item_group_taxonomia(aplicar: bool = False) -> list[dict]:
+	"""Corrige ``Item.item_group`` para o que o item REALMENTE É (nunca o 1º
+	caso de uso), usando a MESMA curadoria já usada para publicar o Website
+	Item (``catalogo_loja.json`` — ``entrada["secao"]``) como fonte única de
+	verdade — não inventa uma segunda classificação.
+
+	Causa raiz: ``_upsert_website_item`` já corrige a categoria de NAVEGAÇÃO
+	(``website_item_groups``, o que rege filtro/tab da loja) sem tocar no
+	``Item.item_group`` bruto — por isso 38 produtos (brincos, vitaminas
+	injetáveis etc., migrados em massa) continuam com ``item_group =
+	"Aplicação de Vacinas"`` no cadastro do Item, mesmo já aparecendo na
+	categoria certa na loja. Isso vaza como rótulo errado em qualquer lugar
+	que leia o ``Item.item_group`` bruto (breadcrumb do produto — ver
+	``imun_parents_corrigidos`` — e qualquer relatório/tela do Desk que
+	agrupe por Item Group).
+
+	SEMPRE roda em modo dry-run por padrão (``aplicar=False``) — só relata o
+	que MUDARIA, nunca escreve. O CTO decide quando aplicar (``aplicar=True``)
+	depois de revisar a lista, rodando via ``bench execute`` — mudança de
+	DADOS em produção não é responsabilidade deste Dev (doutrina do projeto).
+
+	Idempotente: rodar de novo depois de aplicado não muda mais nada (todo
+	item já estaria com o ``item_group`` curado == ``secao``).
+
+	Risco documentado (relatório ao CTO): ``Item.item_group`` alimenta
+	default de conta contábil/imposto/preço em alguns fluxos do ERPNext
+	(Item Group Defaults) — confirmar que as 6 categorias da loja não têm
+	default de conta divergente do que "Aplicação de Vacinas" tinha, antes
+	de aplicar em massa.
+
+	Devolve uma lista de ``{"item_code", "item_name", "item_group_atual",
+	"item_group_novo"}`` — vazia se não houver nada a corrigir (ou se algo
+	impedir a leitura, nunca lança)."""
+	try:
+		if not frappe.db.exists("DocType", "Item"):
+			return []
+
+		mapa = _carregar_mapa_loja()
+		if not mapa:
+			return []
+
+		# Só reatribui para uma seção que EXISTE como Item Group de verdade —
+		# nunca cria um Item Group novo aqui (isso é papel de
+		# _setup_item_groups, já idempotente e já rodado no migrate).
+		secoes_validas = {
+			nome
+			for nome in {entrada.get("secao") for entrada in mapa.values() if entrada.get("secao")}
+			if frappe.db.exists("Item Group", nome)
+		}
+		if not secoes_validas:
+			return []
+
+		items = frappe.get_all(
+			"Item",
+			filters={"disabled": 0, "is_stock_item": 0, "is_sales_item": 1},
+			fields=["name", "item_code", "item_name", "item_group"],
+		)
+
+		mudancas: list[dict] = []
+		for item in items:
+			entrada = mapa.get(item.item_name)
+			if not entrada:
+				continue
+			secao = entrada.get("secao")
+			if not secao or secao not in secoes_validas:
+				continue
+			if item.item_group == secao:
+				continue  # já correto — idempotente.
+			mudancas.append(
+				{
+					"item_code": item.item_code,
+					"item_name": item.item_name,
+					"item_group_atual": item.item_group,
+					"item_group_novo": secao,
+				}
+			)
+
+		if aplicar:
+			for mudanca in mudancas:
+				frappe.db.set_value(
+					"Item",
+					mudanca["item_code"],
+					"item_group",
+					mudanca["item_group_novo"],
+					update_modified=False,
+				)
+			if mudancas:
+				frappe.db.commit()  # nosemgrep
+
+		return mudancas
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		return []

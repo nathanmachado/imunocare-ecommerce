@@ -1676,3 +1676,166 @@ class TestRegressaoCriarAgendamento(FrappeTestCase):
 		self.addCleanup(frappe.set_user, "Administrator")
 		with self.assertRaises(frappe.PermissionError):
 			criar_agendamento(appointment_date="2030-01-10", appointment_time="09:00:00")
+
+
+class TestConfirmarCodigoEVincularLogado(FrappeTestCase):
+	"""Tarefa B do spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md —
+	o "lado B" do fluxo de colisão de CPF: ``agendamento.booking.criar_agendamento``
+	detecta a colisão e devolve ``precisa_verificacao`` (ver test_booking.py,
+	``TestColisaoCPFUsuarioLogado``); esta classe cobre o passo seguinte, que
+	de fato vincula o Patient órfão à conta JÁ LOGADA depois do código certo
+	— NUNCA cria User novo, NUNCA reloga (diferente do guest,
+	``confirmar_codigo_e_agendar``)."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls._appointment_type = frappe.get_doc(
+			{
+				"doctype": "Appointment Type",
+				"appointment_type": "Teste Vincular Logado",
+				"allow_booking_for": "Practitioner",
+				"default_duration": 30,
+			}
+		).insert(ignore_permissions=True)
+		cls._practitioner = frappe.get_doc(
+			{
+				"doctype": "Healthcare Practitioner",
+				"first_name": "Praticante Teste Vincular Logado",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_apagar_definitivamente("Appointment Type", cls._appointment_type.name)
+		_apagar_definitivamente("Healthcare Practitioner", cls._practitioner.name)
+		super().tearDownClass()
+
+	def setUp(self):
+		frappe.local.request = frappe._dict(method="POST")
+		frappe.local.request_ip = _IP_TESTE
+		chave = frappe.cache.make_key(
+			"imun_rl:imunocare_ecommerce.conta.verificacao.confirmar_codigo_e_vincular_logado:"
+			f"{_IP_TESTE}"
+		)
+		frappe.cache.delete(chave)
+		self._usuario_antes = frappe.session.user
+
+	def tearDown(self):
+		frappe.set_user(self._usuario_antes)
+
+	def _novo_website_user(self, prefixo: str) -> str:
+		email, _c = _identidade_unica(prefixo)
+		u = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Teste",
+				"last_name": prefixo,
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", u.name)
+		return u.name
+
+	def _novo_patient_orfao(self, prefixo: str, cpf: str):
+		p = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": prefixo,
+				"middle_name": "de",
+				"last_name": "Teste",
+				"sex": "Male",
+				"dob": "1985-01-01",
+				"cpf": cpf,
+				"mobile": "51988990000",
+				"email": f"{prefixo.lower()}.{frappe.generate_hash(length=6)}@exemplo.com",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
+		return p
+
+	def test_vincula_patient_orfao_a_conta_logada_e_conclui_o_agendamento(self):
+		orfao = self._novo_patient_orfao("VinculoOrfao", "39053344705")
+		usuario = self._novo_website_user("vinculo.logado")
+		frappe.set_user(usuario)
+
+		token = _token()
+		c = mod_codigo.emitir(token, {"cpf": "39053344705"})
+
+		resultado = verificacao.confirmar_codigo_e_vincular_logado(
+			codigo=c,
+			verificacao_id=token,
+			appointment_date="2030-07-01",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+		)
+		self.addCleanup(_apagar_definitivamente, "Patient Appointment", resultado["appointment"])
+
+		self.assertTrue(resultado.get("vinculado"))
+		self.assertEqual(
+			frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient"),
+			orfao.name,
+		)
+		self.assertEqual(frappe.db.get_value("Patient", orfao.name, "user_id"), usuario)
+		# Nunca cria/troca a sessão — a conta já estava logada antes de chamar.
+		self.assertEqual(frappe.session.user, usuario)
+
+	def test_codigo_errado_nao_vincula_nada(self):
+		orfao = self._novo_patient_orfao("VinculoCodigoErrado", "52998224725")
+		usuario = self._novo_website_user("vinculo.codigo.errado")
+		frappe.set_user(usuario)
+
+		token = _token()
+		mod_codigo.emitir(token, {"cpf": "52998224725"})
+
+		with self.assertRaises(mod_codigo.CodigoInvalido):
+			verificacao.confirmar_codigo_e_vincular_logado(
+				codigo="000000",
+				verificacao_id=token,
+				appointment_date="2030-07-02",
+				appointment_time="09:00:00",
+			)
+		self.assertFalse(frappe.db.get_value("Patient", orfao.name, "user_id"))
+
+	def test_nunca_vincula_patient_que_ja_pertence_a_outra_conta_mesmo_com_codigo_certo(self):
+		"""Defesa em profundidade (Tarefa C): mesmo que
+		``agendamento.booking.criar_agendamento`` já tenha barrado a colisão
+		de CPF de terceiro ANTES de oferecer verificação nenhuma, esta função
+		reconfirma a trava — o estado pode ter mudado entre solicitar e
+		confirmar o código (ex.: outra aba vinculou o Patient a outra conta
+		nesse meio-tempo). Nunca um takeover, mesmo com o código certo."""
+		dono = self._novo_website_user("vinculo.dono")
+		patient_do_dono = self._novo_patient_orfao("VinculoDeOutro", "16899535009")
+		frappe.db.set_value("Patient", patient_do_dono.name, "user_id", dono, update_modified=False)
+
+		atacante = self._novo_website_user("vinculo.atacante")
+		frappe.set_user(atacante)
+
+		token = _token()
+		c = mod_codigo.emitir(token, {"cpf": "16899535009"})
+
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.confirmar_codigo_e_vincular_logado(
+				codigo=c,
+				verificacao_id=token,
+				appointment_date="2030-07-03",
+				appointment_time="09:00:00",
+			)
+
+		self.assertEqual(
+			frappe.db.get_value("Patient", patient_do_dono.name, "user_id"), dono
+		)
+
+	def test_guest_e_recusado(self):
+		frappe.set_user("Guest")
+		with self.assertRaises(frappe.PermissionError):
+			verificacao.confirmar_codigo_e_vincular_logado(
+				codigo="000000",
+				verificacao_id="qualquer",
+				appointment_date="2030-07-04",
+				appointment_time="09:00:00",
+			)

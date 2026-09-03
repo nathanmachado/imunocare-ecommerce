@@ -44,6 +44,74 @@ from frappe.utils import get_system_timezone, get_time, getdate, now_datetime
 _LOG_TITLE = "imunocare_ecommerce.agendamento.booking"
 
 
+class ColisaoCPFOrfao(Exception):
+	"""Levantada quando o CPF digitado por um usuário LOGADO já pertence a um
+	``Patient`` ÓRFÃO (``user_id`` vazio) — Tarefa B do spec
+	2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md.
+
+	Causa raiz que esta exceção substitui: ``Patient.insert()``/``save()``
+	batendo na trava ``unique`` do campo ``cpf`` e deixando
+	``frappe.exceptions.UniqueValidationError`` (subclasse de
+	``ValidationError`` — ver ``_completar_paciente_existente``, que só tratava
+	``MandatoryError`` explicitamente e deixava o resto vazar) chegar cru ao
+	cliente. Em vez de inserir/gravar um CPF que já é de outro registro, o
+	fluxo levanta isto e ``criar_agendamento`` converte para um retorno
+	estruturado (``{"precisa_verificacao": True, ...}``) que o storefront usa
+	para pedir prova de posse via OTP (reuso de
+	``imunocare_ecommerce.conta.verificacao`` — ver
+	``confirmar_codigo_e_vincular_logado``) ANTES de vincular o Patient à
+	conta logada. Nunca é levantada quando o Patient já pertence a OUTRA
+	conta — esse caso é uma recusa definitiva (``frappe.throw``), nunca uma
+	oferta de verificação (trava anti-takeover, mesmo princípio do CRÍTICO 1
+	de ``conta.verificacao``)."""
+
+	def __init__(self, patient: str, cpf: str):
+		self.patient = patient
+		self.cpf = cpf
+		super().__init__(patient)
+
+
+def _patient_com_mesmo_cpf(cpf: str, excluir: str | None = None) -> str | None:
+	"""Nome do ``Patient`` dono deste CPF (dígitos), exceto ``excluir`` (o
+	próprio registro, quando o chamador já sabe qual é) — ``None`` se ninguém
+	mais tiver esse CPF. Não faz nenhuma suposição sobre formatação (quem
+	chama já normalizou para dígitos)."""
+	if not cpf:
+		return None
+	nome = frappe.db.get_value("Patient", {"cpf": cpf}, "name")
+	if nome and nome != excluir:
+		return nome
+	return None
+
+
+def _checar_colisao_cpf(cpf: str, user: str, excluir: str | None = None) -> None:
+	"""Nunca deixa um CPF colidido chegar a ``insert()``/``save()`` (que
+	bateria na trava ``unique`` e vazaria ``UniqueValidationError`` cru — a
+	causa raiz do spec 2026-09-03).
+
+	- CPF livre (ninguém mais tem): não faz nada, segue normalmente.
+	- CPF de um ``Patient`` de OUTRA conta (``user_id`` de terceiro): recusa
+	  DE VEZ (``frappe.throw``) — nunca um takeover, com ou sem código (mesma
+	  trava CRÍTICO 1 de ``conta.verificacao``: quem digita o CPF de outra
+	  pessoa não prova posse nenhuma do contato daquele cadastro).
+	- CPF de um ``Patient`` ÓRFÃO (``user_id`` vazio): levanta
+	  ``ColisaoCPFOrfao`` — o chamador (``criar_agendamento``) converte isso
+	  num pedido de verificação por OTP em vez de inserir/gravar."""
+	outro = _patient_com_mesmo_cpf(cpf, excluir=excluir)
+	if not outro:
+		return
+	dono_atual = frappe.db.get_value("Patient", outro, "user_id")
+	if dono_atual and dono_atual != user:
+		frappe.throw(
+			_(
+				"Este CPF já está cadastrado em outra conta. Fale com a clínica "
+				"para regularizar seu acesso."
+			),
+			title=_("CPF já cadastrado"),
+		)
+	raise ColisaoCPFOrfao(outro, cpf)
+
+
 def _boot_datas() -> dict:
 	"""Fuso/formato de data-hora que o controle ``Date`` do Desk (``frappe.ui.Dialog``
 	com ``fieldtype: "Date"``) precisa para montar sem quebrar.
@@ -471,6 +539,15 @@ def _completar_paciente_existente(patient_name: str, patient_data: dict | str | 
 				frappe.throw(_("CPF inválido: {0}").format(doc.cpf))
 			doc.cpf = digitos
 
+			# Colisão de CPF (spec 2026-09-03, Tarefa C — mesma bifurcação do
+			# ramo "Patient novo" abaixo, só que aqui o Patient JÁ EXISTE e
+			# incompleto): sem esta checagem, ``doc.save()`` bateria na trava
+			# ``unique`` e o ``except frappe.ValidationError`` genérico logo
+			# abaixo ENGOLIRIA a colisão de CPF junto com o caso "sem
+			# endereço" (ortogonal) — o cliente nunca saberia que o problema
+			# era o CPF, e o Patient continuaria incompleto para sempre.
+			_checar_colisao_cpf(digitos, frappe.session.user, excluir=doc.name)
+
 	try:
 		doc.save(ignore_permissions=True)
 	except frappe.MandatoryError:
@@ -557,6 +634,20 @@ def _resolver_paciente(patient: str | None, patient_data: dict | str | None) -> 
 
 	usr = frappe.get_doc("User", user)
 	p = _montar_patient_doc(dados, usr)
+
+	# Colisão de CPF (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md,
+	# Tarefa B) — a causa raiz relatada pelo dono: usuário logado (ex.:
+	# Administrator) sem Patient vinculado por user_id/email digita o CPF real,
+	# que já é de um Patient ÓRFÃO (criado por outra origem, ex. clínica) — sem
+	# esta checagem, ``p.insert()`` abaixo bateria na trava ``unique`` de
+	# ``cpf`` e ``frappe.exceptions.UniqueValidationError`` (só ``MandatoryError``
+	# era tratado) vazaria cru para o cliente. Roda ANTES da checagem de
+	# ``faltando``: se o CPF colide, o caminho certo é vincular o Patient
+	# EXISTENTE por OTP (ver ``ColisaoCPFOrfao``/``criar_agendamento``), não
+	# pedir mais campos para um Patient que nunca vai ser inserido.
+	cpf_digitado = re.sub(r"\D", "", str(p.get("cpf") or ""))
+	if cpf_digitado:
+		_checar_colisao_cpf(cpf_digitado, user)
 
 	# Item B do spec 2026-09-02-loja-mitigacao-fluxos.md: NUNCA mais deixa o
 	# ``frappe.MandatoryError`` cru (que embute o nome interno do doc, ex.
@@ -692,7 +783,26 @@ def criar_agendamento(
 
 	wi, appointment_type = _resolver_agendavel(item_code, appointment_type)
 	prof = _resolver_practitioner(wi, practitioner)
-	patient_name = _resolver_paciente(patient, patient_data)
+
+	try:
+		patient_name = _resolver_paciente(patient, patient_data)
+	except ColisaoCPFOrfao as colisao:
+		# Tarefa B do spec 2026-09-03: em vez de inserir (e bater na trava
+		# ``unique`` de ``cpf``) ou vazar o erro cru, devolve um estado
+		# estruturado que o storefront (agendamento.bundle.js) reconhece e
+		# trata pedindo um código de verificação — reuso do MESMO fluxo OTP
+		# do guest (``imunocare_ecommerce.conta.verificacao``), só que aqui
+		# o usuário já está logado: ``confirmar_codigo_e_vincular_logado``
+		# vincula o Patient ÓRFÃO encontrado à conta atual (nunca cria conta
+		# nova, nunca reloga) e só então conclui ESTE MESMO agendamento.
+		# Nenhum dado é persistido/inserido até o código ser confirmado.
+		return {
+			"precisa_verificacao": True,
+			"mensagem": _(
+				"Este CPF já está cadastrado. Para concluir o agendamento, confirme sua "
+				"identidade com um código de verificação."
+			),
+		}
 	company = _empresa_padrao()
 
 	pa = frappe.new_doc("Patient Appointment")

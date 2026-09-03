@@ -711,3 +711,100 @@ def confirmar_codigo_e_agendar(
 	# site) em vez de adivinhar.
 	resultado["usuario"] = usuario
 	return resultado
+
+
+# ---------------------------------------------------------------------------
+# Colisão de CPF do usuário LOGADO (Tarefa B do spec
+# 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md) — reuso do MESMO
+# fluxo OTP acima, mas para vincular um Patient ÓRFÃO à conta que JÁ ESTÁ
+# logada, em vez de criar/logar um User novo.
+#
+# Fluxo completo (ver ``agendamento.booking``):
+#  1. ``criar_agendamento`` detecta a colisão (``ColisaoCPFOrfao``) e devolve
+#     ``{"precisa_verificacao": True}`` em vez de inserir/vazar erro cru.
+#  2. O storefront chama ``solicitar_codigo`` (SEM MUDANÇA NENHUMA aqui — a
+#     função já manda o código para o contato do CADASTRO quando o CPF
+#     digitado já existe, nunca para o que foi digitado agora — ver
+#     ``_resolver_envio``).
+#  3. O storefront chama esta função com o código: ela reconfirma a colisão
+#     (nunca confia no estado do passo 1, que pode ter mudado), vincula
+#     ``user_id`` = a conta JÁ LOGADA e conclui o MESMO agendamento.
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist(methods=["POST"])
+@rate_limit(limit=10, seconds=600)
+def confirmar_codigo_e_vincular_logado(
+	codigo: str,
+	appointment_date: str,
+	appointment_time: str,
+	verificacao_id: str | None = None,
+	item_code: str | None = None,
+	appointment_type: str | None = None,
+	practitioner: str | None = None,
+	modalidade: str | None = None,
+	session_id: str | None = None,
+) -> dict:
+	"""Confirma o código enviado por ``solicitar_codigo`` para um CPF que já é
+	de um ``Patient`` ÓRFÃO e vincula esse Patient à conta JÁ LOGADA (nunca
+	cria User novo, nunca reloga — diferente de ``confirmar_codigo_e_agendar``,
+	que é o caminho do visitante). Requer login: quem chega aqui já passou
+	pela ramificação de colisão de ``agendamento.booking.criar_agendamento``,
+	que só existe para usuário autenticado."""
+	from imunocare_ecommerce.agendamento.booking import criar_agendamento
+	from imunocare_ecommerce.conta.codigo import conferir
+
+	if frappe.session.user == "Guest":
+		frappe.throw(
+			_("Faça login para agendar sua consulta."), frappe.PermissionError, title=_("Login necessário")
+		)
+
+	verificacao_id = _validar_verificacao_id(verificacao_id)
+	dados = conferir(verificacao_id, codigo)
+
+	cpf = _so_digitos(dados.get("cpf"))
+	if not cpf:
+		frappe.throw(_("Código expirado. Peça um novo."), title=_("Código inválido"))
+
+	paciente = frappe.db.get_value("Patient", {"cpf": cpf}, "name")
+	if not paciente:
+		# O cadastro pode ter sido apagado/alterado entre solicitar e
+		# confirmar o código — mesma mensagem genérica de sempre, nunca um
+		# 500 nem uma dica de que o CPF "sumiu".
+		frappe.throw(
+			_("Não foi possível concluir a verificação. Peça um novo código."),
+			title=_("Verificação indisponível"),
+		)
+
+	usuario = frappe.session.user
+
+	# Defesa em profundidade (Tarefa C — nunca confia que a checagem feita em
+	# ``criar_agendamento`` no passo 1 ainda vale): entre solicitar o código e
+	# confirmá-lo, o Patient pode ter sido vinculado a OUTRA conta por
+	# qualquer outro caminho. Reconfirma a trava anti-takeover aqui, no
+	# momento exato do vínculo — nunca um takeover, com ou sem código certo.
+	dono_atual = frappe.db.get_value("Patient", paciente, "user_id")
+	if dono_atual and dono_atual != usuario:
+		frappe.throw(
+			_(
+				"Este CPF já está cadastrado em outra conta. Fale com a clínica "
+				"para regularizar seu acesso."
+			),
+			title=_("CPF já cadastrado"),
+		)
+
+	if not dono_atual:
+		frappe.db.set_value("Patient", paciente, "user_id", usuario, update_modified=False)
+
+	resultado = criar_agendamento(
+		appointment_date=appointment_date,
+		appointment_time=appointment_time,
+		item_code=item_code,
+		appointment_type=appointment_type,
+		practitioner=practitioner,
+		patient=paciente,
+		modalidade=modalidade,
+		session_id=session_id,
+	)
+	resultado["vinculado"] = True
+	return resultado

@@ -19,6 +19,12 @@
 
 {% block breadcrumbs %}
 <div class="item-breadcrumbs small text-muted">
+	{#- Tarefa E (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
+		troca a cadeia de ancestrais pela categoria CURADA (website_item_groups)
+		— o nativo (webshop...website_item.py:get_context) monta `parents` a
+		partir do Item.item_group BRUTO ("Aplicação de Vacinas" para os 38
+		produtos migrados em massa), nunca a seção real da loja. -#}
+	{% set parents = imun_parents_corrigidos(doc, parents) %}
 	{% include "templates/includes/breadcrumbs.html" %}
 </div>
 {% endblock %}
@@ -130,6 +136,15 @@
 	frappe.boot = {{ boot | json }}
 	// for backward compatibility of some libs
 	frappe.sys_defaults = frappe.boot.sysdefaults;
+	// Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
+	// o boot de página WEB nunca traz __messages (só o boot do Desk) — sem
+	// isso o __() client-side (usado por bastante JS nativo do webshop:
+	// "Search for Products", "Item Code :" etc.) nunca traduzia, mesmo com a
+	// tradução já presente em imunocare_ecommerce/translations/pt-BR.csv.
+	// Mesma atribuição que frappe/www/app.html (shell do Desk) faz — só que
+	// aqui, porque a loja nunca carrega aquele shell.
+	frappe.boot["__messages"] = {{ imun_mensagens_loja() | tojson }};
+	frappe._messages = frappe.boot["__messages"];
 </script>
 {{ include_script("frappe-web.bundle.js") }}
 {{ include_script("controls.bundle.js") }}

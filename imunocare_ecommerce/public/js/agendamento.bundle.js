@@ -21,6 +21,110 @@ frappe.ready(function () {
 	imun_retomar_reserva_pendente();
 });
 
+// ---------------------------------------------------------------------------
+// Tarefa D (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md) — Esc
+// não pode fechar o modal de agendamento inteiro (descartando os dados já
+// digitados) só porque o cliente queria fechar o CALENDÁRIO do datepicker.
+//
+// bootstrap-datepicker (air-datepicker, ver frappe/form/controls/date.js) e o
+// `frappe.ui.Dialog` (bootstrap modal) escutam a MESMA tecla Esc no MESMO
+// documento — sem interceptar, Esc fecha os dois de uma vez (ou o modal
+// inteiro quando só o calendário deveria fechar). A pilha abaixo (não
+// depender de classes CSS do bootstrap, que já nos queimou antes — ver
+// feedback_webshop_base_scripts_sem_boot) rastreia só os diálogos que ESTE
+// arquivo cria; qualquer outro diálogo do site continua com o Esc nativo.
+// ---------------------------------------------------------------------------
+var IMUN_MODAIS_AGENDAMENTO_ABERTOS = [];
+var IMUN_ESC_GUARD_INSTALADO = false;
+
+function imun_datepicker_aberto_no_dialogo(dialogo) {
+	// Usa a API PÚBLICA do air-datepicker (`.visible`/`.hide()`, a mesma que
+	// `ControlDate.set_datepicker` já expõe em `control.datepicker`) em vez de
+	// adivinhar classes CSS internas da lib — mais robusto a mudanças de
+	// versão, e é exatamente o objeto que abre/fecha o calendário de CADA
+	// campo Date do diálogo (appointment_date/imun_dob/dob/paciente_dob).
+	var fields = (dialogo && dialogo.fields_dict) || {};
+	for (var fieldname in fields) {
+		if (!Object.prototype.hasOwnProperty.call(fields, fieldname)) {
+			continue;
+		}
+		var control = fields[fieldname];
+		if (control && control.datepicker && control.datepicker.visible) {
+			return control.datepicker;
+		}
+	}
+	return null;
+}
+
+function imun_instalar_guarda_esc_uma_vez() {
+	if (IMUN_ESC_GUARD_INSTALADO) {
+		return;
+	}
+	IMUN_ESC_GUARD_INSTALADO = true;
+	// Capture phase (3º argumento `true`): garante que ESTE listener roda
+	// ANTES do handler nativo do bootstrap modal (que fica no próprio
+	// elemento, fase de bubble) — `stopPropagation` na fase de captura
+	// impede o evento de sequer alcançar o elemento do modal.
+	document.addEventListener(
+		"keydown",
+		function (e) {
+			if (e.key !== "Escape" && e.keyCode !== 27) {
+				return;
+			}
+			var topo = IMUN_MODAIS_AGENDAMENTO_ABERTOS[IMUN_MODAIS_AGENDAMENTO_ABERTOS.length - 1];
+			if (!topo) {
+				return; // nenhum diálogo NOSSO aberto — Esc nativo de sempre.
+			}
+			var pickerAberto = imun_datepicker_aberto_no_dialogo(topo);
+			if (pickerAberto) {
+				pickerAberto.hide();
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+				return;
+			}
+			// Nenhum datepicker aberto: Esc fecharia o modal inteiro,
+			// descartando os dados já preenchidos — confirma antes.
+			e.preventDefault();
+			e.stopPropagation();
+			e.stopImmediatePropagation();
+			frappe.confirm(
+				__("Deseja mesmo fechar? Os dados preenchidos neste formulário serão perdidos."),
+				function () {
+					topo.hide();
+				}
+			);
+		},
+		true
+	);
+}
+
+function imun_registrar_modal_para_esc(dialogo) {
+	imun_instalar_guarda_esc_uma_vez();
+	IMUN_MODAIS_AGENDAMENTO_ABERTOS.push(dialogo);
+	dialogo.$wrapper.on("hidden.bs.modal.imun_esc_guard", function () {
+		var idx = IMUN_MODAIS_AGENDAMENTO_ABERTOS.indexOf(dialogo);
+		if (idx !== -1) {
+			IMUN_MODAIS_AGENDAMENTO_ABERTOS.splice(idx, 1);
+		}
+	});
+}
+
+// Tarefa D: o datepicker de Data de Nascimento abre sempre no mês/ano ATUAL
+// (`ControlDate.get_start_date` = hoje) — péssimo para um campo de
+// nascimento, que obriga o cliente a clicar "mês anterior" dezenas de vezes.
+// `df.options` é repassado cru ao air-datepicker como override (ver
+// `ControlDate.get_df_options`/`set_date_options`, que faz
+// `{...datepicker_options_padrão, ...get_df_options()}`) — campo Date não usa
+// `options` para mais nada, então isto NUNCA colide com outro uso do campo.
+// Abre ~30 anos atrás (ano útil para o adulto que mais agenda pela loja);
+// digitar a data diretamente (DD/MM/AAAA) sempre funcionou e continua
+// funcionando sem depender do calendário.
+function imun_opcoes_datepicker_nascimento() {
+	var anoInicial = new Date().getFullYear() - 30;
+	return { startDate: new Date(anoInicial, 0, 1) };
+}
+
 // Reserva como visitante (Task 6) — sessionStorage "imun_reserva_pendente":
 // sobrevive à ida ao /login e ao reload do caso "horário sumiu" (ver
 // imun_passo_codigo). Carimbado com ``criado_em`` e limpo no fechamento dos
@@ -408,7 +512,16 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			fields.push({ fieldname: "imun_nome_completo", fieldtype: "Data", label: __("Nome completo"), reqd: 1 });
 		}
 		if (camposFaltantes.indexOf("dob") !== -1) {
-			fields.push({ fieldname: "imun_dob", fieldtype: "Date", label: __("Data de nascimento"), reqd: 1 });
+			fields.push({
+				fieldname: "imun_dob",
+				fieldtype: "Date",
+				label: __("Data de nascimento"),
+				reqd: 1,
+				// Tarefa D: abre o calendário ~30 anos atrás em vez do mês
+				// atual — também sempre aceitou digitação direta (DD/MM/AAAA),
+				// sem depender do calendário.
+				options: imun_opcoes_datepicker_nascimento(),
+			});
 		}
 		if (camposFaltantes.indexOf("cpf") !== -1) {
 			fields.push({ fieldname: "imun_cpf", fieldtype: "Data", label: __("CPF"), reqd: 1 });
@@ -493,6 +606,15 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 				}
 			}
 
+			var escolhaAtual = {
+				item_code: params.item_code,
+				appointment_type: params.appointment_type,
+				practitioner: info.practitioner,
+				appointment_date: values.appointment_date,
+				appointment_time: values.appointment_time,
+				modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
+			};
+
 			frappe.call({
 				method: "imunocare_ecommerce.agendamento.booking.criar_agendamento",
 				args: Object.assign(
@@ -514,23 +636,18 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 					if (!r.message) {
 						return;
 					}
-					d.hide();
-					if (r.message.payment_url) {
-						window.location.href = r.message.payment_url;
-					} else {
-						var mensagem = __(
-							"Seu agendamento ({0}) foi registrado. Nossa equipe entrará em contato para combinar o pagamento.",
-							[r.message.appointment]
-						);
-						if (r.message.aviso_domiciliar) {
-							mensagem += "<br><br>" + frappe.utils.escape_html(r.message.aviso_domiciliar);
-						}
-						frappe.msgprint({
-							title: __("Agendamento confirmado"),
-							message: mensagem,
-							indicator: "green",
-						});
+					// Tarefa B do spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md:
+					// o CPF digitado já é de um Patient existente (órfão) — em vez do
+					// erro cru de CPF duplicado, o backend pede para confirmar a
+					// identidade por um código de verificação ANTES de vincular esse
+					// Patient à conta logada e concluir ESTE MESMO agendamento.
+					if (r.message.precisa_verificacao) {
+						d.hide();
+						imun_passo_colisao_cpf(escolhaAtual, values.imun_cpf || "");
+						return;
 					}
+					d.hide();
+					imun_finalizar_sucesso_agendamento(r.message);
 				},
 			});
 		},
@@ -555,6 +672,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 	});
 
 	d.show();
+	imun_registrar_modal_para_esc(d);
 
 	// Reabertura pós-login/verificação (Task 6): repõe a escolha de data/hora
 	// de antes de identificar — o listener de "change" acima revalida o
@@ -564,6 +682,200 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 		d.set_value("appointment_date", preset.appointment_date);
 		d.set_value("appointment_time", preset.appointment_time);
 	}
+}
+
+// Sucesso do agendamento — compartilhado entre o caminho direto (logado sem
+// colisão) e o fim do fluxo de colisão de CPF (imun_passo_codigo_vinculo_logado),
+// que devolve o MESMO shape de resultado de criar_agendamento.
+function imun_finalizar_sucesso_agendamento(resultado) {
+	if (resultado.payment_url) {
+		window.location.href = resultado.payment_url;
+		return;
+	}
+	var mensagem = __(
+		"Seu agendamento ({0}) foi registrado. Nossa equipe entrará em contato para combinar o pagamento.",
+		[resultado.appointment]
+	);
+	if (resultado.aviso_domiciliar) {
+		mensagem += "<br><br>" + frappe.utils.escape_html(resultado.aviso_domiciliar);
+	}
+	frappe.msgprint({
+		title: __("Agendamento confirmado"),
+		message: mensagem,
+		indicator: "green",
+	});
+}
+
+// ---------------------------------------------------------------------------
+// Colisão de CPF do usuário LOGADO (Tarefa B do spec
+// 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md) — reuso do MESMO
+// motor de OTP da reserva como visitante (imunocare_ecommerce.conta.verificacao):
+// ``solicitar_codigo`` já manda o código para o contato DO CADASTRO quando o
+// CPF digitado já existe (nunca para o que a pessoa digitar aqui) — nenhuma
+// mudança nesse endpoint foi necessária. Só o passo de CONFIRMAÇÃO é novo
+// (``confirmar_codigo_e_vincular_logado``): vincula o Patient órfão à conta
+// JÁ LOGADA (nunca cria User novo, nunca reloga).
+// ---------------------------------------------------------------------------
+
+function imun_passo_colisao_cpf(escolha, cpfDigitado) {
+	var avancouParaCodigo = false;
+	var d2 = new frappe.ui.Dialog({
+		title: __("Confirme sua identidade"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				options:
+					"<p>" +
+					__(
+						"Este CPF já está cadastrado. Para vincular à sua conta e concluir o agendamento, confirme com um código de verificação."
+					) +
+					"</p>",
+			},
+			{
+				fieldname: "canal",
+				fieldtype: "Select",
+				label: __("Receber o código por"),
+				reqd: 1,
+				description: __(
+					"O código vai para o contato JÁ cadastrado — não para o que você digitar abaixo."
+				),
+			},
+			{
+				fieldname: "email",
+				fieldtype: "Data",
+				options: "Email",
+				label: __("E-mail"),
+				depends_on: "eval:doc.canal=='" + __("E-mail") + "'",
+				mandatory_depends_on: "eval:doc.canal=='" + __("E-mail") + "'",
+			},
+			{
+				fieldname: "celular",
+				fieldtype: "Data",
+				label: __("Celular / WhatsApp"),
+				depends_on: "eval:doc.canal=='" + __("WhatsApp") + "'",
+				mandatory_depends_on: "eval:doc.canal=='" + __("WhatsApp") + "'",
+			},
+		],
+		primary_action_label: __("Receber código"),
+		primary_action: function (v) {
+			var canalEfetivo = v.canal === __("WhatsApp") ? "whatsapp" : "email";
+			var dados = { cpf: cpfDigitado, email: v.email, celular: v.celular };
+			frappe.call({
+				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
+				args: { canal: canalEfetivo, dados: dados },
+				freeze: true,
+				freeze_message: __("Enviando código..."),
+				callback: function (r) {
+					if (!r.message) {
+						return;
+					}
+					avancouParaCodigo = true;
+					d2.hide();
+					imun_passo_codigo_vinculo_logado(escolha, r.message, { canal: canalEfetivo, dados: dados });
+				},
+			});
+		},
+		on_hide: function () {
+			if (!avancouParaCodigo) {
+				frappe.show_alert({
+					message: __("Agendamento não confirmado — verificação cancelada."),
+					indicator: "orange",
+				});
+			}
+		},
+	});
+
+	// O seletor só oferece o canal que está operacional AGORA (mesmo padrão
+	// do passo de identificação do guest, imun_passo_identificacao).
+	frappe.call({
+		method: "imunocare_ecommerce.conta.verificacao.canais_disponiveis",
+		callback: function (r) {
+			var opcoes = [];
+			if ((r.message || {}).whatsapp) {
+				opcoes.push(__("WhatsApp"));
+			}
+			if ((r.message || {}).email) {
+				opcoes.push(__("E-mail"));
+			}
+			d2.set_df_property("canal", "options", opcoes.join("\n"));
+			if (opcoes.length === 1) {
+				d2.set_value("canal", opcoes[0]);
+			}
+		},
+	});
+
+	d2.show();
+	imun_registrar_modal_para_esc(d2);
+}
+
+function imun_passo_codigo_vinculo_logado(escolha, envio, reenvio) {
+	var concluido = false;
+	var d3 = new frappe.ui.Dialog({
+		title: __("Digite o código"),
+		fields: [
+			{ fieldname: "aviso_html", fieldtype: "HTML" },
+			{ fieldname: "codigo", fieldtype: "Data", label: __("Código de 6 dígitos"), reqd: 1 },
+		],
+		primary_action_label: __("Confirmar agendamento"),
+		primary_action: function (v) {
+			frappe.call({
+				method: "imunocare_ecommerce.conta.verificacao.confirmar_codigo_e_vincular_logado",
+				args: {
+					codigo: v.codigo,
+					verificacao_id: envio.verificacao_id,
+					appointment_date: escolha.appointment_date,
+					appointment_time: escolha.appointment_time,
+					item_code: escolha.item_code,
+					appointment_type: escolha.appointment_type,
+					practitioner: escolha.practitioner,
+					modalidade: escolha.modalidade,
+					session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
+				},
+				freeze: true,
+				freeze_message: __("Confirmando..."),
+				callback: function (r) {
+					if (!r.message) {
+						return;
+					}
+					concluido = true;
+					d3.hide();
+					imun_finalizar_sucesso_agendamento(r.message);
+				},
+			});
+		},
+		secondary_action_label: __("Reenviar código"),
+		secondary_action: function () {
+			if (!reenvio) {
+				return;
+			}
+			frappe.call({
+				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
+				args: Object.assign({}, reenvio, { verificacao_id_anterior: envio.verificacao_id }),
+				freeze: true,
+				freeze_message: __("Reenviando código..."),
+				callback: function (r) {
+					if (!r.message) {
+						return;
+					}
+					envio = r.message;
+					imun_atualizar_aviso_codigo(d3, envio);
+					d3.set_value("codigo", "");
+					frappe.show_alert({ message: __("Novo código enviado."), indicator: "green" });
+				},
+			});
+		},
+		on_hide: function () {
+			if (!concluido) {
+				frappe.show_alert({
+					message: __("Agendamento não confirmado — verificação cancelada."),
+					indicator: "orange",
+				});
+			}
+		},
+	});
+	imun_atualizar_aviso_codigo(d3, envio);
+	d3.show();
+	imun_registrar_modal_para_esc(d3);
 }
 
 function imun_render_horarios(d, res) {
@@ -641,7 +953,16 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 			{ fieldname: "celular", fieldtype: "Data", label: __("Celular / WhatsApp"), reqd: 1 },
 			{ fieldname: "email", fieldtype: "Data", label: __("E-mail"), options: "Email", reqd: 1 },
 			{ fieldname: "cpf", fieldtype: "Data", label: __("CPF"), reqd: 1 },
-			{ fieldname: "dob", fieldtype: "Date", label: __("Data de nascimento"), reqd: 1 },
+			{
+				fieldname: "dob",
+				fieldtype: "Date",
+				label: __("Data de nascimento"),
+				reqd: 1,
+				// Tarefa D: quem se verifica aqui é sempre maior de 18
+				// (_exigir_adulto) — abre o calendário ~30 anos atrás em vez
+				// do mês atual. Digitar direto (DD/MM/AAAA) já funcionava.
+				options: imun_opcoes_datepicker_nascimento(),
+			},
 			{
 				fieldname: "sexo",
 				fieldtype: "Select",
@@ -752,6 +1073,7 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 	});
 
 	d2.show();
+	imun_registrar_modal_para_esc(d2);
 }
 
 // Passo do código — ``reenvio`` guarda {canal, dados} da última chamada a
@@ -879,6 +1201,7 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 	});
 	imun_atualizar_aviso_codigo(d3, envio);
 	d3.show();
+	imun_registrar_modal_para_esc(d3);
 }
 
 function imun_atualizar_aviso_codigo(d3, envio) {

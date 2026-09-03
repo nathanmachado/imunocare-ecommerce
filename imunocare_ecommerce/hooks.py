@@ -193,6 +193,14 @@ jinja = {
 		# do item (templates/generators/item/item.html) para o
 		# public/js/agendamento.js decidir o botão.
 		"imunocare_ecommerce.catalogo.jinja_utils.imun_sinal_servico",
+		# Tarefa E (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
+		# corrige o breadcrumb do produto para a categoria CURADA em vez do
+		# Item.item_group bruto ("Aplicação de Vacinas").
+		"imunocare_ecommerce.catalogo.jinja_utils.imun_parents_corrigidos",
+		# Tarefa F: dicionário de tradução para o boot da storefront
+		# (frappe.boot.__messages/frappe._messages) — ver base_scripts de
+		# item.html/cart.html/customer_reviews.html.
+		"imunocare_ecommerce.catalogo.jinja_utils.imun_mensagens_loja",
 	]
 }
 

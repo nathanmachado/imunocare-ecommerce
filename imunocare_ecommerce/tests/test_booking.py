@@ -636,3 +636,212 @@ class TestPatientExistenteIncompletoNaoDescartaPatientData(FrappeTestCase):
 			frappe.db.get_value("Patient Appointment", resultado["appointment"], "patient"),
 			paciente,
 		)
+
+
+class TestColisaoCPFUsuarioLogado(FrappeTestCase):
+	"""Tarefa B do spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md —
+	causa raiz relatada pelo dono: usuário logado (ex.: Administrator) cujo
+	Patient não casa por ``user_id``/``email`` digita um CPF que já é de um
+	Patient EXISTENTE — antes deste fix, ``Patient.insert()``/``save()``
+	batia na trava ``unique`` de ``cpf`` e ``UniqueValidationError`` vazava
+	crua (só ``MandatoryError`` era tratado).
+
+	Tarefa C (varredura anti-recorrência, ``feedback_regra_meio_fechada``):
+	a mesma checagem é coberta nos DOIS ramos onde um CPF pode colidir —
+	Patient NOVO (``_resolver_paciente`` monta e tentaria inserir) e Patient
+	EXISTENTE mas incompleto (``_completar_paciente_existente`` tentaria
+	salvar) — e nas DUAS bifurcações de quem já é dono do CPF colidido:
+	órfão (vinculável por OTP) x de outra conta (recusa definitiva, nunca
+	takeover)."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls._appointment_type = frappe.get_doc(
+			{
+				"doctype": "Appointment Type",
+				"appointment_type": "Teste Colisao CPF Logado",
+				"allow_booking_for": "Practitioner",
+				"default_duration": 30,
+			}
+		).insert(ignore_permissions=True)
+		cls._practitioner = frappe.get_doc(
+			{
+				"doctype": "Healthcare Practitioner",
+				"first_name": "Praticante Teste Colisao CPF",
+				"status": "Active",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_apagar_definitivamente("Appointment Type", cls._appointment_type.name)
+		_apagar_definitivamente("Healthcare Practitioner", cls._practitioner.name)
+		super().tearDownClass()
+
+	def setUp(self):
+		self._usuario_antes = frappe.session.user
+
+	def tearDown(self):
+		frappe.set_user(self._usuario_antes)
+
+	def _novo_website_user_sem_patient(self, prefixo: str) -> str:
+		email = f"{prefixo}.{frappe.generate_hash(length=6)}@exemplo.com"
+		u = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Teste",
+				"last_name": prefixo,
+				"send_welcome_email": 0,
+				"user_type": "Website User",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "User", u.name)
+		return u.name
+
+	def _novo_patient_orfao_com_cpf(self, prefixo: str, cpf: str):
+		p = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": prefixo,
+				"middle_name": "de",
+				"last_name": "Teste",
+				"sex": "Male",
+				"dob": "1985-01-01",
+				"cpf": cpf,
+				"mobile": "51988990000",
+				"email": f"{prefixo.lower()}.{frappe.generate_hash(length=6)}@exemplo.com",
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
+		return p
+
+	def test_cpf_colide_com_patient_orfao_pede_verificacao_sem_criar_patient_novo(self):
+		orfao = self._novo_patient_orfao_com_cpf("Orfao", "10433218100")
+		self.assertFalse(orfao.user_id, "precondição: órfão")
+
+		usuario = self._novo_website_user_sem_patient("colisao.orfao")
+		frappe.set_user(usuario)
+
+		resultado = booking.criar_agendamento(
+			appointment_date="2030-06-01",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+			patient_data={
+				"dob": "1990-01-01",
+				"cpf": "10433218100",
+				"sex": "Male",
+				"mobile": "51999112233",
+			},
+		)
+
+		self.assertTrue(resultado.get("precisa_verificacao"))
+		self.assertNotIn("appointment", resultado)
+		# Nenhum Patient novo foi criado, e o órfão continua órfão (só o
+		# passo de OTP — fora do escopo deste teste — vincularia).
+		self.assertFalse(frappe.db.exists("Patient", {"user_id": usuario}))
+		self.assertFalse(frappe.db.get_value("Patient", orfao.name, "user_id"))
+		self.assertEqual(frappe.db.count("Patient", {"cpf": "10433218100"}), 1)
+
+	def test_cpf_colide_com_patient_de_outra_conta_e_recusado_sem_oferecer_verificacao(self):
+		dono = self._novo_website_user_sem_patient("colisao.dono")
+		patient_do_dono = self._novo_patient_orfao_com_cpf("DoDono", "96001338914")
+		frappe.db.set_value("Patient", patient_do_dono.name, "user_id", dono, update_modified=False)
+
+		atacante = self._novo_website_user_sem_patient("colisao.atacante")
+		frappe.set_user(atacante)
+
+		with self.assertRaises(frappe.ValidationError):
+			booking.criar_agendamento(
+				appointment_date="2030-06-02",
+				appointment_time="09:00:00",
+				appointment_type=self._appointment_type.name,
+				practitioner=self._practitioner.name,
+				patient_data={
+					"dob": "1990-01-01",
+					"cpf": "96001338914",
+					"sex": "Male",
+					"mobile": "51999112233",
+				},
+			)
+
+		# Nunca um takeover — o dono continua o dono, sem relação com o CPF
+		# ter sido digitado por outra conta.
+		self.assertEqual(
+			frappe.db.get_value("Patient", patient_do_dono.name, "user_id"), dono
+		)
+		self.assertFalse(frappe.db.exists("Patient", {"user_id": atacante}))
+
+	def _usuario_com_patient_incompleto(self, prefixo: str) -> tuple[str, str]:
+		usuario = self._novo_website_user_sem_patient(prefixo)
+		p = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": "Teste",
+				"last_name": prefixo,
+				"user_id": usuario,
+				"email": usuario,
+				"imun_cep": "90000000",
+				"imun_logradouro": "Rua de Teste, 123",
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
+		return usuario, p.name
+
+	def test_completar_patient_existente_com_cpf_de_orfao_alheio_pede_verificacao(self):
+		"""Mesma colisão, mas pelo OUTRO ramo (Tarefa C): o Patient do usuário
+		logado JÁ EXISTE (incompleto) — ``_completar_paciente_existente``
+		tentaria ``doc.save()`` com o CPF colidido e bateria na MESMA trava
+		``unique``."""
+		orfao = self._novo_patient_orfao_com_cpf("OrfaoExistente", "08386379499")
+		usuario, paciente = self._usuario_com_patient_incompleto("colisao.existente.orfao")
+		frappe.set_user(usuario)
+
+		resultado = booking.criar_agendamento(
+			appointment_date="2030-06-03",
+			appointment_time="09:00:00",
+			appointment_type=self._appointment_type.name,
+			practitioner=self._practitioner.name,
+			patient_data={
+				"dob": "1990-01-01",
+				"cpf": "08386379499",
+				"sex": "Male",
+				"mobile": "51999112233",
+			},
+		)
+
+		self.assertTrue(resultado.get("precisa_verificacao"))
+		self.assertNotIn("appointment", resultado)
+		# O CPF colidido NUNCA foi gravado no Patient próprio (o save nem foi
+		# tentado) — nem o órfão foi vinculado (isso é papel do passo de OTP).
+		self.assertFalse(frappe.db.get_value("Patient", paciente, "cpf"))
+		self.assertFalse(frappe.db.get_value("Patient", orfao.name, "user_id"))
+
+	def test_completar_patient_existente_com_cpf_de_outra_conta_e_recusado(self):
+		dono = self._novo_website_user_sem_patient("colisao.existente.dono")
+		patient_do_dono = self._novo_patient_orfao_com_cpf("ExistenteDoDono", "02654235114")
+		frappe.db.set_value("Patient", patient_do_dono.name, "user_id", dono, update_modified=False)
+
+		usuario, paciente = self._usuario_com_patient_incompleto("colisao.existente.atacante")
+		frappe.set_user(usuario)
+
+		with self.assertRaises(frappe.ValidationError):
+			booking.criar_agendamento(
+				appointment_date="2030-06-04",
+				appointment_time="09:00:00",
+				appointment_type=self._appointment_type.name,
+				practitioner=self._practitioner.name,
+				patient_data={
+					"dob": "1990-01-01",
+					"cpf": "02654235114",
+					"sex": "Male",
+					"mobile": "51999112233",
+				},
+			)
+
+		self.assertFalse(frappe.db.get_value("Patient", paciente, "cpf"))
+		self.assertEqual(
+			frappe.db.get_value("Patient", patient_do_dono.name, "user_id"), dono
+		)

@@ -29,6 +29,11 @@
 	frappe.boot = {{ boot | json }}
 	// for backward compatibility of some libs
 	frappe.sys_defaults = frappe.boot.sysdefaults;
+	// Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
+	// ver comentário equivalente em templates/generators/item/item.html —
+	// injeta o dicionário de tradução que o boot de página web nunca traz.
+	frappe.boot["__messages"] = {{ imun_mensagens_loja() | tojson }};
+	frappe._messages = frappe.boot["__messages"];
 </script>
 {{ include_script("frappe-web.bundle.js") }}
 {{ include_script("controls.bundle.js") }}

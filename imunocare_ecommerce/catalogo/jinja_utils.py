@@ -16,20 +16,39 @@ _LOG_TITLE = "imunocare_ecommerce.catalogo.jinja_utils"
 
 
 def contagem_produtos_publicados(item_group: str) -> int:
-	"""Quantos Website Item publicados existem na categoria (via
-	``Website Item Group`` — mesma junção usada por
-	``catalogo.setup.secoes_para_home``)."""
+	"""Quantos Website Item publicados existem na categoria.
+
+	Tarefa E do spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md:
+	conta pelos DOIS caminhos que o filtro NATIVO do webshop realmente usa
+	(``webshop.product_data_engine.query.ProductQuery.build_item_group_filters``
+	— ``or_filters`` com ``Website Item.item_group == X`` OU
+	``Website Item Group.item_group == X``), não só o segundo. Antes desta
+	revisão, esta função só olhava a tabela curada (``Website Item Group`` —
+	``catalogo.setup._upsert_website_item``): uma categoria cujo(s) item(ns)
+	tivesse(m) ``Item.item_group`` batendo DIRETO com o nome da categoria (sem
+	nunca terem passado pela curadoria) era subcontada como "vazia" aqui
+	mesmo aparecendo normalmente no grid nativo — a mesma bifurcação
+	'decisão de vazio' x 'decisão de filtro' tinha que ler os DOIS caminhos
+	pela mesma regra (feedback_regra_meio_fechada)."""
 	try:
 		if not item_group or not frappe.db.exists("DocType", "Website Item Group"):
 			return 0
-		nomes = frappe.get_all(
+		nomes_curados = frappe.get_all(
 			"Website Item Group",
 			filters={"item_group": item_group, "parenttype": "Website Item"},
 			pluck="parent",
 		)
+		nomes = set(nomes_curados)
+		nomes.update(
+			frappe.get_all(
+				"Website Item",
+				filters={"item_group": item_group},
+				pluck="name",
+			)
+		)
 		if not nomes:
 			return 0
-		return frappe.db.count("Website Item", {"name": ["in", nomes], "published": 1})
+		return frappe.db.count("Website Item", {"name": ["in", list(nomes)], "published": 1})
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 		return 0
@@ -89,6 +108,21 @@ _INFO_CATEGORIA_VAZIA: dict[str, dict[str, str]] = {
 		"cta_label": "Quero ser avisado(a)",
 		"cta_href": "/contact",
 	},
+	# Tarefa E do spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md:
+	# "Planos" faltava aqui — sem entrada, uma categoria com 0 produtos
+	# curados caía no ``{% else %}`` do template (grid nativo do webshop) em
+	# vez do bloco informativo, violando "nunca mostrar tudo/vazio incoerente"
+	# quando não há Planos publicado. Se HOUVER Planos publicado,
+	# ``contagem_produtos_publicados`` > 0 e esta entrada nem é consultada —
+	# não esconde produto real nenhum.
+	"Planos": {
+		"mensagem": (
+			"Em breve você poderá contratar planos de vacinação diretamente por "
+			"aqui. Enquanto isso, fale com a nossa equipe para conhecer as opções."
+		),
+		"cta_label": "Falar com a Imunocare",
+		"cta_href": "/contact",
+	},
 }
 
 
@@ -112,3 +146,84 @@ def imun_sinal_servico(doc) -> dict:
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 		return {"servico": False, "appointment_type": None}
+
+
+# ---------------------------------------------------------------------------
+# Tarefa E (rotulagem exibida) — breadcrumb da página do produto
+# ---------------------------------------------------------------------------
+
+
+def imun_parents_corrigidos(doc, parents_originais):
+	"""Corrige o breadcrumb ("Categoria") do Website Item para a categoria
+	CURADA (``website_item_groups`` — mesma fonte de verdade que
+	``catalogo.setup._upsert_website_item`` já usa para publicar o produto na
+	seção certa), em vez do ``Item.item_group`` bruto.
+
+	Causa raiz (Tarefa E do spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
+	``webshop...website_item.py:WebsiteItem.get_context`` (upstream, não
+	tocado) monta ``context.parents`` com
+	``get_parent_item_groups(self.item_group, from_item=True)`` — usando o
+	``item_group`` BRUTO do Item (hoje "Aplicação de Vacinas" para os 38
+	produtos migrados em massa, ver relatório da revisão de taxonomia), nunca
+	a seção curada. Resultado: brincos/vitaminas mostravam "Aplicação de
+	Vacinas" no breadcrumb, mesmo já publicados na seção certa da loja
+	(``website_item_groups``, que rege navegação/filtro — só o BREADCRUMB
+	ficava errado).
+
+	Fix por REUSO (nunca reimplementa a cadeia de ancestrais): chama a MESMA
+	função nativa (``get_parent_item_groups``) só que com o nome da categoria
+	CURADA — devolve a cadeia certa (Home > Todos os Produtos > <categoria
+	curada>) sem duplicar a lógica de NSM/breadcrumb do webshop. Sem
+	``website_item_groups`` (produto ainda não curado), devolve os
+	``parents_originais`` sem alteração — nunca quebra a página."""
+	try:
+		curadas = [
+			row.item_group
+			for row in (doc.get("website_item_groups") or [])
+			if row.item_group
+		]
+		if not curadas:
+			return parents_originais
+
+		from webshop.webshop.doctype.override_doctype.item_group import get_parent_item_groups
+
+		return get_parent_item_groups(curadas[0], from_item=True)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		return parents_originais
+
+
+# ---------------------------------------------------------------------------
+# Tarefa F (i18n client-side) — dicionário de tradução no boot da storefront
+# ---------------------------------------------------------------------------
+
+
+def imun_mensagens_loja() -> dict:
+	"""Dicionário ``{texto_original: tradução}`` do idioma corrente, para
+	injetar em ``frappe.boot.__messages``/``frappe._messages`` nas páginas
+	públicas da loja (ver os ``{% block base_scripts %}`` de
+	``templates/generators/item/item.html``, ``templates/pages/cart.html`` e
+	``templates/pages/customer_reviews.html`).
+
+	Causa raiz (``feedback_loja_client_i18n_e_datepicker``): o boot de página
+	WEB (``frappe.website.utils.get_boot_data``) nunca inclui
+	``__messages`` — só o boot do DESK (``frappe.boot.py:get_bootinfo``) e só
+	o shell ``frappe/www/app.html`` faz ``frappe._messages =
+	frappe.boot["__messages"]``. Páginas públicas nunca carregam ``app.html``,
+	então o ``__()`` client-side (usado por bastante JS nativo do webshop —
+	"Search for Products", "Item Code :", cards de produto etc.) nunca
+	traduzia, mesmo com a tradução JÁ presente em
+	``imunocare_ecommerce/translations/pt-BR.csv``.
+
+	Reuso total: ``frappe.translate.get_all_translations`` é a MESMA função
+	que ``frappe.boot.get_bootinfo`` chama para montar ``__messages`` no Desk
+	(via ``get_messages_for_boot``) — não reimplementamos leitura de CSV/.mo
+	nem merge entre apps aqui. Nunca lança (página pública, guest incluso)."""
+	try:
+		from frappe.translate import get_all_translations
+
+		lang = frappe.local.lang or "pt-BR"
+		return get_all_translations(lang) or {}
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		return {}
