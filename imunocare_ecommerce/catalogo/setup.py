@@ -868,6 +868,107 @@ def _mapa_destaque() -> dict[str, bool]:
 	}
 
 
+# ---------------------------------------------------------------------------
+# Iteração 2 do REDESIGN 2026-09-04 — carrossel do hero (produtos em destaque)
+# ---------------------------------------------------------------------------
+
+# Marcadores de caminho NUNCA elegíveis para o carrossel do hero — defesa
+# extra (ADS-safe), mesmo que só o prefixo curado (``_IMG_PRODUTOS_URL``) já
+# devesse bastar (nenhum Website Item aponta pra essas pastas hoje; ficam
+# aqui caso um operador troque a foto manualmente pelo Desk).
+_IMG_ADS_UNSAFE_MARCADORES: tuple[str, ...] = (
+	"vitaminas-e-protocolos",
+	"vitaminas e protocolos",
+	"protocolo",
+	"emagrecimento",
+)
+
+
+def _imagem_ads_safe(url: str | None) -> bool:
+	"""True se ``url`` for elegível para o carrossel do hero — ADS-SAFE por
+	construção: só aceita o caminho GERIDO de foto de produto
+	(``_IMG_PRODUTOS_URL`` = ``public/img/produtos/<slug>``, a MESMA pasta
+	curada que ``_imagem_produto`` usa para publicar o Website Item) e sem
+	nenhum marcador de princípio ativo/protocolo no caminho. Upload manual
+	apontando pra outro lugar (``/files/...``, pastas brutas de origem como
+	"Vitaminas e Protocolos") nunca entra — mesma regra ADS-safe do resto do
+	site (nunca citar/expor princípio ativo em página pública)."""
+	if not url or not url.startswith(_IMG_PRODUTOS_URL):
+		return False
+	url_lower = url.lower()
+	return not any(marcador in url_lower for marcador in _IMG_ADS_UNSAFE_MARCADORES)
+
+
+def hero_carrossel(limite: int = 6) -> list[dict]:
+	"""Slides do carrossel do hero (``www/index.html``): produtos em
+	DESTAQUE (``catalogo_loja.json``, mesma flag ``destaque`` do selo "Mais
+	agendada" — reuso total, uma curadoria só), publicados, com imagem
+	ADS-SAFE já vinculada ao Website Item.
+
+	Cada slide: ``{"imagem", "nome", "categoria_route"}`` — o link do slide
+	é sempre a CATEGORIA do produto (``entrada["secao"]`` -> ``Item
+	Group.route``, a MESMA fonte da nav — nunca uma URL fixa/hardcoded).
+
+	Produto em destaque sem imagem elegível (ou sem categoria válida) é
+	PULADO silenciosamente — nunca aparece com placeholder genérico; se
+	NENHUM produto em destaque sobrar, devolve ``[]`` (o chamador,
+	``www/index.py``, cai no cartão em wash ciano — fallback gracioso, sem
+	área quebrada). Não lança exceção — usada em request de página pública."""
+	if not frappe.db.exists("DocType", "Website Item"):
+		return []
+	try:
+		mapa = _carregar_mapa_loja()
+		if not mapa:
+			return []
+
+		# Dedup por web_name — ``mapa`` é indexado por item_name (1 produto
+		# pode ter 2+ grafias/nomes cadastrados, ver ``_carregar_mapa_loja``).
+		vistos: set[str] = set()
+		entradas_destaque: list[dict] = []
+		for entrada in mapa.values():
+			web_name = entrada.get("web_name")
+			if not web_name or web_name in vistos or not entrada.get("destaque"):
+				continue
+			vistos.add(web_name)
+			entradas_destaque.append(entrada)
+
+		if not entradas_destaque:
+			return []
+
+		slides: list[dict] = []
+		for entrada in entradas_destaque:
+			web_name = entrada["web_name"]
+			secao = entrada.get("secao")
+			if not secao:
+				continue
+
+			wi = frappe.db.get_value(
+				"Website Item",
+				{"web_item_name": web_name, "published": 1},
+				["website_image", "thumbnail", "route"],
+				as_dict=True,
+			)
+			if not wi:
+				continue
+
+			imagem = wi.website_image or wi.thumbnail
+			if not _imagem_ads_safe(imagem):
+				continue  # destaque sem imagem elegível -> pula (nunca placeholder)
+
+			route = frappe.db.get_value("Item Group", secao, "route")
+			if not route:
+				continue
+
+			slides.append({"imagem": imagem, "nome": web_name, "categoria_route": route})
+			if len(slides) >= limite:
+				break
+
+		return slides
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		return []
+
+
 def nav_categorias(grupo_pai: str) -> list[dict]:
 	"""Categorias de navegação da loja (taxonomia 2026-09-04: lista flat
 	única, ``_NAV_ORDEM_IMUNO``) — TODAS, mesmo as sem produto publicado

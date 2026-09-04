@@ -12,15 +12,17 @@
 {% block page_content %}
 <div class="imun-home">
 
-	<!-- Hero (REDESIGN 2026-09-04, protótipo aprovado): fundo branco, kicker
-	     -> H1 com marca-texto ciano em "forte" -> lead -> CTAs; foto à
-	     direita (degrada para cartão em wash ciano sem foto, ver
-	     www/index.py::_hero_foto). -->
+	<!-- Hero (REDESIGN 2026-09-04, protótipo aprovado; iteração 2 — pedido do
+	     dono: foto estática virou CARROSSEL de produtos em destaque): fundo
+	     branco, kicker -> H1 com marca-texto ciano em "forte" -> lead -> CTAs;
+	     carrossel à direita (degrada para cartão em wash ciano sem nenhum
+	     destaque elegível, ver www/index.py::hero_slides /
+	     catalogo.setup.hero_carrossel). -->
 	<section class="imun-hero">
 		<div class="imun-hero-grid">
 			<div>
 				<span class="imun-hero-kicker"><span class="imun-kicker-sq"></span>Clínica de Vacinas Particulares em Uberlândia</span>
-				<h1 class="imun-hero-tagline">Você mais <span class="imun-accent">forte</span>.</h1>
+				<h1 class="imun-hero-tagline">Você mais <span class="imun-accent">forte</span>!</h1>
 				<p class="imun-hero-sub">
 					Vacinas, vitaminas e protocolos aplicados por profissionais de saúde
 					habilitados — na clínica ou em casa. Agende online em minutos.
@@ -31,11 +33,39 @@
 				</div>
 			</div>
 			<div class="imun-hero-art">
-				<div class="imun-hero-photo">
-					{% if hero_foto %}
-					<img src="{{ hero_foto }}" alt="Equipe Imunocare" loading="eager">
+				{% if hero_slides %}
+				{#- Carrossel acessível (iteração 2): setas + dots, autoplay ~5s
+					pausado no hover/foco, respeita prefers-reduced-motion (JS,
+					ver public/js/hero_carrossel.bundle.js), navegação por
+					teclado nativa (são <a> reais, tab funciona sem JS nenhum).
+					Cada slide leva para a CATEGORIA do produto (nunca uma URL
+					fixa) — fonte: catalogo.setup.hero_carrossel. -#}
+				<div class="imun-hero-carrossel" data-imun-hero-carrossel aria-roledescription="carrossel" aria-label="Produtos em destaque">
+					<div class="imun-hero-carrossel-track">
+						{% for slide in hero_slides %}
+						<a href="/{{ slide.categoria_route }}" class="imun-hero-slide{{ ' is-active' if loop.first else '' }}" data-imun-slide aria-hidden="{{ 'false' if loop.first else 'true' }}" tabindex="{{ '0' if loop.first else '-1' }}">
+							<img src="{{ slide.imagem }}" alt="{{ slide.nome }}" loading="{{ 'eager' if loop.first else 'lazy' }}">
+							<span class="imun-hero-slide-nm">{{ slide.nome }}</span>
+						</a>
+						{% endfor %}
+					</div>
+					{% if hero_slides|length > 1 %}
+					<button type="button" class="imun-hero-carrossel-seta imun-hero-carrossel-prev" data-imun-prev aria-label="Slide anterior">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+					</button>
+					<button type="button" class="imun-hero-carrossel-seta imun-hero-carrossel-next" data-imun-next aria-label="Próximo slide">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+					</button>
+					<div class="imun-hero-carrossel-dots" data-imun-dots role="tablist" aria-label="Selecionar slide">
+						{% for slide in hero_slides %}
+						<button type="button" class="imun-hero-carrossel-dot{{ ' is-active' if loop.first else '' }}" data-imun-dot="{{ loop.index0 }}" role="tab" aria-selected="{{ 'true' if loop.first else 'false' }}" aria-label="Ir para o slide {{ loop.index }}"></button>
+						{% endfor %}
+					</div>
 					{% endif %}
 				</div>
+				{% else %}
+				<div class="imun-hero-photo"></div>
+				{% endif %}
 				<div class="imun-hero-badge">
 					<span class="imun-badge-chk">{{ imun_icone("Atendimento Domiciliar", 18) }}</span>
 					<div>

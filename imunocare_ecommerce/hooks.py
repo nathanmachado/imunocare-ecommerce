@@ -106,6 +106,10 @@ web_include_js = [
 	"seo_jsonld.bundle.js",
 	"rastreio.bundle.js",
 	"domiciliar_cart.bundle.js",
+	# REDESIGN 2026-09-04, iteração 2: carrossel de produtos em destaque no
+	# hero da home (site-wide/no-op fora de "/", ver
+	# public/js/hero_carrossel.bundle.js).
+	"hero_carrossel.bundle.js",
 	# R2 (Feature 70): botão "Agendar" do carrossel de médicos parceiros na
 	# home — reusa o diálogo de agendamento.js (window.imunAbrirAgendamentoDialogo),
 	# carregado depois dele por clareza (a chamada só acontece no clique, a

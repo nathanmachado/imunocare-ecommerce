@@ -420,6 +420,92 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 	box-shadow: var(--imun-shadow);
 }}
 .imun-hero-photo img {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
+
+// ---- Carrossel do hero (iteração 2 do REDESIGN 2026-09-04 — pedido do
+//      dono: produtos em destaque no lugar da foto estática). Ocupa a MESMA
+//      área/aspect-ratio de ``.imun-hero-photo`` — slides empilhados
+//      (position:absolute), só o ``.is-active`` visível; setas + dots por
+//      cima. Transição de opacidade desligada com prefers-reduced-motion
+//      (o autoplay em si já nem liga nesse caso — ver hero_carrossel.js).
+.imun-hero-carrossel {{
+	position: relative;
+	aspect-ratio: 4 / 3.1;
+	border-radius: var(--imun-radius);
+	overflow: hidden;
+	background: var(--imun-ciano-wash);
+	box-shadow: var(--imun-shadow);
+}}
+.imun-hero-carrossel-track {{ position: relative; width: 100%; height: 100%; }}
+.imun-hero-slide {{
+	position: absolute;
+	inset: 0;
+	display: block;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity .5s ease;
+	text-decoration: none;
+}}
+.imun-hero-slide.is-active {{ opacity: 1; visibility: visible; }}
+.imun-hero-slide img {{ width: 100%; height: 100%; object-fit: cover; display: block; }}
+.imun-hero-slide-nm {{
+	position: absolute;
+	left: 16px; right: 16px; bottom: 16px;
+	color: #fff;
+	font-weight: 700;
+	font-size: .92rem;
+	padding: 8px 14px;
+	border-radius: 999px;
+	background: rgba(0,59,74,.72);
+	display: inline-block;
+	width: fit-content;
+}}
+.imun-hero-carrossel-seta {{
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background: rgba(255,255,255,.92);
+	border: 1px solid var(--imun-line);
+	color: var(--imun-petroleo);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	box-shadow: var(--imun-shadow);
+	z-index: 2;
+	transition: background-color .16s ease, color .16s ease;
+	padding: 0;
+}}
+.imun-hero-carrossel-seta:hover {{ background: var(--imun-ciano); color: var(--imun-on-ciano); }}
+.imun-hero-carrossel-prev {{ left: 12px; }}
+.imun-hero-carrossel-next {{ right: 12px; }}
+.imun-hero-carrossel-dots {{
+	position: absolute;
+	left: 0; right: 0; bottom: 10px;
+	display: flex;
+	justify-content: center;
+	gap: 8px;
+	z-index: 2;
+}}
+.imun-hero-carrossel-dot {{
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: rgba(255,255,255,.6);
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	transition: background-color .16s ease, transform .16s ease;
+}}
+.imun-hero-carrossel-dot.is-active {{ background: #fff; transform: scale(1.3); }}
+@media (max-width: 900px) {{
+	.imun-hero-carrossel-seta {{ width: 30px; height: 30px; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+	.imun-hero-slide {{ transition: none; }}
+}}
 .imun-hero-badge {{
 	position: absolute;
 	left: -12px;

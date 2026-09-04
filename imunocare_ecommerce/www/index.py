@@ -83,32 +83,22 @@ def get_context(context):
 	# médico neste ciclo (SPEC 2026-08-11, "não entra").
 	context.consultas_medicas_route = _rota_consultas_medicas()
 
-	# REDESIGN 2026-09-04 (protótipo aprovado): foto do hero à direita — a
-	# foto CLÍNICA REAL da marca, recortada acima do rótulo (conformidade
-	# ADS, fora de escopo desta atividade fornecer o arquivo). Enquanto
-	# ninguém publicar ``public/img/hero/<slug>.<ext>``, a seção degrada
-	# graciosamente para o cartão em wash ciano (ver ``.imun-hero-photo`` no
-	# Website Theme) — sem placeholder de terceiro, sem imagem inventada.
-	context.hero_foto = _hero_foto()
-
-	return context
-
-
-_HERO_FOTO_SLUG = "clinica"
-_HERO_FOTO_EXTS = (".jpg", ".jpeg", ".png", ".webp")
-
-
-def _hero_foto() -> str | None:
+	# REDESIGN 2026-09-04, iteração 2 (pedido do dono): a foto estática do
+	# hero virou um CARROSSEL de produtos em destaque (catalogo.setup.
+	# hero_carrossel — mesma flag ``destaque`` do selo "Mais agendada",
+	# imagens ADS-SAFE já vinculadas ao Website Item). Sem nenhum destaque
+	# elegível, a lista vem vazia e o template cai no cartão em wash ciano
+	# (fallback gracioso, ver ``.imun-hero-photo`` no Website Theme) — nunca
+	# área quebrada.
 	try:
-		base = frappe.get_app_path("imunocare_ecommerce", "public", "img", "hero")
-		for ext in _HERO_FOTO_EXTS:
-			import os
+		from imunocare_ecommerce.catalogo.setup import hero_carrossel
 
-			if os.path.exists(os.path.join(base, f"{_HERO_FOTO_SLUG}{ext}")):
-				return f"/assets/imunocare_ecommerce/img/hero/{_HERO_FOTO_SLUG}{ext}"
+		context.hero_slides = hero_carrossel()
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.www.index")
-	return None
+		context.hero_slides = []
+
+	return context
 
 
 def _rota_consultas_medicas() -> str:
