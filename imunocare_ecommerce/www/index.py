@@ -51,21 +51,20 @@ def get_context(context):
 	except Exception:
 		pass
 
-	# F7 (duas linhas Imuno x Care): nav com TODAS as categorias de cada
-	# linha, mesmo as que ainda não têm produto publicado (essas caem na
-	# página informativa de categoria vazia — ver
-	# templates/generators/item_group.html + catalogo.jinja_utils). Diferente
-	# de `context.secoes` acima (só categorias COM produto, para o carrossel
-	# de cards da home).
+	# Taxonomia 2026-09-04: nav ÚNICA e flat com as 7 categorias de topo
+	# (a separação Imuno x Care em duas linhas, F7, foi descontinuada — ver
+	# catalogo.setup._consolidar_linha_care), mesmo as que ainda não têm
+	# produto publicado (essas caem na página informativa de categoria vazia
+	# — ver templates/generators/item_group.html + catalogo.jinja_utils).
+	# Diferente de `context.secoes` acima (só categorias COM produto, para o
+	# carrossel de cards da home).
 	try:
-		from imunocare_ecommerce.catalogo.setup import nav_categorias
+		from imunocare_ecommerce.catalogo.setup import nav_categorias_loja
 
-		context.nav_imuno = nav_categorias("Loja Imunocare")
-		context.nav_care = nav_categorias("Cuidado Pessoal")
+		context.nav_categorias = nav_categorias_loja()
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.www.index")
-		context.nav_imuno = []
-		context.nav_care = []
+		context.nav_categorias = []
 
 	# R2 (Feature 70 — REDO do site): carrossel de médicos parceiros. Lista
 	# vazia (nenhum profissional com imun_publicar_site=1) esconde a seção
@@ -84,18 +83,44 @@ def get_context(context):
 	# médico neste ciclo (SPEC 2026-08-11, "não entra").
 	context.consultas_medicas_route = _rota_consultas_medicas()
 
+	# REDESIGN 2026-09-04 (protótipo aprovado): foto do hero à direita — a
+	# foto CLÍNICA REAL da marca, recortada acima do rótulo (conformidade
+	# ADS, fora de escopo desta atividade fornecer o arquivo). Enquanto
+	# ninguém publicar ``public/img/hero/<slug>.<ext>``, a seção degrada
+	# graciosamente para o cartão em wash ciano (ver ``.imun-hero-photo`` no
+	# Website Theme) — sem placeholder de terceiro, sem imagem inventada.
+	context.hero_foto = _hero_foto()
+
 	return context
 
 
-def _rota_consultas_medicas() -> str:
-	"""Rota pública do Item Group "Consultas Médicas" (a mesma página nativa
-	gerada por ``templates/generators/item_group.html``). Lida do próprio Item
-	Group em vez de fixa no template — se a rota mudar (rename, webshop
-	regerando ``route``), o link acompanha sem precisar mexer no HTML.
-	Fallback: se o grupo não existir (instalação quebrada/incompleta), mantém
-	o destino antigo em vez de gerar um link morto."""
+_HERO_FOTO_SLUG = "clinica"
+_HERO_FOTO_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _hero_foto() -> str | None:
 	try:
-		route = frappe.db.get_value("Item Group", "Consultas Médicas", "route")
+		base = frappe.get_app_path("imunocare_ecommerce", "public", "img", "hero")
+		for ext in _HERO_FOTO_EXTS:
+			import os
+
+			if os.path.exists(os.path.join(base, f"{_HERO_FOTO_SLUG}{ext}")):
+				return f"/assets/imunocare_ecommerce/img/hero/{_HERO_FOTO_SLUG}{ext}"
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.www.index")
+	return None
+
+
+def _rota_consultas_medicas() -> str:
+	"""Rota pública do Item Group "Consultas" (taxonomia 2026-09-04, era
+	"Consultas Médicas" — mesma página nativa gerada por
+	``templates/generators/item_group.html``). Lida do próprio Item Group em
+	vez de fixa no template — se a rota mudar (rename, webshop regerando
+	``route``), o link acompanha sem precisar mexer no HTML. Fallback: se o
+	grupo não existir (instalação quebrada/incompleta), mantém o destino
+	antigo em vez de gerar um link morto."""
+	try:
+		route = frappe.db.get_value("Item Group", "Consultas", "route")
 		if route:
 			return "/" + route.lstrip("/")
 	except Exception:
@@ -105,13 +130,17 @@ def _rota_consultas_medicas() -> str:
 
 _DESC_PADRAO_SECAO = {
 	"Vacinas": "Aplicação por profissional de saúde habilitado, na clínica ou em casa.",
-	"Vitaminas Injetáveis": "Reposição com avaliação profissional — mais energia e imunidade.",
+	# Taxonomia 2026-09-04: "Vitaminas Injetáveis" -> "Vitaminas".
+	"Vitaminas": "Reposição com avaliação profissional — mais energia e imunidade.",
 	"Terapias Injetáveis": "Protocolos com indicação e acompanhamento profissional.",
 	# Item 2b (2026-08-10): "Pacotes" -> "Planos".
 	"Planos": "Condição especial para completar o esquema recomendado.",
 	"Brincos": "Furo de orelha com técnica asséptica e material hipoalergênico.",
-	"Consultas Médicas": "Orientação profissional para vacinar e se cuidar com segurança.",
+	# Taxonomia 2026-09-04: "Consultas Médicas" -> "Consultas".
+	"Consultas": "Orientação profissional para vacinar e se cuidar com segurança.",
 	"Vale-Presente": "Presenteie saúde: crédito para vacinas, vitaminas ou consultas.",
+	"Nutracêuticos": "Suplementação oral com curadoria de profissional de saúde.",
+	"Cuidado diário": "Filtro solar, repelente e cuidados para a saúde da pele.",
 }
 
 

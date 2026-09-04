@@ -1,4 +1,6 @@
-"""Configuração do catálogo web das 6 seções da loja Imunocare.
+"""Configuração do catálogo web da loja Imunocare — taxonomia 2026-09-04
+(spec ``docs/specs/2026-09-04-redesign-loja-identidade-oficial.md``): 7
+categorias de topo + "Planos" como subcategoria de "Vacinas".
 
 Idempotente: pode ser chamado via after_install e after_migrate sem efeitos
 colaterais ao rodar múltiplas vezes.
@@ -12,17 +14,25 @@ Hierarquia de Item Groups criada:
   All Item Groups
     └── Loja Imunocare  (is_group=1, pai de navegação)
           ├── Vacinas
-          ├── Vitaminas Injetáveis
+          │     └── Planos  (subcategoria — taxonomia 2026-09-04)
+          ├── Vitaminas          (era "Vitaminas Injetáveis" — rename)
           ├── Terapias Injetáveis
-          ├── Consultas Médicas
-          ├── Vale-Presente
-          └── Brincos
+          ├── Consultas          (era "Consultas Médicas" — rename)
+          ├── Nutracêuticos      (novo, nasce vazio)
+          ├── Cuidado diário     (novo, nasce vazio; consolida a antiga
+          │                       Linha Care — Filtro Solar/Serum Facial/
+          │                       Filtro Solar Infantil, ver
+          │                       ``_consolidar_linha_care``)
+          ├── Vale-Presente      (fora da nav de topo — item 2a)
+          ├── Brincos
+          └── Exames             (fora da nav de topo — item 2a)
 
 ATENÇÃO — "Vacinas" pode já existir (criado pelo imunocare_clinic_ext / seed):
   - Se NÃO existe → cria sob "Loja Imunocare" (ideal para navegação).
   - Se JÁ existe  → mantém o parent original; o operador pode reparentar
     manualmente para "Loja Imunocare" via Stock > Item Group se desejar.
-  Os demais 5 grupos são novos e serão criados sob "Loja Imunocare".
+  Os demais grupos são criados sob "Loja Imunocare" (exceto "Planos", cujo
+  parent é "Vacinas" — ver ``_mover_planos_para_vacinas``).
 
 Mapeamento Item → seção:
   Apenas Items de serviço (is_stock_item=0, is_sales_item=1) são publicados.
@@ -52,39 +62,42 @@ import frappe
 # nativa de Item Group — sem duplicar taxonomia nem gerar churn de rota.
 _GRUPO_PAI = "Loja Imunocare"  # = "Linha Imuno" na navegação do site
 
-# Linha Care (F7): novo grupo-pai irmão de "Loja Imunocare", só para
-# produtos de cuidado pessoal (cosmético) — nada de injetável/clínico aqui.
-_GRUPO_PAI_CARE = "Cuidado Pessoal"  # = "Linha Care" na navegação do site
+# Linha Care (F7, DESCONTINUADA pela taxonomia 2026-09-04 — ver
+# ``_consolidar_linha_care``): a separação "Imuno x Care" em duas linhas de
+# navegação virou UMA lista flat de 7 categorias (spec 2026-09-04, "não
+# fatiar o que é o mesmo caso" — todas são categoria de topo da MESMA loja).
+# Constante mantida só para a função de consolidação achar os nomes antigos.
+_GRUPO_PAI_CARE = "Cuidado Pessoal"
 
 # Ordem importa: o pai deve ser criado antes dos filhos.
-# Tupla: (nome, is_group, parent_item_group)
-# Item 2b (2026-08-10): "Pacotes" -> "Planos" (rename real, ver
-# ``_migrar_pacotes_para_planos``, chamada por ``_setup_item_groups``).
+# Taxonomia 2026-09-04 (spec ``docs/specs/2026-09-04-redesign-loja-
+# identidade-oficial.md`` — decisão do dono): 7 categorias de topo —
+# Vacinas/Vitaminas/Terapias Injetáveis/Consultas/Nutracêuticos (novo)/
+# Cuidado diário (novo)/Brincos. "Vitaminas Injetáveis"->"Vitaminas" e
+# "Consultas Médicas"->"Consultas" são RENAMES reais (ver
+# ``_renomear_categorias_2026_09``); "Planos" deixa de ser categoria de topo
+# e vira filho de "Vacinas" (ver ``_mover_planos_para_vacinas``).
 _ITEM_GROUPS: list[tuple[str, int, str]] = [
 	(_GRUPO_PAI, 1, "All Item Groups"),
 	("Vacinas", 0, _GRUPO_PAI),
-	("Vitaminas Injetáveis", 0, _GRUPO_PAI),
+	("Vitaminas", 0, _GRUPO_PAI),
 	("Terapias Injetáveis", 0, _GRUPO_PAI),
-	("Consultas Médicas", 0, _GRUPO_PAI),
+	("Consultas", 0, _GRUPO_PAI),
+	# Nutracêuticos/Cuidado diário (NOVOS — taxonomia 2026-09-04): nascem
+	# vazios, com o mesmo tratamento de "categoria sem produto ainda" já
+	# usado por Consultas/Exames/Terapias (ver catalogo.jinja_utils).
+	("Nutracêuticos", 0, _GRUPO_PAI),
+	("Cuidado diário", 0, _GRUPO_PAI),
 	("Vale-Presente", 0, _GRUPO_PAI),
 	("Brincos", 0, _GRUPO_PAI),
-	("Planos", 0, _GRUPO_PAI),
+	# Planos: parent real é "Vacinas" (reparentado por
+	# ``_mover_planos_para_vacinas`` quando o registro já existir com o
+	# parent antigo — ``_ensure_item_group`` preserva parent em registro
+	# existente, então a criação normal só vale para instalação NOVA).
+	("Planos", 0, "Vacinas"),
 	# Exames (F7): novo, sem item hoje — página informativa (ver
 	# templates/generators/item_group.html + catalogo.jinja_utils).
 	("Exames", 0, _GRUPO_PAI),
-]
-
-# Linha Care (F7): estrutura pronta (show_in_website=1, copy SEO), sem
-# produtos ainda — o dono cadastra a lista real depois (ver
-# catalogo.importar_prod._SECOES_CARE, já pronto para receber). Até lá,
-# cada categoria renderiza com copy "em breve" + captura de interesse (via
-# templates/generators/item_group.html, mesmo tratamento de categoria vazia
-# usado em Consultas/Exames/Terapias).
-_ITEM_GROUPS_CARE: list[tuple[str, int, str]] = [
-	(_GRUPO_PAI_CARE, 1, "All Item Groups"),
-	("Filtro Solar", 0, _GRUPO_PAI_CARE),
-	("Serum Facial", 0, _GRUPO_PAI_CARE),
-	("Filtro Solar Infantil", 0, _GRUPO_PAI_CARE),
 ]
 
 # Mapeamento item_group real → seção da loja.
@@ -97,18 +110,24 @@ _SECTION_MAP: list[tuple[str, str]] = [
 	("pacote", "Planos"),
 	("plano", "Planos"),
 	("vacina", "Vacinas"),
-	("vitamina", "Vitaminas Injetáveis"),
+	("vitamina", "Vitaminas"),
 	("terapia injetável", "Terapias Injetáveis"),
 	("terapia", "Terapias Injetáveis"),
-	("consulta", "Consultas Médicas"),
-	("médico", "Consultas Médicas"),
+	("consulta", "Consultas"),
+	("médico", "Consultas"),
 	("exame", "Exames"),
 	("vale", "Vale-Presente"),
 	("brinco", "Brincos"),
-	("filtro solar infantil", "Filtro Solar Infantil"),
-	("filtro solar", "Filtro Solar"),
-	("sérum facial", "Serum Facial"),
-	("serum facial", "Serum Facial"),
+	# Taxonomia 2026-09-04: as 3 categorias antigas da Linha Care (filtro
+	# solar/sérum facial) consolidam em UMA categoria só, "Cuidado diário"
+	# (nome escolhido para não soar "cosmético" — spec 2026-09-04).
+	("filtro solar infantil", "Cuidado diário"),
+	("filtro solar", "Cuidado diário"),
+	("sérum facial", "Cuidado diário"),
+	("serum facial", "Cuidado diário"),
+	("repelente", "Cuidado diário"),
+	("nutracêutico", "Nutracêuticos"),
+	("nutraceutico", "Nutracêuticos"),
 ]
 
 # Copy (SEO) de cada categoria — usada como Item Group.description (aparece na
@@ -123,14 +142,16 @@ _GROUP_COPY: dict[str, str] = {
 		"aplicação por profissional de saúde habilitado. Consulte preços de vacinas "
 		"particulares e disponibilidade de vacina a domicílio."
 	),
-	"Vitaminas Injetáveis": (
+	# Taxonomia 2026-09-04: "Vitaminas Injetáveis" -> "Vitaminas" (rename).
+	"Vitaminas": (
 		"Aplicação intramuscular de vitaminas e complexos vitamínicos, mediante avaliação "
 		"de um profissional de saúde. Reposição pontual conforme indicação clínica."
 	),
 	"Terapias Injetáveis": (
 		"Aplicação de terapias injetáveis sob prescrição e acompanhamento médico."
 	),
-	"Consultas Médicas": (
+	# Taxonomia 2026-09-04: "Consultas Médicas" -> "Consultas" (rename).
+	"Consultas": (
 		"Agende consultas médicas na Imunocare, com horários online e atendimento "
 		"presencial na clínica."
 	),
@@ -141,6 +162,9 @@ _GROUP_COPY: dict[str, str] = {
 	),
 	# Item 2b: "Pacotes" -> "Planos" (chave renomeada; copy ajustada mantendo
 	# "pacote(s)" como sinônimo, para não perder correspondência de busca).
+	# Taxonomia 2026-09-04: "Planos" virou subcategoria de "Vacinas" — copy
+	# mantida (ainda é a mesma categoria de produto, só mudou de posição na
+	# árvore de navegação).
 	"Planos": (
 		"Planos Imunocare — pacotes fechados de doses de vacina com condição especial, "
 		"ideais para completar o esquema vacinal recomendado."
@@ -149,7 +173,20 @@ _GROUP_COPY: dict[str, str] = {
 		"Agende exames na Imunocare, com coleta/realização presencial na clínica e "
 		"orientação de profissional de saúde habilitado."
 	),
-	# Linha Care (F7) — copy SEO para as categorias ainda sem produto.
+	# Taxonomia 2026-09-04 (NOVAS categorias, nascem vazias — estado "em
+	# breve" via catalogo.jinja_utils._INFO_CATEGORIA_VAZIA):
+	"Nutracêuticos": (
+		"Nutracêuticos Imunocare: suplementação oral com curadoria de profissional de "
+		"saúde — em breve na loja."
+	),
+	"Cuidado diário": (
+		"Cuidado diário Imunocare: filtro solar, repelente e produtos para a saúde da "
+		"pele no dia a dia — em breve na loja."
+	),
+	# Linha Care (F7, DESCONTINUADA — consolidada em "Cuidado diário" acima).
+	# Copy mantida só por histórico/SEO residual enquanto as rotas antigas
+	# não forem removidas (ver ``_consolidar_linha_care`` — grupos ficam
+	# com show_in_website=0, não aparecem mais na loja).
 	"Cuidado Pessoal": (
 		"Linha Care Imunocare: cuidado pessoal para o dia a dia, com a mesma confiança da "
 		"Linha Imuno. Filtro solar, sérum facial e filtro solar infantil — em breve."
@@ -211,15 +248,26 @@ def setup_catalogo() -> None:
 
 
 def _setup_item_groups() -> None:
-	"""Garante a existência dos Item Groups das duas linhas da loja — Imuno
-	(``_ITEM_GROUPS``) e Care (``_ITEM_GROUPS_CARE``, F7) — idempotente."""
+	"""Garante a existência/taxonomia dos 7 Item Groups de topo da loja
+	(``_ITEM_GROUPS``, taxonomia 2026-09-04) — idempotente."""
 	if not frappe.db.exists("DocType", "Item Group"):
 		return  # ERPNext não instalado; improvável em produção
 	_migrar_pacotes_para_planos()
+	_renomear_categorias_2026_09()
+	# ANTES do loop de _ITEM_GROUPS: "Vacinas" ganha uma subcategoria
+	# ("Planos") na taxonomia 2026-09-04 — se ainda for folha (``is_group=0``,
+	# caso real do ambiente: criado pelo imunocare_clinic_ext/seed antes de
+	# qualquer subcategoria existir), o PRÓPRIO re-save de "Vacinas" dentro do
+	# loop abaixo (``_ensure_item_group`` força a description 1x, ver
+	# ``forcar_descricao``) já dispararia o ValidationError do NestedSet
+	# ("cannot be a leaf node as it has children") assim que "Planos" for
+	# reparentado — por isso a promoção acontece AQUI, antes de qualquer
+	# save de "Vacinas" ou "Planos" nesta execução (achado em teste local).
+	_garantir_vacinas_e_grupo()
 	for name, is_group, parent in _ITEM_GROUPS:
 		_ensure_item_group(name, is_group, parent)
-	for name, is_group, parent in _ITEM_GROUPS_CARE:
-		_ensure_item_group(name, is_group, parent)
+	_mover_planos_para_vacinas()
+	_consolidar_linha_care()
 
 
 def _migrar_pacotes_para_planos() -> None:
@@ -272,6 +320,152 @@ def _migrar_pacotes_para_planos() -> None:
 		)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+# Taxonomia 2026-09-04: renomes reais (mesmo padrão de
+# ``_migrar_pacotes_para_planos`` — ``frappe.rename_doc(force=True)``, NUNCA
+# ``ignore_permissions`` no wrapper público, ver aviso ali). ``old -> new``.
+_RENOMES_2026_09: list[tuple[str, str]] = [
+	("Vitaminas Injetáveis", "Vitaminas"),
+	("Consultas Médicas", "Consultas"),
+]
+
+
+def _renomear_categorias_2026_09() -> None:
+	"""Taxonomia 2026-09-04 (spec ``docs/specs/2026-09-04-redesign-loja-
+	identidade-oficial.md``): "Vitaminas Injetáveis" -> "Vitaminas" e
+	"Consultas Médicas" -> "Consultas" — nomear pela categoria como o dono
+	decidiu exibir na nav, não pelo rótulo técnico anterior.
+
+	Mesma receita de ``_migrar_pacotes_para_planos`` (rename real via
+	``frappe.rename_doc``, que já cascade-atualiza ``Item.item_group``,
+	``Website Item Group.item_group`` etc.) + reset de ``route`` para o
+	webshop recalcular a partir do nome novo (``WebshopItemGroup.make_route``
+	só preenche rota vazia). Idempotente: se o nome ANTIGO não existir mais,
+	é no-op; se o nome NOVO já existir (rename já aplicado, ou instalação
+	nova que nasceu direto com o nome certo via ``_ITEM_GROUPS``), também
+	não faz nada — nunca mescla/duplica."""
+	for antigo, novo in _RENOMES_2026_09:
+		if not frappe.db.exists("Item Group", antigo) or frappe.db.exists("Item Group", novo):
+			continue
+		try:
+			frappe.rename_doc("Item Group", antigo, novo, force=True)
+			doc = frappe.get_doc("Item Group", novo)
+			if doc.route:
+				doc.route = None
+				doc.flags.ignore_permissions = True
+				doc.save(ignore_permissions=True)
+			frappe.logger(_LOG_TITLE).info(
+				f"Item Group '{antigo}' renomeado para '{novo}' (taxonomia 2026-09-04)."
+			)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+def _garantir_vacinas_e_grupo() -> None:
+	"""Taxonomia 2026-09-04: "Vacinas" passa a ter uma subcategoria
+	("Planos") — precisa ser ``is_group=1`` (grupo), nunca folha.
+
+	IMPORTANTE (achado em teste local 2026-09-04, não hipotético): "Vacinas"
+	no ambiente real nasceu FOLHA (``is_group=0``, criado pelo
+	``imunocare_clinic_ext``/seed, antes de qualquer subcategoria existir).
+	O ``NestedSet`` nativo do Frappe rejeita salvar um Item Group folha que
+	tenha filho ("... cannot be a leaf node as it has children") — e
+	``_ensure_item_group`` (chamada logo depois, no loop de ``_ITEM_GROUPS``)
+	sempre resalva "Vacinas" (força a description 1x, ver
+	``forcar_descricao``), então a promoção a grupo tem que acontecer AQUI,
+	ANTES do loop — depois é tarde: o próprio resave de "Vacinas" já explode.
+
+	Idempotente: só salva se ``is_group`` ainda for 0. Nunca lança (chamada
+	no meio do after_migrate)."""
+	if not frappe.db.exists("Item Group", "Vacinas"):
+		return
+	try:
+		doc = frappe.get_doc("Item Group", "Vacinas")
+		if doc.is_group:
+			return
+		doc.is_group = 1
+		doc.flags.ignore_permissions = True
+		doc.save(ignore_permissions=True)
+		frappe.logger(_LOG_TITLE).info(
+			"Item Group 'Vacinas' virou grupo (is_group=1) para receber 'Planos' como subcategoria."
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+def _mover_planos_para_vacinas() -> None:
+	"""Taxonomia 2026-09-04: "Planos" deixa de ser categoria de topo da loja
+	e vira SUBCATEGORIA (filho) de "Vacinas" — decisão do dono (planos são,
+	na prática, um jeito de comprar um conjunto de doses de vacina).
+
+	``_ensure_item_group`` (chamada antes, no loop de ``_ITEM_GROUPS``)
+	preserva o ``parent_item_group`` de um registro JÁ EXISTENTE de propósito
+	(não sobrescreve hierarquia de estoque manual) — por isso, para um
+	"Planos" que já exista com o parent antigo ("Loja Imunocare"), o
+	reparenting explícito é feito aqui, uma única vez. Idempotente: se
+	"Planos" já tem parent "Vacinas" (instalação nova, ou já migrado), é
+	no-op. Reseta ``route`` para o webshop recalcular sob "vacinas/planos"
+	(mesma técnica do rename). Pressupõe que ``_garantir_vacinas_e_grupo``
+	já rodou (chamada ANTES do loop de ``_ITEM_GROUPS``, ver
+	``_setup_item_groups``) — "Vacinas" já é grupo quando chegamos aqui."""
+	if not frappe.db.exists("Item Group", "Planos") or not frappe.db.exists("Item Group", "Vacinas"):
+		return
+	doc = frappe.get_doc("Item Group", "Planos")
+	if doc.parent_item_group == "Vacinas":
+		return
+	try:
+		doc.parent_item_group = "Vacinas"
+		doc.route = None
+		doc.flags.ignore_permissions = True
+		doc.save(ignore_permissions=True)
+		frappe.logger(_LOG_TITLE).info(
+			"Item Group 'Planos' reparentado para 'Vacinas' (taxonomia 2026-09-04 — sai da nav de topo)."
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+# Taxonomia 2026-09-04: nomes da Linha Care descontinuada (consolidada em
+# "Cuidado diário" — ver ``_SECTION_MAP``/``_GROUP_COPY`` acima).
+_LINHA_CARE_DESCONTINUADA: tuple[str, ...] = (
+	_GRUPO_PAI_CARE,
+	"Filtro Solar",
+	"Serum Facial",
+	"Filtro Solar Infantil",
+)
+
+
+def _consolidar_linha_care() -> None:
+	"""Taxonomia 2026-09-04: a Linha Care (2 linhas de nav Imuno x Care, F7)
+	vira UMA lista flat de 7 categorias — "Filtro Solar"/"Serum Facial"/
+	"Filtro Solar Infantil" (0 produtos publicados até hoje, confirmado no
+	catálogo curado) consolidam em uma categoria só, "Cuidado diário"
+	(``_ITEM_GROUPS`` acima).
+
+	Reversível por design (doutrina do projeto): NÃO apaga/renomeia os
+	grupos antigos (evita perder histórico/qualquer link externo já
+	indexado) — só desliga ``show_in_website`` (custom field do webshop),
+	tirando-os da navegação/sitemap público. Reaparecem instantaneamente se
+	um operador marcar ``show_in_website=1`` de novo pelo Desk; o próximo
+	migrate não desfaz (só desliga quem estiver ligado, nunca liga)."""
+	tem_show_in_website = frappe.db.exists(
+		"Custom Field", {"dt": "Item Group", "fieldname": "show_in_website"}
+	)
+	if not tem_show_in_website:
+		return
+	for nome in _LINHA_CARE_DESCONTINUADA:
+		if not frappe.db.exists("Item Group", nome):
+			continue
+		if not frappe.db.get_value("Item Group", nome, "show_in_website"):
+			continue
+		try:
+			frappe.db.set_value("Item Group", nome, "show_in_website", 0, update_modified=False)
+			frappe.logger(_LOG_TITLE).info(
+				f"Item Group '{nome}' tirado da navegação pública (Linha Care consolidada em 'Cuidado diário')."
+			)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 
 
 def ensure_item_groups() -> None:
@@ -548,29 +742,36 @@ def _ensure_website_item_section(doc: "frappe.Document", section: str) -> None:
 # alterado; basta devolver os dois nomes a estas listas para reaparecerem).
 SECOES_HOME_ORDEM: list[str] = [
 	"Vacinas",
-	"Vitaminas Injetáveis",
+	"Vitaminas",
 	"Terapias Injetáveis",
 	"Planos",
 	"Brincos",
-	"Consultas Médicas",
-	# Linha Care (F7):
-	"Filtro Solar",
-	"Serum Facial",
-	"Filtro Solar Infantil",
+	"Consultas",
+	# Nutracêuticos/Cuidado diário (taxonomia 2026-09-04): sem produto ainda
+	# — a checagem "sem item publicado -> continue" logo abaixo já as omite
+	# desta lista de carrosséis com conteúdo real; mantidas aqui de propósito
+	# para aparecerem automaticamente assim que o dono publicar o 1º item.
+	"Nutracêuticos",
+	"Cuidado diário",
 ]
 
-# Ordem de navegação (F7 — nav com TODAS as categorias, mesmo vazias).
-# Item 2a: "Exames"/"Vale-Presente" removidos daqui também (ver comentário
-# acima de SECOES_HOME_ORDEM — mesma regra, mesma reversibilidade).
+# Ordem de navegação — taxonomia 2026-09-04: UMA lista flat com as 7
+# categorias de topo (a separação Imuno x Care em duas linhas, F7, foi
+# descontinuada — ver ``_consolidar_linha_care``). "Planos" NÃO entra aqui
+# (saiu da nav de topo, agora é subcategoria de "Vacinas" — spec 2026-09-04).
 _NAV_ORDEM_IMUNO: list[str] = [
 	"Vacinas",
-	"Vitaminas Injetáveis",
+	"Vitaminas",
 	"Terapias Injetáveis",
-	"Planos",
-	"Consultas Médicas",
+	"Consultas",
+	"Nutracêuticos",
+	"Cuidado diário",
 	"Brincos",
 ]
-_NAV_ORDEM_CARE: list[str] = ["Filtro Solar", "Serum Facial", "Filtro Solar Infantil"]
+# Linha Care descontinuada (taxonomia 2026-09-04) — lista vazia preserva a
+# assinatura de ``nav_categorias(grupo_pai)`` (ver ``www/index.py``) sem
+# quebrar quem ainda chama com "Cuidado Pessoal"; sempre retorna [].
+_NAV_ORDEM_CARE: list[str] = []
 
 
 def secoes_para_home(limite_por_secao: int = 4) -> list[dict]:
@@ -640,6 +841,13 @@ def secoes_para_home(limite_por_secao: int = 4) -> list[dict]:
 				"preco": precos.get(wi.item_code),
 				"imagem": wi.website_image or wi.thumbnail,
 				"descricao": wi.short_description,
+				# REDESIGN 2026-09-04 (cards "Opção A" — protótipo): selo "Mais
+				# agendada" é uma curadoria MANUAL do dono (``destaque: true``
+				# em catalogo_loja.json, ver ``_mapa_destaque``) — nunca
+				# inferido/fabricado aqui (nenhum dado real de "mais agendado"
+				# existe nesta atividade; até o dono marcar, todo item vem
+				# ``False``, sem selo nenhum).
+				"destaque": _mapa_destaque().get(wi.web_item_name, False),
 			}
 			for wi in website_items
 		]
@@ -648,11 +856,28 @@ def secoes_para_home(limite_por_secao: int = 4) -> list[dict]:
 	return secoes
 
 
+def _mapa_destaque() -> dict[str, bool]:
+	"""``{web_item_name: True}`` para os produtos curados com ``"destaque":
+	true`` em ``catalogo_loja.json`` (campo opcional, ausente = ``False``).
+	Reuso: mesma fonte do catálogo curado (``_carregar_mapa_loja``), nenhuma
+	segunda lista de "produtos em destaque" mantida à parte."""
+	return {
+		entrada["web_name"]: True
+		for entrada in _carregar_mapa_loja().values()
+		if entrada.get("web_name") and entrada.get("destaque")
+	}
+
+
 def nav_categorias(grupo_pai: str) -> list[dict]:
-	"""Categorias da linha Imuno ("Loja Imunocare") ou Care ("Cuidado
-	Pessoal") para a navegação da home (F7) — TODAS, mesmo as sem produto
-	publicado ainda (essas caem na página de categoria informativa, ver
+	"""Categorias de navegação da loja (taxonomia 2026-09-04: lista flat
+	única, ``_NAV_ORDEM_IMUNO``) — TODAS, mesmo as sem produto publicado
+	ainda (essas caem na página de categoria informativa, ver
 	templates/generators/item_group.html). Cada item: {"nome", "route"}.
+
+	``grupo_pai="Cuidado Pessoal"`` (linha Care, F7) sempre devolve ``[]`` —
+	descontinuada, consolidada em "Cuidado diário" na lista flat (ver
+	``_consolidar_linha_care``). Parâmetro mantido só por compatibilidade de
+	assinatura com quem ainda chamar com o nome antigo.
 
 	Consulta por NOME (``_NAV_ORDEM_IMUNO``/``_NAV_ORDEM_CARE``), não por
 	``parent_item_group`` — "Vacinas" pode ter sido criado antes deste app
@@ -789,3 +1014,26 @@ def backfill_item_group_taxonomia(aplicar: bool = False) -> list[dict]:
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 		return []
+
+
+# ---------------------------------------------------------------------------
+# Atividade REDESIGN 2026-09-04 — alias público pedido pelo spec
+# ---------------------------------------------------------------------------
+
+
+def migrar_item_group_produtos(dry_run: bool = True) -> list[dict]:
+	"""Alias público de ``backfill_item_group_taxonomia`` (Tarefa E, já
+	implementada e idempotente) com a assinatura pedida pelo spec 2026-09-04
+	(``dry_run=True`` por padrão). Reuso total — NÃO duplica a lógica de
+	reclassificação, só inverte o nome do parâmetro (``dry_run`` ao contrário
+	de ``aplicar``) para bater com o nome usado no spec/relatório.
+
+	Uso (via ``bench execute``, sempre em dry-run primeiro):
+
+		bench --site <site> execute imunocare_ecommerce.catalogo.setup.migrar_item_group_produtos
+
+	Para aplicar de fato (o CTO decide, depois de revisar a lista):
+
+		bench --site <site> execute imunocare_ecommerce.catalogo.setup.migrar_item_group_produtos --kwargs '{"dry_run": false}'
+	"""
+	return backfill_item_group_taxonomia(aplicar=not dry_run)

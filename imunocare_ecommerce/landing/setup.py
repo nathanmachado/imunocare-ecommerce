@@ -41,11 +41,13 @@ _LOG_TITLE = "imunocare_ecommerce.landing.setup"
 
 # Seções "de saúde" (recebem disclaimer) vs. as demais seções da loja.
 # Item 2b (2026-08-10): "Pacotes" -> "Planos".
+# Taxonomia 2026-09-04: "Vitaminas Injetáveis"->"Vitaminas", "Consultas
+# Médicas"->"Consultas" (renames reais, ver catalogo.setup).
 _SECOES_SAUDE = {
 	"Vacinas",
-	"Vitaminas Injetáveis",
+	"Vitaminas",
 	"Terapias Injetáveis",
-	"Consultas Médicas",
+	"Consultas",
 	"Planos",
 }
 

@@ -60,7 +60,9 @@ def contagem_produtos_publicados(item_group: str) -> int:
 # (esvaziada por decisão de compliance — F9, ver relatório) e para as 3
 # categorias da Linha Care (produtos ainda não cadastrados pelo dono).
 _INFO_CATEGORIA_VAZIA: dict[str, dict[str, str]] = {
-	"Consultas Médicas": {
+	# Taxonomia 2026-09-04: "Consultas Médicas" -> "Consultas" (rename real,
+	# ver catalogo.setup._renomear_categorias_2026_09).
+	"Consultas": {
 		"mensagem": (
 			"Em breve você poderá agendar consultas médicas diretamente por aqui. "
 			"Enquanto isso, fale com a nossa equipe para marcar sua consulta."
@@ -121,6 +123,23 @@ _INFO_CATEGORIA_VAZIA: dict[str, dict[str, str]] = {
 			"aqui. Enquanto isso, fale com a nossa equipe para conhecer as opções."
 		),
 		"cta_label": "Falar com a Imunocare",
+		"cta_href": "/contact",
+	},
+	# Taxonomia 2026-09-04 (novas categorias, nascem vazias):
+	"Nutracêuticos": {
+		"mensagem": (
+			"Em breve você encontrará nossa curadoria de nutracêuticos por aqui. "
+			"Deixe seu contato para ser avisado(a) no lançamento."
+		),
+		"cta_label": "Quero ser avisado(a)",
+		"cta_href": "/contact",
+	},
+	"Cuidado diário": {
+		"mensagem": (
+			"Em breve: filtro solar, repelente e cuidados para a saúde da pele no "
+			"dia a dia. Deixe seu contato para ser avisado(a) no lançamento."
+		),
+		"cta_label": "Quero ser avisado(a)",
 		"cta_href": "/contact",
 	},
 }

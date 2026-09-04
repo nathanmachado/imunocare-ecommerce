@@ -43,9 +43,13 @@ _STOCK_UOM = "Unidade"
 # criados) continuam "pacotes"/"pac", só o NOME da categoria mudou.
 # ATENÇÃO: não confundir com a chave "planos" abaixo (Calendário Premium,
 # um conceito DIFERENTE — não é produto de venda, nunca importado).
+# Taxonomia 2026-09-04: "vitaminas" -> Item Group "Vitaminas" (era "Vitaminas
+# Injetáveis" — rename real, ver catalogo.setup._renomear_categorias_2026_09).
+# A CHAVE do JSON e o prefixo do item_code continuam os mesmos de sempre
+# (compatibilidade com os Items já criados); só o NOME da categoria mudou.
 _SECOES: dict[str, tuple[str, str]] = {
 	"vacinas": ("Vacinas", "vac"),
-	"vitaminas": ("Vitaminas Injetáveis", "vit"),
+	"vitaminas": ("Vitaminas", "vit"),
 	"terapias": ("Terapias Injetáveis", "ter"),
 	"brincos": ("Brincos", "bri"),
 	"pacotes": ("Planos", "pac"),
@@ -53,17 +57,17 @@ _SECOES: dict[str, tuple[str, str]] = {
 	# não é produto de venda. Não tem relação com o Item Group "Planos" acima.
 }
 
-# F7 (Linha Care): extensão PRONTA para receber a lista real de produtos do
-# dono — hoje `catalogo_prod.json` não tem essas chaves, então o loop de
-# importação abaixo processa listas vazias (no-op seguro). Quando o dono
-# fornecer produtos, basta adicionar as chaves "filtro_solar"/
-# "serum_facial"/"filtro_solar_infantil" ao JSON no mesmo formato das demais
-# seções (item_name/nome_loja/preco) — nenhum código novo é necessário.
-# Preços NÃO são inventados aqui (doutrina "reuso primeiro"/dados sensíveis).
+# Taxonomia 2026-09-04 (DESCONTINUA a Linha Care de 3 categorias — F7 — em
+# favor de UMA categoria só, "Cuidado diário", ver catalogo.setup): extensão
+# PRONTA para receber a lista real de produtos do dono — hoje
+# `catalogo_prod.json` não tem essas chaves, então o loop de importação
+# abaixo processa listas vazias (no-op seguro). Quando o dono fornecer
+# produtos de cuidado diário (filtro solar, repelente etc.), basta adicionar
+# a chave "cuidado_diario" ao JSON no mesmo formato das demais seções
+# (item_name/nome_loja/preco) — nenhum código novo é necessário. Preços NÃO
+# são inventados aqui (doutrina "reuso primeiro"/dados sensíveis).
 _SECOES_CARE: dict[str, tuple[str, str]] = {
-	"filtro_solar": ("Filtro Solar", "flt"),
-	"serum_facial": ("Serum Facial", "ser"),
-	"filtro_solar_infantil": ("Filtro Solar Infantil", "fli"),
+	"cuidado_diario": ("Cuidado diário", "cud"),
 }
 
 # Nomes de loja "feios"/técnicos trocados por um nome amigável — F2 (catálogo

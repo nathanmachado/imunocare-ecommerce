@@ -1,0 +1,66 @@
+{#- Override do template nativo (frappe/templates/includes/footer/footer.html)
+	— SEM tocar upstream: mesmo caminho relativo, resolvido primeiro pelo
+	jinja loader porque imunocare_ecommerce é instalado por último (mesmo
+	mecanismo já usado em templates/generators/item_group.html/item.html).
+
+	REDESIGN 2026-09-04 (protótipo aprovado): rodapé CLARO com 4 colunas
+	(marca+tagline+endereço / Loja / Conta / Atendimento) — layout PRÓPRIO,
+	dados 100% de fontes NATIVAS/já existentes, sem inventar nada novo:
+
+	  - Logo: logo_svg() (identidade.setup, mesma fonte do header).
+	  - Endereço/copyright: campos NATIVOS de Website Settings
+		(``address``/``copyright`` — ``footer_address``/``copyright`` no
+		context, ver frappe/website/doctype/website_settings/website_settings.py).
+		Vazios por padrão (não preenchidos por este app) — o dono edita em
+		Website Settings pelo Desk quando quiser exibi-los; a coluna some
+		graciosamente enquanto não houver dado.
+	  - "Loja": nav_categorias_loja() (catalogo.setup) — MESMA fonte da nav
+		da home/chips de listagem, nenhuma URL nova/duplicada.
+	  - "Conta"/"Atendimento": rotas nativas do portal /me (as mesmas
+		mantidas visíveis por loja.setup.curar_portal_menu — Pedidos/
+		Faturas/Endereços/Detalhes Pessoais) + páginas institucionais já
+		existentes no app (/contact). Sem número de telefone/WhatsApp aqui
+		(dado de negócio sensível, fora do repositório).
+
+	"Powered by Frappe" nativo (footer_powered) é OMITIDO de propósito — o
+	rodapé é da marca Imunocare (mesma decisão da versão anterior, antes via
+	CSS ``display:none``, agora o bloco nem é incluído). -#}
+<footer class="web-footer imun-footer">
+	<div class="container">
+		<div class="imun-footer-cols">
+			<div class="imun-footer-brand">
+				{{ logo_svg("imun-logo-footer") }}
+				<div class="imun-footer-tag">Você mais forte!</div>
+				{% if footer_address %}
+				<p class="imun-footer-address">{{ footer_address }}</p>
+				{% endif %}
+			</div>
+
+			<div class="imun-footer-group">
+				<h4>{{ _("Loja") }}</h4>
+				{%- for cat in (nav_categorias_loja() or []) %}
+				<a href="/{{ cat.route }}">{{ cat.nome }}</a>
+				{%- endfor %}
+			</div>
+
+			<div class="imun-footer-group">
+				<h4>{{ _("Conta") }}</h4>
+				<a href="/orders">{{ _("Pedidos") }}</a>
+				<a href="/invoices">{{ _("Faturas") }}</a>
+				<a href="/addresses">{{ _("Endereços") }}</a>
+				<a href="/personal-details">{{ _("Detalhes Pessoais") }}</a>
+			</div>
+
+			<div class="imun-footer-group">
+				<h4>{{ _("Atendimento") }}</h4>
+				<a href="/contact">{{ _("Fale conosco") }}</a>
+				<a href="/all-products">{{ _("Ver catálogo") }}</a>
+				<a href="/contact">{{ _("Empresas (B2B)") }}</a>
+			</div>
+		</div>
+
+		<div class="imun-footer-fine">
+			<span>{% if copyright %}&copy; {{ copyright }}{% else %}&copy; {{ frappe.utils.now_datetime().year }} IMUNOCARE{% endif %}</span>
+		</div>
+	</div>
+</footer>

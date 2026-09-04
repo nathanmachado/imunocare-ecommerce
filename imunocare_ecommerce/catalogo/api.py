@@ -14,9 +14,10 @@ import frappe
 
 @frappe.whitelist(allow_guest=True)
 def categorias_nav() -> list[dict]:
-	"""Categorias ativas da Linha Imuno (Vacinas/Vitaminas Injetáveis/Terapias
-	Injetáveis/Planos/Consultas Médicas/Brincos — já refletindo a remoção de
-	Exames/Vale-Presente do item 2a), cada uma com ``{"nome", "route"}``.
+	"""Categorias de navegação da loja (taxonomia 2026-09-04 — Vacinas/
+	Vitaminas/Terapias Injetáveis/Consultas/Nutracêuticos/Cuidado diário/
+	Brincos; Planos e Exames/Vale-Presente ficam fora da nav de topo), cada
+	uma com ``{"nome", "route"}``.
 
 	Não lança exceção — chamado de página pública (guest incluso)."""
 	try:

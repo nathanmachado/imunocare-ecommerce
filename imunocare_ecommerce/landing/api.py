@@ -20,7 +20,9 @@ _LOG_TITLE = "imunocare_ecommerce.landing.api"
 # Seções de saúde recebem também o tipo MedicalWebPage (schema.org), além de
 # Product — mesma lista de _SECOES_SAUDE do setup.py, duplicada aqui de
 # propósito (módulo somente leitura, evita import cruzado desnecessário).
-_SECOES_SAUDE = {"Vacinas", "Vitaminas Injetáveis", "Terapias Injetáveis", "Consultas Médicas"}
+# Taxonomia 2026-09-04: "Vitaminas Injetáveis"->"Vitaminas", "Consultas
+# Médicas"->"Consultas" (renames reais, ver catalogo.setup).
+_SECOES_SAUDE = {"Vacinas", "Vitaminas", "Terapias Injetáveis", "Consultas"}
 
 
 @frappe.whitelist(allow_guest=True)

@@ -12,32 +12,51 @@
 {% block page_content %}
 <div class="imun-home">
 
-	<!-- Hero: kicker genérico -> H1 tagline -> sub -> CTAs -> trust row
-	     (F6 — hierarquia revisada, sem o kicker domiciliar, ver F3). -->
+	<!-- Hero (REDESIGN 2026-09-04, protótipo aprovado): fundo branco, kicker
+	     -> H1 com marca-texto ciano em "forte" -> lead -> CTAs; foto à
+	     direita (degrada para cartão em wash ciano sem foto, ver
+	     www/index.py::_hero_foto). -->
 	<section class="imun-hero">
-		<img
-			src="/assets/imunocare_ecommerce/logo/brand/imunocare-simbolo-ciano.png"
-			alt=""
-			aria-hidden="true"
-			class="imun-hero-marca-agua">
-		<span class="imun-hero-kicker">Clínica de Vacinas Particulares em Uberlândia</span>
-		<h1 class="imun-hero-tagline">Você <span class="imun-accent">mais forte!</span></h1>
-		<p class="imun-hero-sub">
-			A Imunocare é uma clínica de vacinas particulares em Uberlândia. Cuidamos da
-			sua saúde e da sua evolução pessoal com vacinação, vitaminas injetáveis e
-			terapias aplicadas por profissionais de saúde habilitados — para você seguir
-			mais forte em cada fase da vida.
-		</p>
-		<div class="imun-hero-cta">
-			<a class="btn imun-cta" href="/all-products">Ver todos os produtos</a>
-			<a class="btn-ghost-light" href="/vacinas">Ver vacinas disponíveis</a>
-		</div>
-		<div class="imun-trust">
-			<span><b>&#10003;</b> Enfermagem especializada</span>
-			<span><b>&#10003;</b> Agende e pague online</span>
-			<span><b>&#10003;</b> Aplicação por profissional de saúde habilitado</span>
+		<div class="imun-hero-grid">
+			<div>
+				<span class="imun-hero-kicker"><span class="imun-kicker-sq"></span>Clínica de Vacinas Particulares em Uberlândia</span>
+				<h1 class="imun-hero-tagline">Você mais <span class="imun-accent">forte</span>.</h1>
+				<p class="imun-hero-sub">
+					Vacinas, vitaminas e protocolos aplicados por profissionais de saúde
+					habilitados — na clínica ou em casa. Agende online em minutos.
+				</p>
+				<div class="imun-hero-cta">
+					<a class="btn imun-cta" href="/all-products">Ver todos os produtos</a>
+					<a class="btn-ghost-light" href="/vacinas">Ver vacinas disponíveis</a>
+				</div>
+			</div>
+			<div class="imun-hero-art">
+				<div class="imun-hero-photo">
+					{% if hero_foto %}
+					<img src="{{ hero_foto }}" alt="Equipe Imunocare" loading="eager">
+					{% endif %}
+				</div>
+				<div class="imun-hero-badge">
+					<span class="imun-badge-chk">{{ imun_icone("Atendimento Domiciliar", 18) }}</span>
+					<div>
+						<div class="imun-badge-t">Profissional habilitado</div>
+						<div class="imun-badge-s">Aplicação na clínica ou em casa</div>
+					</div>
+				</div>
+			</div>
 		</div>
 	</section>
+
+	<!-- Faixa de confiança — slim, branca, checks ciano (protótipo .trust). -->
+	{% set imun_check %}<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>{% endset %}
+	<div class="imun-trust">
+		<span class="imun-trust-item">{{ imun_check }}Enfermagem especializada</span>
+		<span class="imun-trust-item">{{ imun_check }}Agende e pague online</span>
+		<span class="imun-trust-item">{{ imun_check }}Aplicação por profissional habilitado</span>
+		{% if domiciliar_ativo %}
+		<span class="imun-trust-item">{{ imun_check }}Atendimento domiciliar</span>
+		{% endif %}
+	</div>
 
 	<!-- Item 2c: Atendimento Domiciliar como DIFERENCIAL — seção-banner de
 	     destaque (mesmo padrão do .imun-emagrecimento-bloco), logo após o
@@ -68,37 +87,22 @@
 	</section>
 	{% endif %}
 
-	<!-- Catálogo: duas linhas de navegação, Imuno | Care (F5/F7) — ecoam o
-	     wordmark (imuno em petróleo / care em tom distinto). -->
+	<!-- Catálogo (taxonomia 2026-09-04): nav ÚNICA e flat com as 7 categorias
+	     de topo — a separação Imuno x Care (F5/F7) foi descontinuada, ver
+	     catalogo.setup._consolidar_linha_care. -->
 	<section class="imun-section" style="border-top:none; padding-top:0;">
 		<span class="imun-eyebrow">Catálogo</span>
 		<h2 class="imun-section-title h4">O que você encontra na Imunocare</h2>
 		<p class="text-muted" style="max-width:64ch;">
-			{#- Item 2a (2026-08-10): "vale-presente" e "exames" tirados desta
-				frase — remoção só de exibição (ver catalogo/setup.py). -#}
-			Vacinas, vitaminas injetáveis, terapias injetáveis, planos, consultas
-			médicas e brincos — todo item pode ser aplicado na clínica ou em casa.
+			Vacinas, vitaminas, terapias injetáveis, consultas, nutracêuticos, cuidado
+			diário e brincos — todo item pode ser aplicado na clínica ou em casa.
 		</p>
 
-		{% if nav_imuno %}
-		<div class="imun-linha-nav">
-			<span class="imun-linha-tag imun-linha-tag-imuno">Imuno</span>
-			<div class="imun-catnav">
-				{% for cat in nav_imuno %}
-				<a class="imun-chip" href="/{{ cat.route }}">{{ imun_icone(cat.nome) }}{{ cat.nome }}</a>
-				{% endfor %}
-			</div>
-		</div>
-		{% endif %}
-
-		{% if nav_care %}
-		<div class="imun-linha-nav mt-2">
-			<span class="imun-linha-tag imun-linha-tag-care">Care</span>
-			<div class="imun-catnav">
-				{% for cat in nav_care %}
-				<a class="imun-chip imun-chip-care" href="/{{ cat.route }}">{{ imun_icone(cat.nome) }}{{ cat.nome }}</a>
-				{% endfor %}
-			</div>
+		{% if nav_categorias %}
+		<div class="imun-catnav">
+			{% for cat in nav_categorias %}
+			<a class="imun-chip" href="/{{ cat.route }}">{{ imun_icone(cat.nome) }}{{ cat.nome }}</a>
+			{% endfor %}
 		</div>
 		{% endif %}
 	</section>
@@ -116,32 +120,27 @@
 			</div>
 			<div class="imun-grid">
 				{% for item in secao.itens %}
-				<a href="/{{ item.route }}" class="imun-card">
-					{% if item.imagem %}
-					<img
-						src="{{ item.imagem }}"
-						alt="{{ item.nome }}"
-						class="imun-card-img"
-						loading="lazy">
-					{% else %}
-					<div class="imun-card-img imun-card-ph" aria-hidden="true">
-						{{ imun_icone(secao.nome, 34) }}
-					</div>
+				{#- REDESIGN 2026-09-04 — cards "Opção A" (protótipo aprovado):
+					SEM foto, tipográficos (categoria/nome/descrição/preço em
+					destaque/CTA "Agendar"). "Mais agendada" é curadoria manual
+					do dono (item.destaque, catalogo.setup._mapa_destaque) —
+					nunca fabricada. -#}
+				<a href="/{{ item.route }}" class="imun-card{{ ' imun-card-feat' if item.destaque else '' }}">
+					{% if item.destaque %}
+					<span class="imun-card-tag">Mais agendada</span>
 					{% endif %}
-					<div class="imun-card-body">
-						<span class="imun-pill imun-pill-brand" style="align-self:flex-start;">{{ secao.nome }}</span>
-						<div class="imun-card-nm">{{ item.nome }}</div>
-						{% if item.descricao %}
-						<div class="imun-card-ds">{{ item.descricao }}</div>
+					<span class="imun-card-cat">{{ secao.nome }}</span>
+					<div class="imun-card-nm">{{ item.nome }}</div>
+					{% if item.descricao %}
+					<div class="imun-card-ds">{{ item.descricao }}</div>
+					{% endif %}
+					<div class="imun-card-foot">
+						{% if item.preco_fmt %}
+						<div class="imun-card-price">{{ item.preco_fmt }}<small>à vista</small></div>
+						{% else %}
+						<div class="imun-card-price" style="font-size:1rem; color:var(--imun-muted);">Sob consulta</div>
 						{% endif %}
-						<div class="imun-card-foot">
-							{% if item.preco_fmt %}
-							<span class="imun-price">{{ item.preco_fmt }}</span>
-							{% else %}
-							<span class="imun-pill imun-pill-accent">Sob consulta</span>
-							{% endif %}
-							<span class="btn imun-cta imun-btn-sm">Ver detalhes</span>
-						</div>
+						<span class="imun-card-go{{ '' if item.preco_fmt else ' imun-card-go-ghost' }}">Agendar</span>
 					</div>
 				</a>
 				{% endfor %}
@@ -153,6 +152,47 @@
 			Catálogo em preparação — volte em breve.
 		</div>
 	{% endif %}
+
+	<!-- "Como funciona" (REDESIGN 2026-09-04, protótipo aprovado) — única
+	     seção com fundo != branco (off-white), 3 passos numerados em ciano. -->
+	<div class="imun-how">
+		<div class="imun-how-grid">
+			<div>
+				<span class="imun-eyebrow">Onde você estiver</span>
+				<h2>Na clínica ou no conforto de casa.</h2>
+				<p class="imun-how-lead">
+					Escolha, agende e receba a aplicação por um profissional habilitado —
+					com a carteira digital atualizada na hora.
+				</p>
+				<div class="imun-how-cta">
+					<a class="btn imun-cta" href="/all-products">Agendar atendimento</a>
+				</div>
+			</div>
+			<div class="imun-steps">
+				<div class="imun-step">
+					<span class="imun-step-n">1</span>
+					<div>
+						<h4>Escolha</h4>
+						<p>Selecione a vacina, vitamina ou consulta e veja o preço na hora.</p>
+					</div>
+				</div>
+				<div class="imun-step">
+					<span class="imun-step-n">2</span>
+					<div>
+						<h4>Agende</h4>
+						<p>Escolha um horário livre — na clínica ou em casa — e confirme.</p>
+					</div>
+				</div>
+				<div class="imun-step">
+					<span class="imun-step-n">3</span>
+					<div>
+						<h4>Aplique</h4>
+						<p>Profissional habilitado aplica e sua carteira digital é atualizada.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
 
 	<!-- R2 (Feature 70 — REDO do site): carrossel de médicos parceiros.
 	     Dados 100% do Healthcare Practitioner nativo (imun_publicar_site=1
@@ -235,31 +275,17 @@
 		</div>
 	</section>
 
-	<!-- Linha Care (F7): teaser "em breve" — produtos ainda não cadastrados
-	     pelo dono; cada chip leva à página de categoria informativa. -->
-	{% if nav_care %}
-	<section class="imun-section imun-section-care">
-		<span class="imun-eyebrow">Linha Care</span>
-		<h2 class="imun-section-title h4">Cuidado pessoal, em breve</h2>
-		<p class="text-muted" style="max-width:64ch;">
-			A Linha Care Imunocare chega com filtro solar, sérum facial e filtro solar
-			infantil — a mesma confiança da Linha Imuno, agora no cuidado do dia a dia.
-		</p>
-		<div class="imun-grid imun-grid-care">
-			{% for cat in nav_care %}
-			<a href="/{{ cat.route }}" class="imun-card">
-				<div class="imun-card-img imun-card-ph" aria-hidden="true">
-					{{ imun_icone(cat.nome, 34) }}
-				</div>
-				<div class="imun-card-body">
-					<div class="imun-card-nm">{{ cat.nome }}</div>
-					<div class="imun-card-ds">Em breve na Imunocare.</div>
-					<div class="imun-card-foot">
-						<span class="imun-pill imun-pill-accent">Em breve</span>
-						<span class="btn imun-cta imun-btn-sm">Quero saber mais</span>
-					</div>
-				</div>
-			</a>
+	<!-- Categorias (REDESIGN 2026-09-04, protótipo #cats/.cats) — grade quieta
+	     com TODAS as categorias de topo, mesmo as sem produto ainda
+	     (Nutracêuticos/Cuidado diário caem na página informativa "em breve",
+	     ver templates/generators/item_group.html + catalogo.jinja_utils). -->
+	{% if nav_categorias %}
+	<section class="imun-section" id="categorias">
+		<span class="imun-eyebrow">Explore</span>
+		<h2 class="imun-section-title h4">Categorias</h2>
+		<div class="imun-cats-grid">
+			{% for cat in nav_categorias %}
+			<a href="/{{ cat.route }}" class="imun-cat-tile"><span class="imun-cat-dot"></span>{{ cat.nome }}</a>
 			{% endfor %}
 		</div>
 	</section>
@@ -272,6 +298,23 @@
 		ou finalizar sua compra.
 	</p>
 	{% endif %}
+
+	<!-- Fechamento (REDESIGN 2026-09-04, protótipo .close) — CTA final antes
+	     do disclaimer/rodapé. -->
+	<section class="imun-section text-center">
+		<span class="imun-eyebrow">Pronto para começar?</span>
+		<h2 class="imun-section-title h4" style="font-size:clamp(1.7rem,4vw,2.4rem);">
+			Você <span class="imun-accent">mais forte</span>, hoje.
+		</h2>
+		<p class="text-muted" style="max-width:52ch; margin:12px auto 0;">
+			Agende sua vacina, vitamina ou consulta em minutos — atendimento na clínica
+			ou em casa.
+		</p>
+		<div class="imun-hero-cta" style="justify-content:center; margin-top:24px;">
+			<a class="btn imun-cta" href="/all-products">Agendar agora</a>
+			<a class="btn-ghost-light" href="/contact">Falar com a clínica</a>
+		</div>
+	</section>
 
 	<section class="text-center py-4">
 		<p class="text-muted small mb-1">

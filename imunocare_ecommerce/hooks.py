@@ -23,31 +23,17 @@ required_apps = ["erpnext", "webshop", "healthcare"]
 # Para exportar: bench export-fixtures --app imunocare_ecommerce
 # ---------------------------------------------------------------------------
 fixtures = [
-	{
-		"dt": "Item Group",
-		"filters": [
-			[
-				"item_group_name",
-				"in",
-				[
-					"Loja Imunocare",
-					"Vitaminas Injetáveis",
-					"Terapias Injetáveis",
-					"Consultas Médicas",
-					"Vale-Presente",
-					"Brincos",
-					# Item 2b (2026-08-10): "Pacotes" -> "Planos".
-					"Planos",
-					"Exames",
-					# Linha Care (F7):
-					"Cuidado Pessoal",
-					"Filtro Solar",
-					"Serum Facial",
-					"Filtro Solar Infantil",
-				],
-			]
-		],
-	},
+	# Item Group NÃO é mais fixture (2026-09-04, decisão do CTO na revisão):
+	# a taxonomia da loja passa a ser gerida INTEGRALMENTE e de forma
+	# idempotente por ``catalogo.setup.setup_catalogo`` (after_install/
+	# after_migrate) — criar, renomear ("Vitaminas Injetáveis"->"Vitaminas",
+	# "Consultas Médicas"->"Consultas"), reparentar (Planos->Vacinas) e
+	# consolidar (Linha Care->Cuidado diário). Mantê-la TAMBÉM como fixture
+	# reintroduzia a corrida rename × fixture-sync: o sync roda ANTES do
+	# after_migrate e ou ressuscita o nome antigo, ou cria o novo vazio e o
+	# rename guardado pula, deixando itens órfãos. Fonte única = o código.
+	# Ver [[feedback_frappe_rename_e_fixture]]. (Arquivo fixtures/item_group.json
+	# removido nesta mesma mudança.)
 	# R2 (Feature 70 — REDO do site): carrossel de médicos parceiros na home —
 	# custom fields de PUBLICAÇÃO em Healthcare Practitioner (nativo do
 	# Healthcare, não tocado — só estendido). Criados em código, idempotentes
@@ -187,6 +173,15 @@ web_include_js = [
 # não "sumirem silenciosamente" — mostram copy + CTA em vez do grid vazio.
 jinja = {
 	"methods": [
+		# REDESIGN 2026-09-04: fonte única do SVG do logo oficial (header via
+		# brand_html direto em Python; rodapé via este método, chamado do
+		# override templates/includes/footer/footer.html).
+		"imunocare_ecommerce.identidade.setup.logo_svg",
+		# REDESIGN 2026-09-04: coluna "Loja" do rodapé (templates/includes/
+		# footer/footer.html, override) reusa a MESMA fonte de navegação da
+		# home/chips de listagem — nenhuma URL nova hardcoded, nenhuma lista
+		# duplicada de categorias.
+		"imunocare_ecommerce.catalogo.setup.nav_categorias_loja",
 		"imunocare_ecommerce.catalogo.jinja_utils.contagem_produtos_publicados",
 		"imunocare_ecommerce.catalogo.jinja_utils.info_categoria_vazia",
 		# Atividade 540 (Feature 72): sinal serviço×produto exposto na página
