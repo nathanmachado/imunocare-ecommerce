@@ -231,6 +231,12 @@ def setup_catalogo() -> None:
 		_setup_item_groups()
 		if frappe.db.exists("DocType", "Website Item"):
 			_publish_website_items()
+			# Correção 2026-09-05: custom field "Produto em destaque" (Website
+			# Item) + seed único dos 5 produtos que já estavam no carrossel —
+			# nesta ordem (depois de publicar), porque o seed procura o
+			# Website Item pelo nome de vitrine.
+			_setup_custom_fields_catalogo()
+			_seed_produtos_destaque()
 		else:
 			frappe.logger(_LOG_TITLE).warning(
 				"webshop ainda não instalado — Website Items não foram criados. "
@@ -860,7 +866,16 @@ def _mapa_destaque() -> dict[str, bool]:
 	"""``{web_item_name: True}`` para os produtos curados com ``"destaque":
 	true`` em ``catalogo_loja.json`` (campo opcional, ausente = ``False``).
 	Reuso: mesma fonte do catálogo curado (``_carregar_mapa_loja``), nenhuma
-	segunda lista de "produtos em destaque" mantida à parte."""
+	segunda lista de "produtos em destaque" mantida à parte.
+
+	IMPORTANTE (correção 2026-09-05, pedido do dono): esta flag é usada
+	SÓ para o selo "Mais agendada" dos cards da home (``secoes_para_home``
+	acima) — DESACOPLADA do carrossel do hero desde a correção 2026-09-05.
+	O carrossel agora lê exclusivamente o custom field
+	``Website Item.imun_produto_destaque`` (ver ``hero_carrossel`` abaixo),
+	que é curadoria do GESTOR pelo Desk, não deste arquivo de config de dev.
+	Não fundir as duas de novo — são decisões diferentes, de gente diferente
+	(dev cura o catálogo curado; gestor cura o que aparece no hero)."""
 	return {
 		entrada["web_name"]: True
 		for entrada in _carregar_mapa_loja().values()
@@ -870,104 +885,172 @@ def _mapa_destaque() -> dict[str, bool]:
 
 # ---------------------------------------------------------------------------
 # Iteração 2 do REDESIGN 2026-09-04 — carrossel do hero (produtos em destaque)
+#
+# CORREÇÃO 2026-09-05 (pedido do dono, feedback direto): a 1ª versão desta
+# atividade filtrava os slides por um critério "ADS-safe" (caminho de
+# imagem) que NINGUÉM pediu — regra oculta, decisão de curadoria tomada pelo
+# código sem o gestor saber. Removida por completo (nunca mais um filtro
+# silencioso aqui): o que sobe pro carrossel agora é 100% decisão do
+# GESTOR, marcando o campo abaixo pelo Desk — sem filtro de caminho de
+# imagem, sem depender de ``catalogo_loja.json`` (aquilo é config de DEV,
+# não do gestor).
 # ---------------------------------------------------------------------------
 
-# Marcadores de caminho NUNCA elegíveis para o carrossel do hero — defesa
-# extra (ADS-safe), mesmo que só o prefixo curado (``_IMG_PRODUTOS_URL``) já
-# devesse bastar (nenhum Website Item aponta pra essas pastas hoje; ficam
-# aqui caso um operador troque a foto manualmente pelo Desk).
-_IMG_ADS_UNSAFE_MARCADORES: tuple[str, ...] = (
-	"vitaminas-e-protocolos",
-	"vitaminas e protocolos",
-	"protocolo",
-	"emagrecimento",
+# Custom field no Website Item nativo — "a regra fica visível para o
+# gestor, não escondida no código" (pedido explícito do dono). Mesmo padrão
+# de custom field idempotente já usado em ``medicos.setup``
+# (``create_custom_fields(..., update=True)``).
+CUSTOM_FIELDS_WEBSITE_ITEM: dict[str, list[dict]] = {
+	"Website Item": [
+		{
+			"fieldname": "imun_produto_destaque",
+			"fieldtype": "Check",
+			"label": "Produto em destaque",
+			"insert_after": "thumbnail",
+			"default": "0",
+			"description": (
+				"Marque para este produto aparecer no carrossel da home. A imagem "
+				"exibida é a imagem do produto (Imagem do Site/Miniatura acima) — "
+				"sem essa imagem, o produto marcado simplesmente não gera slide. "
+				"O clique no slide leva à categoria deste produto. Curadoria 100% "
+				"sua: marque/desmarque quantos produtos quiser, a qualquer momento."
+			),
+		},
+	]
+}
+
+
+def _setup_custom_fields_catalogo() -> None:
+	"""Entry-point idempotente (chamado por ``setup_catalogo``, abaixo).
+	Nunca interrompe o migrate."""
+	try:
+		if not frappe.db.exists("DocType", "Website Item"):
+			return
+		from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+		create_custom_fields(CUSTOM_FIELDS_WEBSITE_ITEM, update=True)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+# Seed ONE-SHOT (correção 2026-09-05): os 5 produtos que já apareciam no
+# carrossel na versão anterior (curadoria de dev, ``catalogo_loja.json``)
+# continuam aparecendo depois do deploy — sem isso, o carrossel nasceria
+# vazio até o gestor marcar algo manualmente. Roda uma vez só (mesmo
+# mecanismo de ``loja.setup.curar_portal_menu`` — ``frappe.db.get_default``/
+# ``set_default``): depois disso o gestor manda, marca/desmarca o que
+# quiser pelo Desk sem que um migrate futuro desfaça a escolha dele.
+_SEED_PRODUTOS_DESTAQUE: tuple[str, ...] = (
+	"Qdenga – Takeda (Dengue)",
+	"Influenza Tetravalente",
+	"Shingrix – Herpes Zoster",
+	"Hexavalente",
+	"Vacina HPV9 (Nonavalente)",
 )
+_FLAG_SEED_PRODUTOS_DESTAQUE = "imun_seed_produtos_destaque_20260905"
 
 
-def _imagem_ads_safe(url: str | None) -> bool:
-	"""True se ``url`` for elegível para o carrossel do hero — ADS-SAFE por
-	construção: só aceita o caminho GERIDO de foto de produto
-	(``_IMG_PRODUTOS_URL`` = ``public/img/produtos/<slug>``, a MESMA pasta
-	curada que ``_imagem_produto`` usa para publicar o Website Item) e sem
-	nenhum marcador de princípio ativo/protocolo no caminho. Upload manual
-	apontando pra outro lugar (``/files/...``, pastas brutas de origem como
-	"Vitaminas e Protocolos") nunca entra — mesma regra ADS-safe do resto do
-	site (nunca citar/expor princípio ativo em página pública)."""
-	if not url or not url.startswith(_IMG_PRODUTOS_URL):
-		return False
-	url_lower = url.lower()
-	return not any(marcador in url_lower for marcador in _IMG_ADS_UNSAFE_MARCADORES)
+def _seed_produtos_destaque() -> None:
+	if frappe.db.get_default(_FLAG_SEED_PRODUTOS_DESTAQUE):
+		return
+	try:
+		if not frappe.db.exists("Custom Field", {"dt": "Website Item", "fieldname": "imun_produto_destaque"}):
+			return  # campo ainda não existe nesta execução -> tenta de novo no próximo migrate
+		for web_name in _SEED_PRODUTOS_DESTAQUE:
+			name = frappe.db.get_value("Website Item", {"web_item_name": web_name}, "name")
+			if name:
+				frappe.db.set_value("Website Item", name, "imun_produto_destaque", 1, update_modified=False)
+		frappe.db.set_default(_FLAG_SEED_PRODUTOS_DESTAQUE, "1")
+		frappe.logger(_LOG_TITLE).info(
+			"Seed único: 5 produtos marcados 'Produto em destaque' (carrossel do hero não nasce vazio)."
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 
 
-def hero_carrossel(limite: int = 6) -> list[dict]:
-	"""Slides do carrossel do hero (``www/index.html``): produtos em
-	DESTAQUE (``catalogo_loja.json``, mesma flag ``destaque`` do selo "Mais
-	agendada" — reuso total, uma curadoria só), publicados, com imagem
-	ADS-SAFE já vinculada ao Website Item.
+def _categoria_de_navegacao(website_item_name: str) -> str | None:
+	"""1º Item Group de navegação curado (``website_item_groups``, mesma
+	fonte que ``imun_parents_corrigidos``/``contagem_produtos_publicados``
+	já usam) para o Website Item — ou ``None`` se o produto não tiver
+	nenhuma categoria curada (caso raro: item criado direto no Desk sem
+	passar pela curadoria de ``_upsert_website_item``)."""
+	rows = frappe.get_all(
+		"Website Item Group",
+		filters={"parent": website_item_name, "parenttype": "Website Item"},
+		pluck="item_group",
+		order_by="idx asc",
+		limit_page_length=1,
+	)
+	return rows[0] if rows else None
+
+
+def hero_carrossel(limite: int = 12) -> list[dict]:
+	"""Slides do carrossel do hero (``www/index.html``) — CORREÇÃO 2026-09-05
+	(pedido do dono): curadoria 100% do GESTOR, via o custom field
+	``Website Item.imun_produto_destaque`` (marcado pelo Desk) — NENHUM
+	filtro de código por cima disso. Nunca mais um descarte silencioso por
+	"caminho de imagem" ou qualquer outro critério que ninguém pediu.
+
+	Critério (só isto, documentado no ``description`` do campo pro gestor
+	ver): ``imun_produto_destaque=1`` E ``published=1``. A imagem exibida é
+	a do PRÓPRIO produto (``website_image`` ou, na falta, ``thumbnail``),
+	SEJA QUAL FOR o caminho — inclusive upload manual em ``/files/...`` pelo
+	Desk. Produto marcado sem NENHUMA imagem não gera slide (não tem o que
+	desenhar — isso está dito no campo, não é surpresa).
+
+	Ordenação: estável, por ``web_item_name`` (alfabética) — simples e
+	previsível; o gestor não precisa entender índice/prioridade nenhum, só
+	marcar o checkbox. (Se um dia for preciso ordem manual, dá pra trocar
+	por um campo "Ordem no carrossel" — não implementado por não ter sido
+	pedido.)
 
 	Cada slide: ``{"imagem", "nome", "categoria_route"}`` — o link do slide
-	é sempre a CATEGORIA do produto (``entrada["secao"]`` -> ``Item
-	Group.route``, a MESMA fonte da nav — nunca uma URL fixa/hardcoded).
+	é a CATEGORIA do produto, lida da navegação curada do próprio Website
+	Item (``_categoria_de_navegacao`` / ``website_item_groups``, a mesma
+	fonte da nav) — nunca uma URL fixa/hardcoded, nunca depende de
+	``catalogo_loja.json`` (aquilo é config de dev, decoupled desde a
+	correção 2026-09-05 — ver ``_mapa_destaque``, usada só pro selo "Mais
+	agendada"). Produto sem categoria resolvível (estrutural, não curadoria)
+	é pulado.
 
-	Produto em destaque sem imagem elegível (ou sem categoria válida) é
-	PULADO silenciosamente — nunca aparece com placeholder genérico; se
-	NENHUM produto em destaque sobrar, devolve ``[]`` (o chamador,
-	``www/index.py``, cai no cartão em wash ciano — fallback gracioso, sem
+	Sem NENHUM produto marcado, devolve ``[]`` — o chamador
+	(``www/index.py``) cai no cartão em wash ciano (fallback gracioso, sem
 	área quebrada). Não lança exceção — usada em request de página pública."""
 	if not frappe.db.exists("DocType", "Website Item"):
 		return []
+	if not frappe.db.exists("Custom Field", {"dt": "Website Item", "fieldname": "imun_produto_destaque"}):
+		return []
 	try:
-		mapa = _carregar_mapa_loja()
-		if not mapa:
-			return []
-
-		# Dedup por web_name — ``mapa`` é indexado por item_name (1 produto
-		# pode ter 2+ grafias/nomes cadastrados, ver ``_carregar_mapa_loja``).
-		vistos: set[str] = set()
-		entradas_destaque: list[dict] = []
-		for entrada in mapa.values():
-			web_name = entrada.get("web_name")
-			if not web_name or web_name in vistos or not entrada.get("destaque"):
-				continue
-			vistos.add(web_name)
-			entradas_destaque.append(entrada)
-
-		if not entradas_destaque:
-			return []
+		website_items = frappe.get_all(
+			"Website Item",
+			filters={"imun_produto_destaque": 1, "published": 1},
+			fields=["name", "web_item_name", "website_image", "thumbnail", "item_group"],
+			order_by="web_item_name asc",
+			limit_page_length=limite,
+		)
 
 		slides: list[dict] = []
-		for entrada in entradas_destaque:
-			web_name = entrada["web_name"]
-			secao = entrada.get("secao")
-			if not secao:
-				continue
-
-			wi = frappe.db.get_value(
-				"Website Item",
-				{"web_item_name": web_name, "published": 1},
-				["website_image", "thumbnail", "route"],
-				as_dict=True,
-			)
-			if not wi:
-				continue
-
+		for wi in website_items:
 			imagem = wi.website_image or wi.thumbnail
-			if not _imagem_ads_safe(imagem):
-				continue  # destaque sem imagem elegível -> pula (nunca placeholder)
+			if not imagem:
+				continue  # marcado, mas sem imagem nenhuma -> nada pra desenhar
 
-			route = frappe.db.get_value("Item Group", secao, "route")
+			categoria = _categoria_de_navegacao(wi.name) or wi.item_group
+			if not categoria:
+				continue
+
+			route = frappe.db.get_value("Item Group", categoria, "route")
 			if not route:
 				continue
 
-			slides.append({"imagem": imagem, "nome": web_name, "categoria_route": route})
-			if len(slides) >= limite:
-				break
+			slides.append(
+				{"imagem": imagem, "nome": wi.web_item_name or wi.name, "categoria_route": route}
+			)
 
 		return slides
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 		return []
-
 
 def nav_categorias(grupo_pai: str) -> list[dict]:
 	"""Categorias de navegação da loja (taxonomia 2026-09-04: lista flat

@@ -84,10 +84,12 @@ def get_context(context):
 	context.consultas_medicas_route = _rota_consultas_medicas()
 
 	# REDESIGN 2026-09-04, iteração 2 (pedido do dono): a foto estática do
-	# hero virou um CARROSSEL de produtos em destaque (catalogo.setup.
-	# hero_carrossel — mesma flag ``destaque`` do selo "Mais agendada",
-	# imagens ADS-SAFE já vinculadas ao Website Item). Sem nenhum destaque
-	# elegível, a lista vem vazia e o template cai no cartão em wash ciano
+	# hero virou um CARROSSEL. CORREÇÃO 2026-09-05: curadoria 100% do
+	# GESTOR pelo Desk (custom field "Produto em destaque" no Website Item,
+	# ver catalogo.setup.hero_carrossel/CUSTOM_FIELDS_WEBSITE_ITEM) — SEM
+	# nenhum filtro de código por cima (a 1ª versão filtrava por "imagem
+	# ADS-safe" sem ninguém ter pedido; removido). Sem nenhum produto
+	# marcado, a lista vem vazia e o template cai no cartão em wash ciano
 	# (fallback gracioso, ver ``.imun-hero-photo`` no Website Theme) — nunca
 	# área quebrada.
 	try:
