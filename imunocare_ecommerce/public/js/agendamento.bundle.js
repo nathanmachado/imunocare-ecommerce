@@ -15,6 +15,26 @@
 //
 // Site-wide via hooks.web_include_js — roda em toda página pública e sai
 // cedo se não houver item agendável na página atual.
+
+// Task 1.3 (spec loja-agendar-em-toda-pagina) — __() client-side (frappe/
+// public/js/frappe/translate.js:13-17, frappe._) lê DIRETO de
+// ``frappe._messages``, NUNCA de ``frappe.boot.__messages`` — só
+// ``frappe/www/app.html:55`` (shell do Desk, que a loja nunca carrega) faz
+// esse espelhamento. ``frappe.boot.__messages`` agora chega em TODA página
+// via o hook ``update_website_context`` (``catalogo.jinja_utils.
+// injetar_mensagens_loja``, mutando ``context.boot`` antes do
+// ``frappe.boot = {{ boot | json }}`` de ``frappe/templates/base.html``
+// rodar) — falta só este espelho, feito aqui (site-wide, sem template) em
+// vez de repetir a linha em cada override de ``base_scripts``.
+// ``frappe.boot`` já existe neste ponto: o ``block base_scripts`` de
+// ``base.html`` (linhas 91-98) roda ANTES do loop de ``web_include_js``
+// (linhas 100-102) que carrega este bundle — este arquivo é o 1º item de
+// ``web_include_js`` (ver ``hooks.py``), então roda cedo, síncrono, antes de
+// qualquer ``frappe.ready``.
+if (frappe.boot && frappe.boot.__messages) {
+	frappe._messages = frappe.boot.__messages;
+}
+
 frappe.ready(function () {
 	imun_decidir_botao_pagina_item();
 	imun_patch_botao_grid();
@@ -349,6 +369,46 @@ frappe.ready(function () {
 	});
 });
 
+// Garante os bundles de formulário do Desk ANTES de montar
+// ``frappe.ui.Dialog`` com campos (``fields``) — ver
+// feedback_web_dialog_controls_bundle: o ``base_scripts`` padrão do site só
+// carrega ``frappe-web.bundle.js`` (tem ``frappe.ui.Dialog``, NÃO tem
+// ``frappe.ui.form.make_control``, que só existe em ``controls.bundle``/
+// ``desk.bundle``). Sem isso o diálogo estoura
+// "frappe.ui.form.make_control is not a function" em qualquer página que não
+// inclua os dois bundles no template (hoje só a página do produto,
+// ``/cart`` e ``/customer_reviews`` incluem — ``/all-products``, categorias
+// e a home NÃO incluem).
+//
+// Reuso total: ``frappe.require`` já existe em ``frappe-web.bundle.js``
+// (``apps/frappe/frappe/website/js/website.js:10-21``, importado por
+// ``apps/frappe/frappe/public/js/frappe-web.bundle.js:24`` — presente em
+// TODA página pública, sem exceção) e resolve cada nome de bundle
+// (``"controls.bundle.js"``/``"dialog.bundle.js"``) para o caminho com hash
+// via ``frappe.bundled_asset`` -> ``frappe.boot.assets_json[path]``
+// (``website.js:21-29``) — o mesmo ``assets_json`` que
+// ``frappe.website.utils.get_boot_data`` injeta no boot de página web
+// (``apps/frappe/frappe/website/utils.py:191``, chave ``"assets_json":
+// get_assets_json()``), não só no Desk. ``frappe.require`` é ``async
+// function`` (website.js:10), então já devolve uma Promise nativamente —
+// não precisamos embrulhar em ``new Promise`` nem copiar nenhum template do
+// webshop. Ele também deduplica via ``frappe._assets_loaded``
+// (website.js:33), então chamar isto de novo num diálogo seguinte não
+// insere `<script>` duplicado.
+//
+// Ponto ÚNICO: usado dentro de ``imun_abrir_dialogo_agendamento`` (abaixo),
+// que é o único caminho que todos os chamadores atravessam — botão da
+// página do produto (``imun_render_botao_agendar``), cards de listagem
+// (``.imun-btn-agendar-card``) e ``window.imunAbrirAgendamentoDialogo``
+// (carrossel de médicos, ``medicos_carrossel.bundle.js``) — sem precisar
+// tocar em nenhum desses três pontos individualmente nem em template algum.
+function imun_garantir_dialog() {
+	if (frappe.ui.form && frappe.ui.form.make_control) {
+		return Promise.resolve();
+	}
+	return frappe.require(["controls.bundle.js", "dialog.bundle.js"]);
+}
+
 // Diálogo de agendamento compartilhado — aceita ``params`` com
 // ``{item_code}`` (item da loja, fluxo A1.3 acima) OU ``{appointment_type}``
 // (agendamento direto, ex.: carrossel de médicos na home — R2/Feature 70)
@@ -362,19 +422,25 @@ frappe.ready(function () {
 // verificação, mas o horário É REVALIDADO normalmente (não fica reservado
 // enquanto a pessoa se identifica).
 function imun_abrir_dialogo_agendamento(params, info, preset) {
-	// F3 (evoluído na Atividade 542-dep / Feature 72): modalidade "Na clínica
-	// x Domiciliar" — consome ``info_domiciliar_agendamento`` (elegibilidade
-	// POR SERVIÇO: só oferece Domiciliar quando o Appointment Type do item
-	// tiver ``imun_permite_domiciliar=1``, lido defensivamente — ver
-	// ``agendamento/domiciliar.py``). Antes desta atividade a elegibilidade
-	// era só o flag GLOBAL da loja (``info_domiciliar()``, ainda usado pelo
-	// carrinho de produtos em ``domiciliar_cart.js``, sem noção de serviço).
-	frappe.call({
-		method: "imunocare_ecommerce.agendamento.domiciliar.info_domiciliar_agendamento",
-		args: params,
-		callback: function (r) {
-			imun_montar_dialogo_agendamento(params, info, r.message || {}, preset);
-		},
+	// Task 1.1 (spec loja-agendar-em-toda-pagina): garante
+	// controls.bundle+dialog.bundle ANTES de qualquer coisa que monte
+	// frappe.ui.Dialog — cobre TODOS os chamadores desta função (ver
+	// imun_garantir_dialog acima).
+	imun_garantir_dialog().then(function () {
+		// F3 (evoluído na Atividade 542-dep / Feature 72): modalidade "Na clínica
+		// x Domiciliar" — consome ``info_domiciliar_agendamento`` (elegibilidade
+		// POR SERVIÇO: só oferece Domiciliar quando o Appointment Type do item
+		// tiver ``imun_permite_domiciliar=1``, lido defensivamente — ver
+		// ``agendamento/domiciliar.py``). Antes desta atividade a elegibilidade
+		// era só o flag GLOBAL da loja (``info_domiciliar()``, ainda usado pelo
+		// carrinho de produtos em ``domiciliar_cart.js``, sem noção de serviço).
+		frappe.call({
+			method: "imunocare_ecommerce.agendamento.domiciliar.info_domiciliar_agendamento",
+			args: params,
+			callback: function (r) {
+				imun_montar_dialogo_agendamento(params, info, r.message || {}, preset);
+			},
+		});
 	});
 }
 
@@ -464,7 +530,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			// Fonte inglesa "Date" (traduz para "Data" em pt-BR) — NUNCA a fonte
 			// ambigua "Data", que colide com o ingles "Data" (=dados/registros) e,
 			// com o dicionario de traducao agora injetado na loja, virava "Dados".
-			label: __("Date"),
+			label: "Date",
 			fieldtype: "Date",
 			reqd: 1,
 		},
@@ -474,7 +540,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 		},
 		{
 			fieldname: "appointment_time",
-			label: __("Horário selecionado"),
+			label: "Selected time",
 			fieldtype: "Data",
 			read_only: 1,
 		},
@@ -487,7 +553,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 		});
 		fields.push({
 			fieldname: "modalidade",
-			label: __("Atendimento"),
+			label: "Service mode",
 			fieldtype: "Select",
 			options: __("Na clínica") + "\n" + __("Domiciliar (+ taxa)"),
 			default: __("Na clínica"),
@@ -510,15 +576,15 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 	var camposFaltantes =
 		(info.logged_in && info.cadastro_paciente && info.cadastro_paciente.campos_faltantes) || [];
 	if (camposFaltantes.length) {
-		fields.push({ fieldname: "imun_cadastro_sb", fieldtype: "Section Break", label: __("Complete seu cadastro") });
+		fields.push({ fieldname: "imun_cadastro_sb", fieldtype: "Section Break", label: "Complete your registration" });
 		if (camposFaltantes.indexOf("first_name") !== -1 || camposFaltantes.indexOf("last_name") !== -1) {
-			fields.push({ fieldname: "imun_nome_completo", fieldtype: "Data", label: __("Nome completo"), reqd: 1 });
+			fields.push({ fieldname: "imun_nome_completo", fieldtype: "Data", label: "Full name", reqd: 1 });
 		}
 		if (camposFaltantes.indexOf("dob") !== -1) {
 			fields.push({
 				fieldname: "imun_dob",
 				fieldtype: "Date",
-				label: __("Data de nascimento"),
+				label: "Date of birth",
 				reqd: 1,
 				// Tarefa D: abre o calendário ~30 anos atrás em vez do mês
 				// atual — também sempre aceitou digitação direta (DD/MM/AAAA),
@@ -527,13 +593,13 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			});
 		}
 		if (camposFaltantes.indexOf("cpf") !== -1) {
-			fields.push({ fieldname: "imun_cpf", fieldtype: "Data", label: __("CPF"), reqd: 1 });
+			fields.push({ fieldname: "imun_cpf", fieldtype: "Data", label: "CPF", reqd: 1 });
 		}
 		if (camposFaltantes.indexOf("mobile") !== -1) {
 			fields.push({
 				fieldname: "imun_mobile",
 				fieldtype: "Data",
-				label: __("Celular / WhatsApp"),
+				label: "Mobile / WhatsApp",
 				reqd: 1,
 			});
 		}
@@ -542,7 +608,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 				fieldname: "imun_email",
 				fieldtype: "Data",
 				options: "Email",
-				label: __("E-mail"),
+				label: "E-mail",
 				reqd: 1,
 			});
 		}
@@ -550,7 +616,7 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			fields.push({
 				fieldname: "imun_sex",
 				fieldtype: "Select",
-				label: __("Sexo"),
+				label: "Gender",
 				options: "\nMale\nFemale\nOther",
 				reqd: 1,
 			});
@@ -737,7 +803,7 @@ function imun_passo_colisao_cpf(escolha, cpfDigitado) {
 			{
 				fieldname: "canal",
 				fieldtype: "Select",
-				label: __("Receber o código por"),
+				label: "Receive the code by",
 				reqd: 1,
 				description: __(
 					"O código vai para o contato JÁ cadastrado — não para o que você digitar abaixo."
@@ -747,14 +813,14 @@ function imun_passo_colisao_cpf(escolha, cpfDigitado) {
 				fieldname: "email",
 				fieldtype: "Data",
 				options: "Email",
-				label: __("E-mail"),
+				label: "E-mail",
 				depends_on: "eval:doc.canal=='" + __("E-mail") + "'",
 				mandatory_depends_on: "eval:doc.canal=='" + __("E-mail") + "'",
 			},
 			{
 				fieldname: "celular",
 				fieldtype: "Data",
-				label: __("Celular / WhatsApp"),
+				label: "Mobile / WhatsApp",
 				depends_on: "eval:doc.canal=='" + __("WhatsApp") + "'",
 				mandatory_depends_on: "eval:doc.canal=='" + __("WhatsApp") + "'",
 			},
@@ -817,7 +883,7 @@ function imun_passo_codigo_vinculo_logado(escolha, envio, reenvio) {
 		title: __("Digite o código"),
 		fields: [
 			{ fieldname: "aviso_html", fieldtype: "HTML" },
-			{ fieldname: "codigo", fieldtype: "Data", label: __("Código de 6 dígitos"), reqd: 1 },
+			{ fieldname: "codigo", fieldtype: "Data", label: "6-digit code", reqd: 1 },
 		],
 		primary_action_label: __("Confirmar agendamento"),
 		primary_action: function (v) {
@@ -950,16 +1016,16 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 				fieldtype: "HTML",
 				options: "<p>" + __("Para confirmar o horário escolhido, identifique-se.") + "</p>",
 			},
-			{ fieldname: "ja_tenho_conta", fieldtype: "Button", label: __("Já tenho conta") },
+			{ fieldname: "ja_tenho_conta", fieldtype: "Button", label: "I already have an account" },
 			{ fieldtype: "Section Break" },
-			{ fieldname: "nome", fieldtype: "Data", label: __("Nome completo"), reqd: 1 },
-			{ fieldname: "celular", fieldtype: "Data", label: __("Celular / WhatsApp"), reqd: 1 },
-			{ fieldname: "email", fieldtype: "Data", label: __("E-mail"), options: "Email", reqd: 1 },
-			{ fieldname: "cpf", fieldtype: "Data", label: __("CPF"), reqd: 1 },
+			{ fieldname: "nome", fieldtype: "Data", label: "Full name", reqd: 1 },
+			{ fieldname: "celular", fieldtype: "Data", label: "Mobile / WhatsApp", reqd: 1 },
+			{ fieldname: "email", fieldtype: "Data", label: "E-mail", options: "Email", reqd: 1 },
+			{ fieldname: "cpf", fieldtype: "Data", label: "CPF", reqd: 1 },
 			{
 				fieldname: "dob",
 				fieldtype: "Date",
-				label: __("Data de nascimento"),
+				label: "Date of birth",
 				reqd: 1,
 				// Tarefa D: quem se verifica aqui é sempre maior de 18
 				// (_exigir_adulto) — abre o calendário ~30 anos atrás em vez
@@ -969,14 +1035,14 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 			{
 				fieldname: "sexo",
 				fieldtype: "Select",
-				label: __("Sexo"),
+				label: "Gender",
 				options: "\nMale\nFemale\nOther",
 				reqd: 1,
 			},
 			{
 				fieldname: "para_outra_pessoa",
 				fieldtype: "Check",
-				label: __("A consulta é para outra pessoa"),
+				label: "This appointment is for someone else",
 				description: __(
 					"Menor de 18 anos só pode ser agendado por um responsável — marque esta opção e informe os dados de quem vai ser atendido."
 				),
@@ -984,28 +1050,28 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 			{
 				fieldname: "paciente_nome",
 				fieldtype: "Data",
-				label: __("Nome do paciente"),
+				label: "Patient's name",
 				depends_on: "para_outra_pessoa",
 				mandatory_depends_on: "para_outra_pessoa",
 			},
 			{
 				fieldname: "paciente_cpf",
 				fieldtype: "Data",
-				label: __("CPF do paciente"),
+				label: "Patient's CPF",
 				depends_on: "para_outra_pessoa",
 				mandatory_depends_on: "para_outra_pessoa",
 			},
 			{
 				fieldname: "paciente_dob",
 				fieldtype: "Date",
-				label: __("Nascimento do paciente"),
+				label: "Patient's date of birth",
 				depends_on: "para_outra_pessoa",
 				mandatory_depends_on: "para_outra_pessoa",
 			},
 			{
 				fieldname: "paciente_sexo",
 				fieldtype: "Select",
-				label: __("Sexo do paciente"),
+				label: "Patient's gender",
 				options: "\nMale\nFemale\nOther",
 				depends_on: "para_outra_pessoa",
 				mandatory_depends_on: "para_outra_pessoa",
@@ -1014,7 +1080,7 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 			{
 				fieldname: "canal",
 				fieldtype: "Select",
-				label: __("Receber o código por"),
+				label: "Receive the code by",
 				reqd: 1,
 				// Mudança de contrato (revisão de segurança 2026-09-01): o canal
 				// não é cosmético — é ele que ANCORA a conta. Verificar por
@@ -1093,7 +1159,7 @@ function imun_passo_codigo(escolha, envio, reenvio) {
 		title: __("Digite o código"),
 		fields: [
 			{ fieldname: "aviso_html", fieldtype: "HTML" },
-			{ fieldname: "codigo", fieldtype: "Data", label: __("Código de 6 dígitos"), reqd: 1 },
+			{ fieldname: "codigo", fieldtype: "Data", label: "6-digit code", reqd: 1 },
 		],
 		primary_action_label: __("Confirmar reserva"),
 		primary_action: function (v) {

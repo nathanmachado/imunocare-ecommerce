@@ -15,20 +15,16 @@
 
 {% block header %}{% endblock %}
 
-{#- Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
-	este template NÃO sobrescrevia base_scripts antes (herdava o default de
-	frappe/templates/base.html, sem o bug de boot derrubado do
-	feedback_webshop_base_scripts_sem_boot) — só acrescenta o dicionário de
-	tradução via `{{ super() }}`, sem tocar no resto do bloco original. Cobre
-	o mesmo widget de busca/grid ("Search for Products", cards de produto —
-	product_ui/views.js) que aparece em QUALQUER página de categoria. -#}
-{% block base_scripts %}
-{{ super() }}
-<script>
-	frappe.boot["__messages"] = {{ imun_mensagens_loja() | tojson }};
-	frappe._messages = frappe.boot["__messages"];
-</script>
-{% endblock %}
+{#- Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md)
+	sobrescrevia base_scripts aqui só para acrescentar o dicionário de
+	tradução via `{{ super() }}` — este template nunca teve o bug de boot
+	derrubado (feedback_webshop_base_scripts_sem_boot), então não precisava
+	de mais nada. Substituída pela Task 1.3 (spec
+	loja-agendar-em-toda-pagina): o dicionário agora é injetado no
+	context.boot pelo hook update_website_context
+	(catalogo.jinja_utils.injetar_mensagens_loja), ponto único que já cobre
+	o base_scripts DEFAULT de frappe/templates/base.html — bloco removido,
+	volta a herdar o default sem override nenhum. -#}
 
 {% block script %}
 <script type="text/javascript" src="/all-products/index.js"></script>
