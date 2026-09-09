@@ -136,15 +136,14 @@
 	frappe.boot = {{ boot | json }}
 	// for backward compatibility of some libs
 	frappe.sys_defaults = frappe.boot.sysdefaults;
-	// Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
-	// o boot de página WEB nunca traz __messages (só o boot do Desk) — sem
-	// isso o __() client-side (usado por bastante JS nativo do webshop:
-	// "Search for Products", "Item Code :" etc.) nunca traduzia, mesmo com a
-	// tradução já presente em imunocare_ecommerce/translations/pt-BR.csv.
-	// Mesma atribuição que frappe/www/app.html (shell do Desk) faz — só que
-	// aqui, porque a loja nunca carrega aquele shell.
-	frappe.boot["__messages"] = {{ imun_mensagens_loja() | tojson }};
-	frappe._messages = frappe.boot["__messages"];
+	// Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md),
+	// substituída pela Task 1.3 (spec loja-agendar-em-toda-pagina): o
+	// dicionário de tradução agora vem DENTRO de `boot` (mesma variável
+	// acima) — injetado no context.boot pelo hook update_website_context
+	// (catalogo.jinja_utils.injetar_mensagens_loja), ponto único que cobre
+	// TODA página, não só esta. frappe._messages é espelhado a partir de
+	// frappe.boot.__messages no topo de public/js/agendamento.bundle.js
+	// (bundle global via web_include_js) — não precisa mais de linha aqui.
 </script>
 {{ include_script("frappe-web.bundle.js") }}
 {{ include_script("controls.bundle.js") }}

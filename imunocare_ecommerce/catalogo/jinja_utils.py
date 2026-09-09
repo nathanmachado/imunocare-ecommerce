@@ -219,10 +219,9 @@ def imun_parents_corrigidos(doc, parents_originais):
 
 def imun_mensagens_loja() -> dict:
 	"""Dicionário ``{texto_original: tradução}`` do idioma corrente, para
-	injetar em ``frappe.boot.__messages``/``frappe._messages`` nas páginas
-	públicas da loja (ver os ``{% block base_scripts %}`` de
-	``templates/generators/item/item.html``, ``templates/pages/cart.html`` e
-	``templates/pages/customer_reviews.html`).
+	injetar em ``frappe.boot.__messages`` (server-side, ver
+	``injetar_mensagens_loja`` abaixo) e ``frappe._messages`` (client-side,
+	ver o topo de ``public/js/agendamento.bundle.js``).
 
 	Causa raiz (``feedback_loja_client_i18n_e_datepicker``): o boot de página
 	WEB (``frappe.website.utils.get_boot_data``) nunca inclui
@@ -234,15 +233,79 @@ def imun_mensagens_loja() -> dict:
 	traduzia, mesmo com a tradução JÁ presente em
 	``imunocare_ecommerce/translations/pt-BR.csv``.
 
-	Reuso total: ``frappe.translate.get_all_translations`` é a MESMA função
-	que ``frappe.boot.get_bootinfo`` chama para montar ``__messages`` no Desk
-	(via ``get_messages_for_boot``) — não reimplementamos leitura de CSV/.mo
-	nem merge entre apps aqui. Nunca lança (página pública, guest incluso)."""
+	Correção de peso (revisão 2026-09-09 da Task 1.3): a 1ª versão usava
+	``frappe.translate.get_all_translations`` — o dicionário MERGED de TODO o
+	sistema (``frappe``+``erpnext``+``healthcare``+... instalados, ~16 mil
+	chaves, ~1,1 MB de JSON inline em CADA página, inclusive a home, que é
+	landing page de Google Ads). Decisão (simplicidade + peso): a loja
+	carrega só o dicionário DA LOJA (``frappe.translate.
+	get_translations_from_apps(lang, apps=["imunocare_ecommerce"])``,
+	``apps/frappe/frappe/translate.py:174-189`` — MESMA função que
+	``get_all_translations`` usa por baixo para cada app, só que sem
+	mesclar todos os apps instalados); ~60 chaves, poucos KB. Strings do
+	CORE que o cliente vê na loja (grid/lista/filtros/busca do webshop, ex.
+	"Categories"/"Explore"/"Prev"/"Next") NÃO vêm mais de graça do dicionário
+	do sistema inteiro — precisam estar explicitamente em
+	``imunocare_ecommerce/translations/pt-BR.csv`` (fonte única, curada,
+	nunca "todo o resto engolido por engano").
+
+	Reuso: ``get_translations_from_apps`` é a mesma função que
+	``get_all_translations`` chama internamente por trás do cache
+	MERGED_TRANSLATION_KEY — não reimplementamos leitura de CSV/.mo aqui, só
+	escopamos ao(s) app(s). Nunca lança (página pública, guest incluso)."""
 	try:
-		from frappe.translate import get_all_translations
+		from frappe.translate import get_translations_from_apps
 
 		lang = frappe.local.lang or "pt-BR"
-		return get_all_translations(lang) or {}
+		return get_translations_from_apps(lang, apps=["imunocare_ecommerce"]) or {}
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
 		return {}
+
+
+def injetar_mensagens_loja(context):
+	"""Hook ``update_website_context`` (Task 1.3 — spec
+	loja-agendar-em-toda-pagina): ponto ÚNICO de injeção do dicionário de
+	tradução em TODA página web pública, substituindo as 4 injeções por
+	template (``item.html``/``item_group.html``/``cart.html``/
+	``customer_reviews.html``) que só cobriam quem incluía aquele bloco —
+	``/all-products`` (listagem geral, sem override de ``base_scripts``) e a
+	home ficavam de fora, e o campo de data do modal de agendamento saía
+	"Date"/"Selected time" em vez de "Data"/"Horário selecionado" (achado da
+	revisão 2026-09-09 das Tasks 1.1/1.2).
+
+	Timing confirmado no core (``apps/frappe/frappe/website/page_renderers/``):
+	- ``base_template_page.py:12-15`` (``init_context``) roda
+	  ``self.context.update(get_website_settings())`` — e
+	  ``website_settings.py:263`` (``get_website_settings``) faz
+	  ``context.boot = get_boot_data()`` antes de retornar; esse dict vira
+	  ``self.context.boot`` (mesmo objeto, sem cópia — ``dict.update`` só
+	  copia a referência do valor).
+	- ``base_template_page.py:26-34`` (``post_process_context``) chama
+	  ``self.update_website_context()`` (linha 32) — que roda DEPOIS de
+	  ``init_context`` já ter sido chamado por quem constrói o renderer
+	  (``frappe/website/page_renderers/template_page.py``) — e
+	  ``update_website_context`` (linhas 69-74) percorre
+	  ``frappe.get_hooks("update_website_context")`` chamando
+	  ``frappe.get_attr(method)(self.context)``: quando ESTA função roda,
+	  ``context.boot`` já é o dict populado por ``get_boot_data()``.
+
+	``frappe/templates/base.html:91-98`` (``block base_scripts``, herdado por
+	QUALQUER página que não sobrescreva o bloco) faz
+	``frappe.boot = {{ boot | json }}`` usando esse MESMO ``context.boot`` —
+	mutar ``context.boot`` aqui chega a toda página sem tocar em nenhum
+	template, inclusive nos 3 que sobrescrevem ``base_scripts`` só para
+	restaurar ``frappe.boot``/``frappe.sys_defaults`` (``item.html``/
+	``cart.html``/``customer_reviews.html`` — ver
+	``feedback_webshop_base_scripts_sem_boot``): eles usam a mesma variável
+	Jinja ``boot`` = ``context.boot``, então também ganham ``__messages`` de
+	graça, sem precisar mais da injeção inline que tinham.
+
+	Defensivo (``context.boot`` pode não existir/não ser dict em algum
+	renderer que não passe por ``get_website_settings``): nunca lança, só
+	não injeta."""
+	try:
+		if isinstance(context.get("boot"), dict):
+			context.boot["__messages"] = imun_mensagens_loja()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)

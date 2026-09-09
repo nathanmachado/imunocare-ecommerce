@@ -29,11 +29,11 @@
 	frappe.boot = {{ boot | json }}
 	// for backward compatibility of some libs
 	frappe.sys_defaults = frappe.boot.sysdefaults;
-	// Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
-	// ver comentário equivalente em templates/generators/item/item.html —
-	// injeta o dicionário de tradução que o boot de página web nunca traz.
-	frappe.boot["__messages"] = {{ imun_mensagens_loja() | tojson }};
-	frappe._messages = frappe.boot["__messages"];
+	// Tarefa F (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md),
+	// substituída pela Task 1.3 (spec loja-agendar-em-toda-pagina) — ver
+	// comentário equivalente em templates/generators/item/item.html: o
+	// dicionário de tradução agora vem dentro do `boot` acima, injetado
+	// pelo hook update_website_context (ponto único, cobre toda página).
 </script>
 {{ include_script("frappe-web.bundle.js") }}
 {{ include_script("controls.bundle.js") }}

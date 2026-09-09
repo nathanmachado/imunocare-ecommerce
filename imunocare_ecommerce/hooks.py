@@ -168,6 +168,44 @@ web_include_js = [
 # automatically create page for each record of this doctype
 # website_generators = ["Web Page"]
 
+# Redirects
+# ----------
+# Task 2.1 (spec loja-agendar-em-toda-pagina): a busca nativa do Frappe
+# (``/search?q=...``, em inglês, devolve grupos de Item — não a loja) leva à
+# busca de produtos da própria loja (``/all-products?search=...``),
+# preservando o termo pesquisado. Escopo desta task é só o REDIRECT — o
+# webshop nativo (`ProductFiltersBuilder`/`all-products/index.py`) não lê
+# hoje nenhum parâmetro ``search`` da querystring para pré-filtrar a
+# listagem; ligar o termo a um filtro de fato é atividade futura, fora deste
+# escopo (avisar o CTO).
+#
+# Sintaxe conferida em ``apps/frappe/frappe/website/path_resolver.py``:
+# ``PathResolver.__init__`` (linha 23) já chega com ``self.path =
+# path.strip("/ ")`` (sem barra), e ``resolve_redirect`` (linhas 99-151) faz
+# ``pattern = rule["source"].strip("/ ") + "$"`` (linha 133, também tira a
+# barra do ``source`` do hook) e casa com ``re.match`` (ancorado no início
+# por padrão) — por isso ``source`` aqui é escrito só com barra INICIAL, sem
+# barra final, e sem ``^``. O termo da busca só entra em ``path_to_match``
+# quando a regra tem ``"match_with_query_string": True`` **e** a requisição
+# realmente tem query string (linhas 139-141: ``if query_string and
+# rule.get("match_with_query_string")``); sem isso o cotejo usa só o path,
+# ignorando a query — por isso ``/search`` puro (2ª regra, sem
+# ``match_with_query_string``) também bateria numa requisição COM query se
+# viesse antes da 1ª — a ordem das duas regras abaixo importa: a mais
+# específica (com termo) primeiro, a genérica (sem termo) depois. O termo
+# volta como veio (sem decodificar %20/+) — ``target`` é usado direto em
+# ``re.sub`` (linha 148), sem reencode.
+website_redirects = [
+	# /search?q=<termo> -> /all-products?search=<termo>
+	{
+		"source": r"/search\?q=(.*)",
+		"target": r"/all-products?search=\1",
+		"match_with_query_string": True,
+	},
+	# /search (sem termo) -> /all-products
+	{"source": r"/search", "target": r"/all-products"},
+]
+
 # Jinja
 # ----------
 
@@ -196,12 +234,19 @@ jinja = {
 		# corrige o breadcrumb do produto para a categoria CURADA em vez do
 		# Item.item_group bruto ("Aplicação de Vacinas").
 		"imunocare_ecommerce.catalogo.jinja_utils.imun_parents_corrigidos",
-		# Tarefa F: dicionário de tradução para o boot da storefront
-		# (frappe.boot.__messages/frappe._messages) — ver base_scripts de
-		# item.html/cart.html/customer_reviews.html.
-		"imunocare_ecommerce.catalogo.jinja_utils.imun_mensagens_loja",
 	]
 }
+
+# Task 1.3 (spec loja-agendar-em-toda-pagina): ponto ÚNICO de injeção do
+# dicionário de tradução (frappe.boot.__messages) em TODA página web
+# pública — substitui as 4 injeções por template (item.html/item_group.html/
+# cart.html/customer_reviews.html, Tarefa F antiga), que deixavam de fora
+# qualquer página sem esse bloco (/all-products, home). Ver
+# catalogo.jinja_utils.injetar_mensagens_loja para o porquê do timing
+# (roda depois de context.boot já populado por get_website_settings).
+update_website_context = [
+	"imunocare_ecommerce.catalogo.jinja_utils.injetar_mensagens_loja",
+]
 
 # Installation
 # ------------
