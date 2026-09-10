@@ -48,6 +48,13 @@ frappe.ready(function () {
 		item_group: null,
 		field_filters: {},
 		attribute_filters: {},
+		// Task 2.2 (spec loja-agendar-em-toda-pagina): "Carregar mais" monta
+		// seus PRÓPRIOS query_args (não passa por
+		// webshop.ProductView.get_query_filters, que é onde
+		// product_search_filter.bundle.js faz o monkey-patch para a 1ª leva)
+		// — sem isto, a partir da 2ª página o `search` da URL seria perdido e
+		// o "Carregar mais" voltaria a trazer TODOS os produtos.
+		search: null,
 	};
 
 	// Página buscada antecipadamente (na checagem inicial de "existe mais
@@ -59,6 +66,10 @@ frappe.ready(function () {
 		estado.field_filters = filtros.field_filters ? JSON.parse(filtros.field_filters) : {};
 		estado.attribute_filters = filtros.attribute_filters ? JSON.parse(filtros.attribute_filters) : {};
 		estado.item_group = $(".item-group-content").data("item-group") || null;
+		// Task 2.2: search NÃO é JSON (frappe.utils.get_query_params já
+		// devolve a string decodificada), mesmo formato que
+		// webshop.webshop.api.get_product_filter_data espera em query_args.
+		estado.search = filtros.search || null;
 	}
 
 	function preferenciaView() {
@@ -114,6 +125,7 @@ frappe.ready(function () {
 					attribute_filters: estado.attribute_filters,
 					item_group: estado.item_group,
 					start: start,
+					search: estado.search,
 				},
 			},
 			callback: function (r) {

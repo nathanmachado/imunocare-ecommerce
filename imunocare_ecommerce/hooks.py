@@ -120,6 +120,11 @@ web_include_js = [
 	# próprio arquivo. Precisa carregar DEPOIS do "web.bundle.js" do webshop
 	# (garantido pela ordem de instalação dos apps — webshop antes deste).
 	"product_grid_style.bundle.js",
+	# Task 2.2 (spec loja-agendar-em-toda-pagina): `/all-products?search=`
+	# filtra a listagem — monkey-patch de
+	# webshop.ProductView.prototype.get_query_filters (mesmo motivo/ordem dos
+	# dois itens acima: precisa do "web.bundle.js" do webshop já definido).
+	"product_search_filter.bundle.js",
 	# Item 3 — "Carregar mais" (append) nas páginas de listagem, no lugar da
 	# paginação nativa Prev/Next. Carregado DEPOIS do product_grid_style.js
 	# (mesma razão: usa webshop.ProductGrid/ProductList, precisa do
