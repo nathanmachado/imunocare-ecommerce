@@ -557,8 +557,20 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			fieldtype: "Select",
 			options: __("Na clínica") + "\n" + __("Domiciliar (+ taxa)"),
 			default: __("Na clínica"),
+			// Task 1.4 (spec loja-agendar-em-toda-pagina): description TAMBÉM é
+			// re-traduzida pelo controle (base_input.js:187-199, set_description
+			// -> __(this.df.description, ...)) — mesma regra do label. Diferente
+			// dos outros description: abaixo, este tem um valor DINÂMICO
+			// ({0} = taxa_fmt) — a re-tradução do controle NUNCA recebe
+			// `replace`/`$.format` (só chama __(texto, null, parent)), então não
+			// dá pra montar o texto final ali. Por isso ainda chamamos __() aqui
+			// UMA vez (fonte inglesa, tradução no CSV) só para traduzir+substituir
+			// o `{0}` — o resultado já sai em português com o valor certo, e a
+			// re-tradução do controle sobre esse texto final (que nunca bate com
+			// nenhuma chave do dicionário) não faz nada, igual ao "Date"->"Data"
+			// seria um erro se a fonte fosse ambígua — aqui não é.
 			description: __(
-				"No atendimento domiciliar, a taxa de {0} é confirmada e cobrada pela recepção — ainda não é cobrada automaticamente neste agendamento online.",
+				"For home visits, the {0} fee is confirmed and charged by reception — this online booking does not charge it automatically yet.",
 				[domiciliar_info.taxa_fmt]
 			),
 		});
@@ -613,6 +625,17 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			});
 		}
 		if (camposFaltantes.indexOf("sex") !== -1) {
+			// Task 1.4 (achado): select.js (parse_option, linhas 172-175) TAMBÉM
+			// re-traduz cada linha de `options` (``label = __(v, null,
+			// doctype)``) — só o texto exibido no <option>, o VALOR salvo
+			// continua o enum bruto ("Male"/"Female"/"Other", o que o
+			// Patient.sex do Healthcare espera). Isso é desejável (dropdown em
+			// português, valor certo no banco) e dependia do core
+			// (frappe/erpnext pt-BR.csv: Male/Female/Other) estar no
+			// dicionário — a Task 1.3 (revisão de peso) estreitou o boot para
+			// só o CSV do nosso app, o que teria regredido este dropdown para
+			// inglês; corrigido incluindo as 3 entradas no nosso próprio CSV
+			// (ver translations/pt-BR.csv).
 			fields.push({
 				fieldname: "imun_sex",
 				fieldtype: "Select",
@@ -793,6 +816,18 @@ function imun_passo_colisao_cpf(escolha, cpfDigitado) {
 		fields: [
 			{
 				fieldtype: "HTML",
+				// Task 1.4 (achado): frappe/public/js/frappe/form/controls/html.js
+				// (ControlHTML.get_content, linhas 9-11) TAMBÉM re-traduz
+				// `options` (``content = __(content)``), contrariando a
+				// suposição inicial de que HTML field escaparia da regra. Na
+				// prática é inofensivo aqui: a chave que a re-tradução tenta
+				// achar é a STRING INTEIRA já com as tags <p> — nunca bate com
+				// nenhuma entrada do CSV (que só tem texto puro), então a
+				// re-tradução é sempre um no-op. Convertê-lo para "fonte
+				// inglesa sem __()" exigiria colocar HTML cru como chave do CSV
+				// (frágil, propenso a quebrar com aspas/novas linhas) só para
+				// remover uma re-tradução que já não faz nada — mantido com
+				// __() de propósito; ver relatório da Task 1.4.
 				options:
 					"<p>" +
 					__(
@@ -805,9 +840,10 @@ function imun_passo_colisao_cpf(escolha, cpfDigitado) {
 				fieldtype: "Select",
 				label: "Receive the code by",
 				reqd: 1,
-				description: __(
-					"O código vai para o contato JÁ cadastrado — não para o que você digitar abaixo."
-				),
+				// Task 1.4: description sem __() aqui — a mesma regra do label
+				// (fonte inglesa, o controle traduz sozinho, ver base_input.js:
+				// set_description -> __(this.df.description, ...)).
+				description: "The code goes to the contact already ON FILE — not to what you type below.",
 			},
 			{
 				fieldname: "email",
@@ -1014,6 +1050,9 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 		fields: [
 			{
 				fieldtype: "HTML",
+				// Task 1.4: mesmo caso de imun_passo_colisao_cpf acima — options
+				// de HTML field É re-traduzido (html.js:9-11), mas com tag <p>
+				// embutida nunca bate chave do CSV; mantido com __() de propósito.
 				options: "<p>" + __("Para confirmar o horário escolhido, identifique-se.") + "</p>",
 			},
 			{ fieldname: "ja_tenho_conta", fieldtype: "Button", label: "I already have an account" },
@@ -1043,9 +1082,9 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 				fieldname: "para_outra_pessoa",
 				fieldtype: "Check",
 				label: "This appointment is for someone else",
-				description: __(
-					"Menor de 18 anos só pode ser agendado por um responsável — marque esta opção e informe os dados de quem vai ser atendido."
-				),
+				// Task 1.4: description sem __() — mesma regra do label.
+				description:
+					"Minors can only be booked by a guardian — check this box and enter the patient's details.",
 			},
 			{
 				fieldname: "paciente_nome",
@@ -1087,9 +1126,9 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 				// WhatsApp identifica pelo CELULAR; por e-mail, pelo E-MAIL. Quem
 				// já tem conta de e-mail e verifica por WhatsApp pode entrar numa
 				// conta nova, não na antiga.
-				description: __(
-					"O contato que você confirmar aqui é o que abre/identifica sua conta — não o outro campo do formulário."
-				),
+				// Task 1.4: description sem __() — mesma regra do label.
+				description:
+					"The contact you confirm here is what opens/identifies your account — not the other field on the form.",
 			},
 		],
 		primary_action_label: __("Receber código"),
