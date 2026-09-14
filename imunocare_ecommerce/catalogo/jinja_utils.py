@@ -303,9 +303,21 @@ def injetar_mensagens_loja(context):
 
 	Defensivo (``context.boot`` pode não existir/não ser dict em algum
 	renderer que não passe por ``get_website_settings``): nunca lança, só
-	não injeta."""
+	não injeta.
+
+	Guarda por conteúdo (hotfix 2026-09-13): este hook (``update_website_context``)
+	roda para TODA página passada pelo renderer de templates do Frappe —
+	inclusive ``/app`` (``frappe/www/app.py``), cujo ``context.boot`` já vem
+	com ``__messages`` COMPLETO (``frappe.boot.get_bootinfo``, ~19 mil
+	chaves de todos os apps instalados). Sem a checagem, o dicionário de ~77
+	chaves da loja SOBRESCREVIA o do desk inteiro (barra lateral, botões,
+	"Shortcuts"... tudo em inglês, achado em produção). Só injeta quando
+	``__messages`` ainda não existe — página web pública nunca tem, o desk
+	sempre tem — em vez de checar a rota (mais simples e cobre qualquer
+	renderer)."""
 	try:
-		if isinstance(context.get("boot"), dict):
-			context.boot["__messages"] = imun_mensagens_loja()
+		boot = context.get("boot")
+		if isinstance(boot, dict) and not boot.get("__messages"):
+			boot["__messages"] = imun_mensagens_loja()
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
