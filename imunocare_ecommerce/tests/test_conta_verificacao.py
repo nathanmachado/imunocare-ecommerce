@@ -350,6 +350,101 @@ class TestFormatoDoContatoAntesDoCpf(FrappeTestCase):
 		self.assertIn("Procure a clínica", str(ctx.exception))
 
 
+class TestValidarCpfAntesDoDestino(FrappeTestCase):
+	"""Hotfix 2026-09-20: ``dados["cpf"]`` (e ``paciente_cpf`` quando
+	``para_outra_pessoa``) tem que ser um CPF com dígito verificador válido —
+	SEMPRE, antes de qualquer consulta ao banco (``_resolver_envio``) ou envio
+	de código. Sem este portão, CPF ausente/inválido só estourava dentro de
+	``confirmar_codigo_e_agendar``, DEPOIS de o código OTP já ter sido
+	queimado por ``codigo.conferir`` — a pessoa acertava o código e mesmo
+	assim não conseguia reservar."""
+
+	def setUp(self):
+		frappe.local.request = frappe._dict(method="POST")
+		frappe.local.request_ip = _IP_TESTE
+		_limpar_rate_limit_solicitar_codigo()
+
+		conta = frappe.get_doc(
+			{
+				"doctype": "Email Account",
+				"email_id": "cpf-gate-teste@exemplo.com",
+				"enable_outgoing": 1,
+				"default_outgoing": 1,
+				"smtp_server": "127.0.0.1",
+				"awaiting_password": 1,
+			}
+		).insert(ignore_permissions=True)
+		self.addCleanup(
+			frappe.delete_doc, "Email Account", conta.name, force=True, ignore_permissions=True
+		)
+
+		self._codigos_enviados = []
+		patcher = patch(
+			"imunocare_ecommerce.conta.canais.enviar",
+			side_effect=lambda canal, destino, codigo, nome: self._codigos_enviados.append(codigo),
+		)
+		self.addCleanup(patcher.stop)
+		patcher.start()
+
+	def test_cpf_ausente_e_recusado_e_nenhum_codigo_e_emitido(self):
+		dados = dict(_DADOS)
+		dados.pop("cpf")
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.solicitar_codigo("email", dados)
+		self.assertEqual(self._codigos_enviados, [])
+
+	def test_cpf_com_digito_invalido_e_recusado(self):
+		dados = dict(_DADOS, cpf="11111111111")
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.solicitar_codigo("email", dados)
+		self.assertEqual(self._codigos_enviados, [])
+
+	def test_para_outra_pessoa_sem_paciente_cpf_e_recusado(self):
+		dados = dict(_DADOS, para_outra_pessoa=True, paciente_nome="Filho Teste")
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.solicitar_codigo("email", dados)
+		self.assertEqual(self._codigos_enviados, [])
+
+	def test_para_outra_pessoa_com_paciente_cpf_invalido_e_recusado(self):
+		dados = dict(
+			_DADOS,
+			para_outra_pessoa=True,
+			paciente_nome="Filho Teste",
+			paciente_cpf="11111111111",
+		)
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.solicitar_codigo("email", dados)
+		self.assertEqual(self._codigos_enviados, [])
+
+	def test_caminho_feliz_cpf_proprio_valido_continua_emitindo_codigo(self):
+		r = verificacao.solicitar_codigo("email", dict(_DADOS))
+		self.assertIn("verificacao_id", r)
+		self.assertEqual(len(self._codigos_enviados), 1)
+
+	def test_para_outra_pessoa_com_paciente_cpf_valido_continua_emitindo_codigo(self):
+		dados = dict(
+			_DADOS,
+			para_outra_pessoa=True,
+			paciente_nome="Filho Teste",
+			paciente_cpf="16899535009",
+		)
+		r = verificacao.solicitar_codigo("email", dados)
+		self.assertIn("verificacao_id", r)
+		self.assertEqual(len(self._codigos_enviados), 1)
+
+	def test_dados_do_dialogo_de_colisao_sem_nome_ou_dob_continua_passando(self):
+		"""Risco de regressão do hotfix: ``imun_passo_colisao_cpf`` monta
+		``dados = {cpf, email, celular}`` — SEM ``nome``/``dob``/
+		``para_outra_pessoa`` (agendamento.bundle.js ~867). O portão novo só
+		exige ``cpf`` (e ``paciente_cpf`` quando ``para_outra_pessoa``), nunca
+		``nome``/``dob`` — exigir qualquer um deles quebraria este fluxo, que
+		hoje funciona."""
+		dados = {"cpf": _DADOS["cpf"], "email": _DADOS["email"], "celular": _DADOS["celular"]}
+		r = verificacao.solicitar_codigo("email", dados)
+		self.assertIn("verificacao_id", r)
+		self.assertEqual(len(self._codigos_enviados), 1)
+
+
 class TestResolverEnvio(FrappeTestCase):
 	"""Fix crítico da revisão da Task 4: quando o CPF já é de um Patient, o
 	contato SEMPRE vem do cadastro — nunca do que foi digitado, mesmo que o
@@ -447,6 +542,29 @@ class TestConfirmarCodigo(FrappeTestCase):
 		with self.assertRaises(mod_codigo.CodigoInvalido):
 			verificacao.confirmar_codigo_e_agendar(
 				codigo="000000",
+				verificacao_id=token,
+				appointment_date="2030-01-10",
+				appointment_time="09:00:00",
+			)
+		self.assertEqual(frappe.db.count("User"), antes_user)
+		self.assertEqual(frappe.db.count("Patient"), antes_pac)
+
+	def test_cpf_ausente_no_token_e_recusado_com_mensagem_generica(self):
+		"""Guarda B do hotfix 2026-09-20: com o portão de ``solicitar_codigo``
+		(``_validar_cpf_dados``), chegar aqui sem CPF só acontece com um token
+		emitido fora do fluxo normal (dado velho/adulterado) — espelha o que
+		``confirmar_codigo_e_vincular_logado`` já faz para o mesmo caso."""
+		antes_user = frappe.db.count("User")
+		antes_pac = frappe.db.count("Patient")
+		dados = dict(_DADOS)
+		dados.pop("cpf")
+		dados["canal_verificado"] = "email"
+		dados["destino_verificado"] = dados["email"]
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
+		with self.assertRaises(frappe.ValidationError):
+			verificacao.confirmar_codigo_e_agendar(
+				codigo=c,
 				verificacao_id=token,
 				appointment_date="2030-01-10",
 				appointment_time="09:00:00",
