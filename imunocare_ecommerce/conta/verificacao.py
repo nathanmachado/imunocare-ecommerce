@@ -77,6 +77,44 @@ def _so_digitos(valor) -> str:
 	return "".join(c for c in _texto(valor) if c.isdigit())
 
 
+def _validar_cpf_dados(dados: dict) -> None:
+	"""Hotfix 2026-09-20: garante que ``dados["cpf"]`` (o CPF de QUEM SE
+	VERIFICA) — e, quando ``para_outra_pessoa``, também ``dados["paciente_cpf"]``
+	— sejam um CPF com dígito verificador válido ANTES de qualquer consulta ao
+	banco. Mesma disciplina de ``_formato_valido``: depende só do que a pessoa
+	digitou, nunca do estado de cadastro, por isso é seguro rodar aqui, ANTES
+	de ``_resolver_envio``.
+
+	Sem este portão, ``dados["cpf"]`` ausente ou com dígito errado só
+	estourava muito mais adiante — dentro de ``confirmar_codigo_e_agendar``,
+	DEPOIS de o código OTP já ter sido queimado por ``codigo.conferir`` —
+	vazando erro cru de framework (``Patient`` sem CPF) ou o ``frappe.throw``
+	de ``imunocare_clinic_ext.patient_hooks`` (dígito inválido), e deixando a
+	pessoa sem o código que acabara de acertar.
+
+	Reusa ``is_valid_cpf`` de ``imunocare_clinic_ext.patient_hooks`` — mesmo
+	padrão de import defensivo de ``agendamento/booking.py`` (~linha 533) —
+	nunca reimplementa o algoritmo do dígito verificador aqui.
+	"""
+	try:
+		from imunocare_clinic_ext.patient_hooks import is_valid_cpf
+	except ImportError:
+		is_valid_cpf = None
+
+	cpf = _so_digitos(dados.get("cpf"))
+	if not cpf:
+		frappe.throw(_("Informe um CPF válido."), title=_("Requisição inválida"))
+	if is_valid_cpf is not None and not is_valid_cpf(cpf):
+		frappe.throw(_("CPF inválido."), title=_("Requisição inválida"))
+
+	if dados.get("para_outra_pessoa"):
+		paciente_cpf = _so_digitos(dados.get("paciente_cpf"))
+		if not paciente_cpf:
+			frappe.throw(_("Informe o CPF do paciente."), title=_("Requisição inválida"))
+		if is_valid_cpf is not None and not is_valid_cpf(paciente_cpf):
+			frappe.throw(_("CPF do paciente inválido."), title=_("Requisição inválida"))
+
+
 def _formato_valido(canal: str, dados: dict) -> bool:
 	"""Item 5 da revisão 2026-09-02: só o FORMATO do que foi digitado, nunca
 	consulta nada (nem o CPF) — por isso é seguro rodar isto ANTES de
@@ -188,6 +226,12 @@ def solicitar_codigo(
 			_("Informe um e-mail válido.") if canal == "email" else _("Informe um celular válido."),
 			title=_("Requisição inválida"),
 		)
+
+	# Hotfix 2026-09-20: CPF é o próximo portão da ordem declarada acima
+	# (formato -> CPF -> destino) — sem ele, uma reserva com CPF ausente ou
+	# de dígito inválido só falhava dentro de confirmar_codigo_e_agendar,
+	# DEPOIS de o código OTP já ter sido consumido (ver _validar_cpf_dados).
+	_validar_cpf_dados(dados)
 
 	# canal_efetivo pode divergir do pedido (ver _resolver_envio) — toda
 	# checagem daqui em diante (disponibilidade, envio, máscara) usa o
@@ -629,6 +673,14 @@ def confirmar_codigo_e_agendar(
 
 	para_outro = bool(dados.get("para_outra_pessoa"))
 	cpf = _so_digitos(dados.get("paciente_cpf") if para_outro else dados.get("cpf"))
+	if not cpf:
+		# Hotfix 2026-09-20: com o portão de solicitar_codigo (_validar_cpf_dados),
+		# chegar aqui sem CPF só acontece com dado velho/adulterado (ex.: código
+		# emitido antes deste hotfix, verificacao_id reaproveitado à mão). Mesma
+		# forma e mesma mensagem genérica de código inválido que
+		# confirmar_codigo_e_vincular_logado já usa para o caso equivalente —
+		# nunca uma busca por {"cpf": ""} (ver risco descrito no relatório).
+		frappe.throw(_("Código expirado. Peça um novo."), title=_("Código inválido"))
 	paciente = frappe.db.get_value("Patient", {"cpf": cpf}, "name")
 
 	# CRÍTICO 1 da revisão 2026-09-02 (takeover de prontuário): um Patient
