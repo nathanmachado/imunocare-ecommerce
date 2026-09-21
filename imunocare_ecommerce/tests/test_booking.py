@@ -59,6 +59,16 @@ class TestResolverPacienteNaoAdotaOrfaoPorNomeInformado(FrappeTestCase):
 		return u.name
 
 	def _novo_patient_orfao(self, prefixo: str, user_id: str | None = None):
+		"""Sem CPF, de propósito: reproduz o estado real dos Patients órfãos
+		de produção. Achado durante a task 4.1 de ``mesma-pessoa-um-paciente-so``:
+		desde a 1.1 (D1), ``Patient.insert()`` recusa QUALQUER Patient novo
+		sem CPF, mesmo sob ``ignore_mandatory`` (que anula só o ``reqd`` do
+		metadado, não o hook de ``validate``) — por isso ``db_insert()``
+		(INSERT direto, sem ``validate``/hooks) é o único jeito honesto de
+		simular em teste um registro que já existia ANTES da regra nova.
+		Mesmo padrão de
+		``imunocare_clinic_ext/imunocare_clinic_ext/tests/test_identidade_paciente.py:102-136``
+		(``_criar_candidato_sem_cpf``)."""
 		p = frappe.get_doc(
 			{
 				"doctype": "Patient",
@@ -69,7 +79,8 @@ class TestResolverPacienteNaoAdotaOrfaoPorNomeInformado(FrappeTestCase):
 				"dob": "1990-01-01",
 				"user_id": user_id,
 			}
-		).insert(ignore_permissions=True, ignore_mandatory=True)
+		)
+		p.db_insert()
 		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
 		return p
 
@@ -492,11 +503,24 @@ class TestPatientExistenteIncompletoNaoDescartaPatientData(FrappeTestCase):
 			"last_name": prefixo,
 			"user_id": u.name,
 			"email": email,
+			# ``insert()`` normal aplica o default do campo (_set_defaults, que
+			# ignore_mandatory NÃO pula) antes do insert cru; ``db_insert()``
+			# não roda essa etapa — replicar à mão o mesmo default
+			# ("Brazil", custom_fields.py:426), senão o save posterior (que
+			# NÃO ignora obrigatoriedade) recusa por pais_nascimento vazio,
+			# um problema ortogonal ao que este fixture testa.
+			"pais_nascimento": "Brazil",
 		}
 		if com_endereco:
 			dados_patient["imun_cep"] = "90000000"
 			dados_patient["imun_logradouro"] = "Rua de Teste, 123"
-		p = frappe.get_doc(dados_patient).insert(ignore_permissions=True, ignore_mandatory=True)
+		# Achado na task 4.1 (mesma-pessoa-um-paciente-so, D1): sem CPF é o
+		# ponto do teste — "Patient existente incompleto" real. Desde a 1.1,
+		# nem ``ignore_mandatory`` deixa inserir sem CPF; ``db_insert()``
+		# simula o registro que já existia antes da regra (mesmo padrão de
+		# ``_novo_patient_orfao`` acima).
+		p = frappe.get_doc(dados_patient)
+		p.db_insert()
 		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
 		return u.name, p.name
 
@@ -776,6 +800,10 @@ class TestColisaoCPFUsuarioLogado(FrappeTestCase):
 
 	def _usuario_com_patient_incompleto(self, prefixo: str) -> tuple[str, str]:
 		usuario = self._novo_website_user_sem_patient(prefixo)
+		# Achado na task 4.1 (D1): ver o mesmo comentário em
+		# TestPatientExistenteIncompletoNaoDescartaPatientData — sem CPF é o
+		# ponto do teste, e ``db_insert()`` é o único jeito honesto de
+		# simular hoje um Patient existente que nunca teve CPF.
 		p = frappe.get_doc(
 			{
 				"doctype": "Patient",
@@ -785,8 +813,13 @@ class TestColisaoCPFUsuarioLogado(FrappeTestCase):
 				"email": usuario,
 				"imun_cep": "90000000",
 				"imun_logradouro": "Rua de Teste, 123",
+				# Mesmo motivo do comentário acima: db_insert() não aplica o
+				# default do campo (custom_fields.py:426), que o insert()
+				# normal aplicaria mesmo sob ignore_mandatory.
+				"pais_nascimento": "Brazil",
 			}
-		).insert(ignore_permissions=True, ignore_mandatory=True)
+		)
+		p.db_insert()
 		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
 		return usuario, p.name
 
