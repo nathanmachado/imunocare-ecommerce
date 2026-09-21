@@ -711,6 +711,144 @@ class TestConfirmarCodigo(FrappeTestCase):
 		self.assertEqual(frappe.db.count("User"), antes_user)
 		self.assertEqual(frappe.db.count("Patient"), antes_pac)
 
+	def test_tres_filhos_geram_tres_pacientes_ligados_a_mesma_conta(self):
+		"""Task 4.1 (iv) / proposal 'vários dependentes na mesma conta': o
+		titular reserva para TRÊS dependentes diferentes, cada um com CPF
+		próprio — três Patients distintos, todos com o mesmo ``user_id`` do
+		adulto. Extensão de ``test_dois_filhos_geram_dois_pacientes`` para o
+		número exato citado no cenário do delta de spec (dois já provava "não
+		reusa o Patient do irmão"; três é o número do critério de aceite 5 do
+		proposal e do enunciado literal da task)."""
+		adulto = "ana.nova@exemplo.com"
+		base = dict(
+			_DADOS, para_outra_pessoa=True, paciente_dob="2019-01-01", paciente_sexo="Female"
+		)
+
+		pacientes = []
+		# Revisão do CTO: CPFs PRÓPRIOS deste teste. Os que estavam aqui
+		# (52998224725/16899535009/12345678909) são os mesmos de
+		# ``test_dois_filhos_geram_dois_pacientes`` e de outras ~15 asserções
+		# do módulo — reusá-los faz os dois testes colidirem em
+		# ``UniqueValidationError`` no CPF conforme a ordem de execução.
+		for nome, cpf in (
+			("Joaquim Tres Souza", "30742761002"),
+			("Marina Tres Souza", "31859872093"),
+			("Pedro Tres Souza", "32967983071"),
+		):
+			p = verificacao._montar_paciente(
+				dict(base, paciente_nome=nome, paciente_cpf=cpf), adulto_user=adulto
+			)
+			p.insert(ignore_permissions=True)
+			# ``frappe.delete_doc`` cru NÃO commita, e o fluxo sob teste comita:
+			# o rollback de fim-de-classe desfaz só a limpeza e ressuscita a
+			# linha. Ver o docstring de ``_apagar_definitivamente``.
+			self.addCleanup(_apagar_definitivamente, "Patient", p.name)
+			pacientes.append(p)
+
+		nomes = {p.name for p in pacientes}
+		self.assertEqual(len(nomes), 3, "os três dependentes geram três Patients distintos")
+		self.assertTrue(
+			all(p.user_id == adulto for p in pacientes), "todos ligados à mesma conta do adulto"
+		)
+
+
+class TestRecusaPorCandidatoLegadoSemCpf(FrappeTestCase):
+	"""Task 4.1 (v), change ``mesma-pessoa-um-paciente-so`` — trava o efeito
+	NOVO que a rede de segurança do D2/D3 (``imunocare_clinic_ext.identidade``)
+	passou a ter na loja, sem mudar nenhum código: uma reserva cujo nome e
+	nascimento batem com um paciente legado sem CPF é recusada dentro de
+	``Patient.insert()`` (o ``validate`` único do Patient, hook de
+	``patient_hooks``), e a mensagem que chega ao cliente da loja é a
+	GENÉRICA de D4 — nunca a que nomeia o candidato (essa é só para quem tem
+	permissão de escrita em Patient, ex. recepção).
+
+	``_criar_candidato_sem_cpf`` replica (não importa) o helper
+	``imunocare_clinic_ext/imunocare_clinic_ext/tests/test_identidade_paciente.py:102-136``:
+	depois da task 1.1 (D1), ``Patient.insert()`` NUNCA MAIS aceita um
+	Patient novo sem CPF — nem sob ``ignore_mandatory`` (que anula ``reqd``
+	do metadado, mas não anula hook de ``validate``). Simular em teste um
+	cadastro "como os que já existiam antes desta entrega" só é possível com
+	``db_insert()`` (INSERT direto, sem ``validate``/hooks —
+	``frappe/model/base_document.py:548``).
+
+	O usuário de portal (não Administrator) já é garantido pelo PRÓPRIO
+	fluxo sob teste: ``confirmar_codigo_e_agendar`` chama ``_garantir_usuario``
+	(que loga como o Website User recém-criado) ANTES de tentar inserir o
+	Patient — então ``frappe.has_permission("Patient", "write")``, dentro do
+	hook, já roda com a sessão do cliente da loja, nunca com Administrator.
+	Role "Patient" (a única que ``_criar_website_user`` concede) não tem
+	nenhum DocPerm em ``Patient`` (nem leitura) — confirmado em
+	``healthcare/healthcare/doctype/patient/patient.json``: só System
+	Manager/Physician/Laboratory User/Nursing User escrevem."""
+
+	def setUp(self):
+		frappe.local.request = frappe._dict(method="POST")
+		frappe.local.request_ip = _IP_TESTE
+		_limpar_rate_limit_confirmar_codigo()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+
+	def _criar_candidato_sem_cpf(self, first_name: str, last_name: str, dob: str):
+		p = frappe.get_doc(
+			{
+				"doctype": "Patient",
+				"first_name": first_name,
+				"last_name": last_name,
+				"dob": dob,
+			}
+		)
+		p.db_insert()
+		self.addCleanup(_apagar_definitivamente, "Patient", p.name)
+		return p
+
+	def test_nome_e_nascimento_batem_com_candidato_sem_cpf_e_recusado_com_mensagem_generica(self):
+		candidato = self._criar_candidato_sem_cpf(
+			"Fulano D4Recusa", "Teste", "1988-04-12"
+		)
+
+		antes_pac = frappe.db.count("Patient")
+		email, celular = _identidade_unica("d4.recusa")
+		dados = dict(
+			_DADOS,
+			nome=candidato.patient_name,
+			email=email,
+			celular=celular,
+			cpf="22233344405",  # CPF válido do próprio visitante (novo, não o do candidato)
+			dob="1988-04-12",  # mesmo nascimento do candidato
+			canal_verificado="email",
+			destino_verificado=email,
+		)
+		token = _token()
+		c = mod_codigo.emitir(token, dados)
+
+		with self.assertRaises(frappe.ValidationError) as cm:
+			verificacao.confirmar_codigo_e_agendar(
+				codigo=c,
+				verificacao_id=token,
+				appointment_date="2030-01-10",
+				appointment_time="09:00:00",
+			)
+		self.addCleanup(_apagar_definitivamente, "User", email)
+
+		mensagem = str(cm.exception)
+		self.assertNotIn(candidato.patient_name, mensagem)
+		self.assertNotIn("1988-04-12", mensagem)
+		self.assertNotIn("12-04-1988", mensagem)
+		# Revisão do CTO: "Fale com a clínica" sozinho NÃO isola este ramo —
+		# a frase aparece em 7 pontos do código, e dois wrappers de
+		# ``agendamento/booking.py`` (:559, :680) produzem uma mensagem
+		# genérica parecida ao engolir um erro de insert. Asserir o trecho
+		# distintivo garante que o texto que chegou ao cliente é o do ramo
+		# SEM permissão de ``patient_hooks.py:146-148``, e não o de um wrapper.
+		self.assertIn("Precisamos confirmar alguns dados", mensagem)
+		self.assertIn("Fale com a clínica", mensagem)
+
+		# Nada gravado do lado do paciente: nem o candidato ganhou CPF, nem
+		# um Patient novo nasceu.
+		self.assertEqual(frappe.db.count("Patient"), antes_pac)
+		self.assertFalse(frappe.db.get_value("Patient", candidato.name, "cpf"))
+
 
 class TestParaOutraPessoaNaoAdotaPatientExistente(FrappeTestCase):
 	"""CRÍTICO 1 da revisão 2026-09-02 — takeover de prontuário.
