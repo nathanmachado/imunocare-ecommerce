@@ -16,6 +16,12 @@
 // Site-wide via hooks.web_include_js — roda em toda página pública e sai
 // cedo se não houver item agendável na página atual.
 
+// Feature validacao-cpf-no-navegador, task 2.1 — `import` entre bundles é o
+// mesmo mecanismo do `controls.bundle.js` do core (esbuild trata arquivo
+// `*.bundle.js` como entrypoint ESM). `imun_cpf.js` é puro (sem DOM, sem
+// frappe.*), verificado pela task 1.1.
+import { imun_cpf_valido, imun_formatar_cpf } from "./imun_cpf.js";
+
 // Task 1.3 (spec loja-agendar-em-toda-pagina) — __() client-side (frappe/
 // public/js/frappe/translate.js:13-17, frappe._) lê DIRETO de
 // ``frappe._messages``, NUNCA de ``frappe.boot.__messages`` — só
@@ -655,6 +661,30 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 		fields: fields,
 		primary_action_label: __("Confirmar Agendamento"),
 		primary_action: function (values) {
+			// Task 3.1 (validacao-cpf-no-navegador) — revalida `imun_cpf` aqui
+			// porque dá para clicar "Confirmar Agendamento" sem nunca sair do
+			// campo (spec "envio bloqueado sem passar pelo campo"): o `blur`
+			// ligado abaixo não teria disparado. `d.fields_dict.imun_cpf` só
+			// existe quando o backend pediu o CPF (camposFaltantes) — nos
+			// demais ramos (visitante, logado com cadastro completo) o
+			// controle é `undefined` e `imun_conferir_cpf_controle` devolve
+			// `true` sem examinar nada, então esses ramos não são afetados.
+			//
+			// Falha para o lado seguro (spec "conferência do navegador em
+			// dúvida"): qualquer situação inesperada na conferência não
+			// bloqueia o envio — o servidor (`agendamento/booking.py:533`)
+			// continua sendo a autoridade.
+			try {
+				if (!imun_conferir_cpf_controle(d.fields_dict.imun_cpf)) {
+					// Bloqueia só não chamando o servidor: diálogo permanece
+					// aberto e com tudo o que foi digitado (spec) — sem
+					// `msgprint`/`frappe.throw`, a marca no campo já avisa.
+					return;
+				}
+			} catch (e) {
+				// Dúvida da própria conferência: segue adiante, quem decide
+				// de verdade é o servidor.
+			}
 			if (!values.appointment_time) {
 				frappe.msgprint(__("Selecione um horário disponível."));
 				return;
@@ -762,6 +792,13 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 			},
 		});
 	});
+
+	// Task 3.1 (validacao-cpf-no-navegador) — conferência de CPF no blur do
+	// campo `imun_cpf` deste diálogo, injetado só quando o backend pediu o
+	// CPF (camposFaltantes acima). `d.fields_dict.imun_cpf` fica `undefined`
+	// nos demais ramos, e o `if` dentro do auxiliar cobre essa ausência —
+	// reaproveita o mesmo auxiliar das tasks 2.1/2.2, sem duplicar lógica.
+	imun_ligar_conferencia_cpf(d.fields_dict.imun_cpf);
 
 	d.show();
 	imun_registrar_modal_para_esc(d);
@@ -1013,6 +1050,77 @@ function imun_render_horarios(d, res) {
 }
 
 // ---------------------------------------------------------------------------
+// Conferência de CPF no navegador — Feature validacao-cpf-no-navegador,
+// task 2.1. Auxiliar reaproveitável (a task 3.1 liga o mesmo gancho ao
+// campo `imun_cpf` do modal de agendamento): liga UM controle de campo Data
+// à conferência de `imun_cpf.js` no `blur`.
+//
+// Armadilha 1 (tasks.md): campo Data dispara `onchange` no `change` E no
+// `input` com debounce de 500ms (base_input.js ~184-186) — `onchange`
+// acusaria "CPF inválido" no meio da digitação (5 dígitos), o que o dono já
+// recusou. Por isso prendemos no `blur` do `$input`, que só dispara quando
+// a pessoa sai do campo de fato — nunca no meio da digitação.
+//
+// Falha para o lado seguro (spec "conferência do navegador em dúvida" /
+// "o servidor continua sendo a autoridade"): controle ausente, sem
+// `$input`, ou qualquer situação inesperada não deve travar o formulário —
+// só não liga a conveniência, e quem decide de verdade continua sendo o
+// servidor.
+//
+// Task 2.2 — a parte "marcar/limpar" foi separada em
+// `imun_conferir_cpf_controle` para ser reaproveitada também no
+// `primary_action` do diálogo (revalidação de quem envia sem sair do
+// campo), sem duplicar o bloco de marcação. O comportamento do `blur`
+// abaixo continua idêntico ao da task 2.1.
+//
+// Devolve `true` quando o valor pode seguir (vazio ou válido) e `false`
+// quando bloqueia (CPF com dígito verificador errado). `controle` ausente
+// também devolve `true` — dúvida da própria conferência nunca barra
+// (spec "conferência do navegador em dúvida").
+function imun_conferir_cpf_controle(controle, mensagem_invalido) {
+	if (!controle) {
+		return true;
+	}
+	var mensagem = mensagem_invalido || "CPF inválido.";
+	var valor = controle.get_value();
+	// Campo vazio: quem cuida é o `reqd` nativo — nunca "CPF inválido"
+	// (spec "campo de CPF em branco"). Limpa qualquer marca anterior,
+	// senão um erro corrigido para vazio fica preso na tela.
+	if (!valor) {
+		controle.df.invalid = false;
+		controle.set_invalid();
+		controle.set_description("");
+		return true;
+	}
+	if (imun_cpf_valido(valor)) {
+		// CPF aceito: limpa marca antiga e reescreve formatado (spec
+		// "CPF aceito é devolvido formatado").
+		controle.df.invalid = false;
+		controle.set_invalid();
+		controle.set_description("");
+		controle.set_value(imun_formatar_cpf(valor));
+		return true;
+	}
+	controle.df.invalid = true;
+	controle.set_invalid();
+	// Armadilha 2 (tasks.md): `set_description` passa o texto por `__()`
+	// (base_input.js ~195), que não traduz na loja
+	// (feedback_loja_client_i18n_e_datepicker) — mensagem já nasce em
+	// pt-BR aqui, sem __().
+	controle.set_description(mensagem);
+	return false;
+}
+
+function imun_ligar_conferencia_cpf(controle, mensagem_invalido) {
+	if (!controle || !controle.$input) {
+		return;
+	}
+	controle.$input.on("blur", function () {
+		imun_conferir_cpf_controle(controle, mensagem_invalido);
+	});
+}
+
+// ---------------------------------------------------------------------------
 // Reserva como visitante (Task 6) — identificação + código, dentro do
 // próprio modal. Backend: imunocare_ecommerce.conta.verificacao (Tasks 4/5).
 // ---------------------------------------------------------------------------
@@ -1133,6 +1241,38 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 		],
 		primary_action_label: __("Receber código"),
 		primary_action: function (v) {
+			// Task 2.2 (validacao-cpf-no-navegador) — revalida os dois campos
+			// aqui porque dá para clicar "Receber código" sem nunca sair do
+			// campo (spec "envio bloqueado sem passar pelo campo"): o `blur`
+			// da task 2.1 não teria disparado. `paciente_cpf` só entra na
+			// conferência quando `para_outra_pessoa` está marcado — mesmo
+			// recorte do portão do servidor
+			// (conta/verificacao.py:80 `_validar_cpf_dados`), que continua
+			// intocado e é quem decide de verdade.
+			//
+			// Falha para o lado seguro (spec "conferência do navegador em
+			// dúvida"): qualquer situação inesperada na conferência não
+			// bloqueia o envio — só não barra por dúvida própria, o servidor
+			// segue como autoridade.
+			try {
+				var cpfOk = imun_conferir_cpf_controle(d2.fields_dict.cpf);
+				var pacienteCpfOk = true;
+				if (v.para_outra_pessoa) {
+					pacienteCpfOk = imun_conferir_cpf_controle(
+						d2.fields_dict.paciente_cpf,
+						"CPF do paciente inválido."
+					);
+				}
+				if (!cpfOk || !pacienteCpfOk) {
+					// Bloqueia só não chamando o servidor: diálogo permanece
+					// aberto e com tudo o que foi digitado (spec) — sem
+					// `msgprint`/`frappe.throw`, a marca no campo já avisa.
+					return;
+				}
+			} catch (e) {
+				// Dúvida da própria conferência: segue adiante, quem decide
+				// de verdade é o servidor.
+			}
 			var canalEfetivo = v.canal === __("WhatsApp") ? "whatsapp" : "email";
 			frappe.call({
 				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
@@ -1157,6 +1297,14 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 			}
 		},
 	});
+
+	// Task 2.1 (validacao-cpf-no-navegador) — conferência de CPF no blur dos
+	// dois campos deste diálogo. `paciente_cpf` fica `undefined` quando o
+	// campo ainda não foi renderizado no DOM (não é o caso aqui, Dialog já
+	// monta todos os fields_dict na construção) — o `if` dentro do
+	// auxiliar cobre qualquer ausência mesmo assim.
+	imun_ligar_conferencia_cpf(d2.fields_dict.cpf);
+	imun_ligar_conferencia_cpf(d2.fields_dict.paciente_cpf, "CPF do paciente inválido.");
 
 	d2.fields_dict.ja_tenho_conta.$input.on("click", function () {
 		window.location.href = "/login?redirect-to=" + encodeURIComponent(window.location.pathname);
