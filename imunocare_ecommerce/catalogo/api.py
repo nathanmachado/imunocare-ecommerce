@@ -55,7 +55,9 @@ def get_product_filter_data_loja(query_args=None) -> dict:
 
 	query_args = _combinar_busca_e_categoria(query_args)
 	resultado = get_product_filter_data(query_args=query_args)
-	_enriquecer_com_sinal_servico(resultado.get("items") or [])
+	itens = resultado.get("items") or []
+	_enriquecer_com_sinal_servico(itens)
+	_enriquecer_com_exige_receita(itens)
 	return resultado
 
 
@@ -164,3 +166,30 @@ def _enriquecer_com_sinal_servico(items: list) -> None:
 			sinal = {"servico": False, "appointment_type": None}
 		item["imun_servico"] = 1 if sinal["servico"] else 0
 		item["imun_appointment_type"] = sinal["appointment_type"]
+
+
+# ---------------------------------------------------------------------------
+# Change ``venda-sob-receita``, task 5.1 (D8) — sinal "exige receita" no
+# grid/lista, mesmo mecanismo de ``_enriquecer_com_sinal_servico`` acima:
+# cobre carregamento inicial e "Carregar mais" com o mesmo código, sem
+# chamada extra por card.
+# ---------------------------------------------------------------------------
+
+
+def _enriquecer_com_exige_receita(items: list) -> None:
+	"""Grava ``item["imun_exige_receita"]`` (0/1) para cada item devolvido pelo
+	grid/lista. Reusa ``agendamento.booking._item_exige_receita`` (task 4.1) —
+	fonte ÚNICA da leitura tolerante de ``Item.imun_exige_receita`` (
+	``imunocare_clinic_ext`` não é dependência de ``imunocare_ecommerce``; a
+	função já faz ``get_meta(...).has_field`` + ``get_cached_value`` com
+	``False`` seguro quando o campo não existe) — nenhuma leitura paralela do
+	campo aqui."""
+	from imunocare_ecommerce.agendamento.booking import _item_exige_receita
+
+	for item in items:
+		try:
+			exige = _item_exige_receita(item.get("item_code"))
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.catalogo.api")
+			exige = False
+		item["imun_exige_receita"] = 1 if exige else 0

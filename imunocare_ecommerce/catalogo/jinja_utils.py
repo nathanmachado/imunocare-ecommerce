@@ -168,6 +168,32 @@ def imun_sinal_servico(doc) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Change ``venda-sob-receita``, task 5.1 (D8) — badge "Venda sob prescrição
+# médica" na página do produto
+# ---------------------------------------------------------------------------
+
+
+def imun_exige_receita(doc) -> bool:
+	"""``True`` quando o item de serviço do Website Item ``doc`` exige receita
+	médica (``Item.imun_exige_receita``). Usado por
+	``templates/generators/item/item.html`` para expor
+	``data-imun-exige-receita`` e renderizar o badge server-side, mesmo padrão
+	de ``imun_sinal_servico`` acima. Reusa ``agendamento.booking.
+	_item_exige_receita`` — fonte ÚNICA da leitura tolerante do custom field
+	(``imunocare_clinic_ext`` não é dependência deste app), a mesma usada pelo
+	enriquecimento do grid (``catalogo.api._enriquecer_com_exige_receita``) —
+	nenhuma leitura paralela do campo."""
+	try:
+		from imunocare_ecommerce.agendamento.booking import _item_exige_receita
+
+		item_code = doc.get("item_code") if hasattr(doc, "get") else getattr(doc, "item_code", None)
+		return _item_exige_receita(item_code)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+		return False
+
+
+# ---------------------------------------------------------------------------
 # Tarefa E (rotulagem exibida) — breadcrumb da página do produto
 # ---------------------------------------------------------------------------
 
