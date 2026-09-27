@@ -215,12 +215,31 @@ def _resolver_practitioner(wi: "frappe._dict", informado: str | None = None) -> 
 			frappe.throw(_("Profissional inválido para este serviço."))
 		return wi.imun_practitioner
 
+	# Médico parceiro (Healthcare Practitioner com practitioner_type="External",
+	# change pontuacao-medico-parceiro/D2) nunca vira profissional da loja "por
+	# acaso": as escolhas automáticas abaixo filtram ``!= "External"``. O
+	# ``ifnull(practitioner_type,'') != 'External'`` automático (que faz um
+	# profissional antigo com o Select vazio/NULL continuar elegível — pegadinha
+	# "filtro '' pega NULL") só existe no ``DatabaseQuery`` por trás de
+	# ``frappe.get_all``/``get_list`` — ``frappe.db.exists``/``get_value`` usam
+	# o query builder (``frappe.qb``), que NÃO envolve o filtro em ``ifnull`` e
+	# recusaria erroneamente o NULL. Por isso usamos ``get_all`` nos dois
+	# ramos (mesma consulta, só limitando por ``name``), nunca ``db.exists``
+	# aqui.
 	if informado:
-		if not frappe.db.exists("Healthcare Practitioner", {"name": informado, "status": "Active"}):
+		if not frappe.get_all(
+			"Healthcare Practitioner",
+			filters={"name": informado, "status": "Active", "practitioner_type": ["!=", "External"]},
+			limit=1,
+		):
 			frappe.throw(_("Profissional indisponível."))
 		return informado
 
-	ativos = frappe.get_all("Healthcare Practitioner", filters={"status": "Active"}, pluck="name")
+	ativos = frappe.get_all(
+		"Healthcare Practitioner",
+		filters={"status": "Active", "practitioner_type": ["!=", "External"]},
+		pluck="name",
+	)
 	if len(ativos) == 1:
 		return ativos[0]
 	frappe.throw(
