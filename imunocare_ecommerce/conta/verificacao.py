@@ -754,6 +754,12 @@ def confirmar_codigo_e_agendar(
 		patient=paciente,
 		modalidade=modalidade,
 		session_id=session_id,
+		# Change venda-sob-receita, task 4.1 (D7): a confirmação viajou DENTRO
+		# do payload guardado por ``solicitar_codigo``/``codigo.emitir`` (mesma
+		# chave que o formulário do modal já mandava, sem mecanismo novo de
+		# cache) — repassa para ``criar_agendamento``, que confere de novo no
+		# servidor.
+		receita_confirmada=frappe.utils.sbool(dados.get("receita_confirmada")),
 	)
 	resultado["conta_criada"] = conta_criada
 	# Item 1 da revisão 2026-09-01: o cliente lê frappe.session.user no
@@ -857,6 +863,10 @@ def confirmar_codigo_e_vincular_logado(
 		patient=paciente,
 		modalidade=modalidade,
 		session_id=session_id,
+		# Change venda-sob-receita, task 4.1 (D7) — mesmo repasse de
+		# ``confirmar_codigo_e_agendar``: regra fechada pela metade é cicatriz
+		# do projeto, os DOIS caminhos de confirmação por código repassam.
+		receita_confirmada=frappe.utils.sbool(dados.get("receita_confirmada")),
 	)
 	resultado["vinculado"] = True
 	return resultado

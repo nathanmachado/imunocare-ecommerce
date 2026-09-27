@@ -229,6 +229,31 @@ def _resolver_practitioner(wi: "frappe._dict", informado: str | None = None) -> 
 
 
 # ---------------------------------------------------------------------------
+# Venda sob receita (change ``venda-sob-receita``, task 4.1) — confirmação de
+# posse da receita ao agendar. Fonte única: ``Item.imun_exige_receita``
+# (custom field criado por ``imunocare_clinic_ext``). ``imunocare_ecommerce``
+# NÃO está em ``required_apps`` de ``imunocare_clinic_ext`` (ver
+# ``hooks.py``) — mesmo padrão de import defensivo já usado neste app
+# (``imunocare_clinic_ext.patient_hooks.is_valid_cpf``), aqui aplicado à
+# leitura de metadado em vez de import: ``frappe.get_meta("Item").has_field``
+# garante ``False`` (nenhuma exigência) em vez de erro quando o campo ainda
+# não existe (clinic_ext não instalado/migrado neste site).
+# ---------------------------------------------------------------------------
+
+
+def _item_exige_receita(item_code: str | None) -> bool:
+	"""``True`` só quando o Item de serviço resolvido está marcado
+	``imun_exige_receita=1``. Sem ``item_code`` (ex.: F9 — agendamento por
+	``appointment_type`` direto, sem Website Item/Item nenhum envolvido),
+	``False`` — não há o que exigir."""
+	if not item_code:
+		return False
+	if not frappe.get_meta("Item").has_field("imun_exige_receita"):
+		return False
+	return bool(frappe.get_cached_value("Item", item_code, "imun_exige_receita"))
+
+
+# ---------------------------------------------------------------------------
 # Disponibilidade de horários (thin wrapper sobre o nativo)
 # ---------------------------------------------------------------------------
 
@@ -328,6 +353,9 @@ def info_agendamento(item_code: str) -> dict:
 		"appointment_type": appointment_type,
 		"practitioner": practitioner,
 		"logged_in": frappe.session.user != "Guest",
+		# Change venda-sob-receita, task 4.1: o modal decide se mostra o aviso
+		# + a caixa de confirmação a partir deste sinal (D7).
+		"exige_receita": _item_exige_receita(wi.item_code),
 	}
 	resultado.update(_boot_datas())
 	# Item B do spec 2026-09-02-loja-mitigacao-fluxos.md: {} para Guest (o
@@ -769,19 +797,36 @@ def criar_agendamento(
 	session_id: str | None = None,
 	modalidade: str | None = None,
 	appointment_type: str | None = None,
+	receita_confirmada: bool = False,
 ) -> dict:
 	"""Cria o Patient Appointment a partir da loja. Requer login (portal user) —
 	mesmo requisito do Web Form nativo ``patient-appointments`` do Healthcare.
 
 	Aceita ``item_code`` (fluxo normal — Website Item com
 	``imun_appointment_type``) OU ``appointment_type`` direto (F9 — landing
-	"Protocolo de Emagrecimento", sem Website Item de medicamento)."""
+	"Protocolo de Emagrecimento", sem Website Item de medicamento).
+
+	``receita_confirmada`` — change ``venda-sob-receita``, task 4.1 (D7):
+	quando o item resolvido exige receita médica (``Item.imun_exige_receita``),
+	a confirmação é obrigatória e é conferida AQUI, no servidor — nunca
+	confiando no que o modal do storefront checou (mesmo princípio de
+	ADR-0011/0012/0015). Cobre também chamada direta à API, sem passar pelo
+	modal."""
 	if frappe.session.user == "Guest":
 		frappe.throw(
 			_("Faça login para agendar sua consulta."), frappe.PermissionError, title=_("Login necessário")
 		)
 
 	wi, appointment_type = _resolver_agendavel(item_code, appointment_type)
+	exige_receita = _item_exige_receita(wi.item_code)
+	if exige_receita and not frappe.utils.sbool(receita_confirmada):
+		frappe.throw(
+			_(
+				"Este serviço exige receita médica. Confirme que você tem a receita e vai "
+				"apresentá-la no atendimento para concluir o agendamento."
+			),
+			title=_("Receita médica necessária"),
+		)
 	prof = _resolver_practitioner(wi, practitioner)
 
 	try:
@@ -827,6 +872,13 @@ def criar_agendamento(
 		# fazia todo agendamento NÃO-domiciliar quebrar em pa.insert() com
 		# ValidationError (Feature 72, achado do dev-clinic 2026-08-11).
 		pa.imun_modalidade = "Domiciliar" if modalidade_domiciliar else "Clínica"
+
+	# Change venda-sob-receita, task 4.1 (D7): a declaração só é gravada
+	# quando o item de fato exige receita (nunca para item comum, mesmo que
+	# receita_confirmada tenha chegado True por engano/sobra do formulário).
+	if exige_receita and meta_pa.has_field("imun_receita_declarada"):
+		pa.imun_receita_declarada = 1
+
 	pa.insert(ignore_permissions=True)
 
 	resultado = {

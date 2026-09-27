@@ -49,6 +49,19 @@ frappe.ready(function () {
 			<div class="card-body text-left card-body-flex" style="width:100%">
 		`;
 
+		// Change `venda-sob-receita`, task 5.1 (D8) — badge "Venda sob
+		// prescrição médica" quando o backend enriqueceu o item com
+		// `item.imun_exige_receita` (catalogo.api.get_product_filter_data_loja
+		// / `_enriquecer_com_exige_receita`). Vive AQUI (e não num
+		// monkey-patch separado de `get_card_body_html`) porque este método
+		// já substitui o corpo do card por inteiro — um segundo patch
+		// encadeado nunca seria chamado (este arquivo carrega DEPOIS, ver
+		// `hooks.py#web_include_js`, e reescreve o método sem chamar o
+		// anterior).
+		if (item.imun_exige_receita) {
+			body_html += '<span class="imun-badge-receita">Venda sob prescrição médica</span>';
+		}
+
 		if (item.item_group) {
 			body_html += `<div class="product-category" itemprop="name">${frappe.utils.escape_html(
 				item.item_group

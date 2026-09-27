@@ -235,6 +235,9 @@ jinja = {
 		# do item (templates/generators/item/item.html) para o
 		# public/js/agendamento.js decidir o botão.
 		"imunocare_ecommerce.catalogo.jinja_utils.imun_sinal_servico",
+		# Change venda-sob-receita, task 5.1 (D8): badge "Venda sob prescrição
+		# médica" na página do produto (templates/generators/item/item.html).
+		"imunocare_ecommerce.catalogo.jinja_utils.imun_exige_receita",
 		# Tarefa E (spec 2026-09-03-cadastro-paciente-portal-e-colisao-cpf.md):
 		# corrige o breadcrumb do produto para a categoria CURADA em vez do
 		# Item.item_group bruto ("Aplicação de Vacinas").

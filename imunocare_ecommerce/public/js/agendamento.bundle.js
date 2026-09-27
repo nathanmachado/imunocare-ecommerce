@@ -44,6 +44,7 @@ if (frappe.boot && frappe.boot.__messages) {
 frappe.ready(function () {
 	imun_decidir_botao_pagina_item();
 	imun_patch_botao_grid();
+	imun_patch_card_receita();
 	imun_retomar_reserva_pendente();
 });
 
@@ -332,6 +333,47 @@ function imun_patch_botao_grid() {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Change ``venda-sob-receita``, task 5.1 (D8) — badge "Venda sob prescrição
+// médica" na LISTA (view "List View", ``webshop.ProductList``). Monkey-patch
+// de ``get_row_body_html`` (método real que monta o corpo da linha na lista
+// — ``ProductList`` NÃO tem ``get_card_body_html``; esse método é só do
+// grid, ver ``apps/webshop/webshop/public/js/product_ui/list.js``). Guarda a
+// implementação NATIVA e só ACRESCENTA o badge quando o backend enriqueceu o
+// item com ``item.imun_exige_receita`` (``catalogo.api.
+// get_product_filter_data_loja``/``_enriquecer_com_exige_receita``) — cobre
+// lista inicial e "Carregar mais" com o mesmo código (``product_list_more.
+// bundle.js`` reusa ``new webshop.ProductList(...)``, que chama este
+// método), sem chamada extra por card. Flag própria
+// (``_imun_patched_receita``) pra não colidir com o guard de
+// ``imun_patch_botao_grid``.
+//
+// O GRID (``webshop.ProductGrid``) tem o badge equivalente direto em
+// ``product_grid_style.bundle.js`` (nosso próprio ``get_card_body_html``,
+// que já reescreve o corpo do card por inteiro) — um segundo monkey-patch
+// aqui nunca seria chamado, porque aquele arquivo carrega DEPOIS deste (ver
+// ``hooks.py#web_include_js``) e substitui o método sem encadear o anterior.
+// ---------------------------------------------------------------------------
+
+function imun_patch_card_receita() {
+	if (typeof webshop === "undefined") {
+		return;
+	}
+
+	if (webshop.ProductList && !webshop.ProductList.prototype._imun_patched_receita) {
+		var original_list_row = webshop.ProductList.prototype.get_row_body_html;
+		webshop.ProductList.prototype.get_row_body_html = function (item, title, settings) {
+			var html = original_list_row.call(this, item, title, settings);
+			return item.imun_exige_receita ? imun_html_badge_receita() + html : html;
+		};
+		webshop.ProductList.prototype._imun_patched_receita = true;
+	}
+}
+
+function imun_html_badge_receita() {
+	return '<span class="imun-badge-receita">Venda sob prescrição médica</span>';
+}
+
 function imun_html_botao_agendar_card(item) {
 	return (
 		'<div class="btn btn-sm btn-primary w-100 mt-2 imun-btn-agendar-card" ' +
@@ -552,6 +594,35 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 		},
 	];
 
+	// Change venda-sob-receita, task 4.2 (D7/D8) — aviso + confirmação de posse
+	// da receita só aparecem quando o item exige receita (info.exige_receita,
+	// já resolvido pelo backend na task 4.1). Item não marcado: nenhum campo
+	// extra, nenhuma checagem (bifurcação "produto sem exigência" da spec).
+	if (info.exige_receita) {
+		fields.push({
+			fieldname: "imun_receita_sb",
+			fieldtype: "Section Break",
+		});
+		fields.push({
+			fieldname: "imun_receita_aviso_html",
+			fieldtype: "HTML",
+			// Mesma convenção de imun_conferir_cpf_controle (Armadilha 2 do
+			// tasks.md / feedback_loja_client_i18n_e_datepicker): texto final já
+			// em pt-BR, sem __() — o controle (ControlHTML.get_content também
+			// chama __(content), ver imun_passo_colisao_cpf acima) tenta
+			// re-traduzir de novo, mas não acha esta string no dicionário
+			// (chaves são fonte inglesa) e devolve inalterado.
+			options:
+				'<p class="text-warning">Este produto exige receita médica — você ' +
+				"vai precisar apresentá-la no atendimento.</p>",
+		});
+		fields.push({
+			fieldname: "receita_confirmada",
+			fieldtype: "Check",
+			label: "Declaro que tenho a receita médica e vou apresentá-la no atendimento.",
+		});
+	}
+
 	if (domiciliar_info.ativo) {
 		fields.push({
 			fieldname: "modalidade_sb",
@@ -689,6 +760,25 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 				frappe.msgprint(__("Selecione um horário disponível."));
 				return;
 			}
+
+			// Change venda-sob-receita, task 4.2 (D7) — mesmo padrão de bloqueio
+			// client-side dos demais campos obrigatórios do modal (aponta o
+			// campo, não dispara o envio): sem a confirmação marcada, nem o
+			// logado nem o visitante avançam — a ramificação de guest logo
+			// abaixo (imun_passo_identificacao) herda `values.receita_confirmada`
+			// deste MESMO diálogo, então validar aqui cobre os dois caminhos.
+			if (info.exige_receita && !values.receita_confirmada) {
+				var controleReceita = d.fields_dict.receita_confirmada;
+				if (controleReceita) {
+					controleReceita.df.invalid = true;
+					controleReceita.set_invalid();
+					controleReceita.set_description(
+						"Marque a confirmação de que você tem a receita médica para continuar."
+					);
+				}
+				return;
+			}
+
 			var domiciliar = domiciliar_info.ativo && values.modalidade === __("Domiciliar (+ taxa)");
 
 			// Reserva como visitante (Task 6): guest chegou até o Confirmar
@@ -735,6 +825,9 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 				appointment_date: values.appointment_date,
 				appointment_time: values.appointment_time,
 				modalidade: domiciliar ? "Domiciliar" : "Na Clínica",
+				// Change venda-sob-receita, task 4.2 (D7) — atravessa a colisão de
+				// CPF (imun_passo_colisao_cpf) até o dados do OTP, ver abaixo.
+				receita_confirmada: !!values.receita_confirmada,
 			};
 
 			frappe.call({
@@ -749,6 +842,9 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 						// Rastreio da jornada (Feature 56 / A2.4) — null se o cliente não
 						// consentiu, e o agendamento segue normalmente sem UTM/origem.
 						session_id: window.ImunRastreio ? window.ImunRastreio.sessionId() : null,
+						// Change venda-sob-receita, task 4.2 (D7) — caminho logado direto
+						// (sem colisão de CPF); o servidor confere de novo (criar_agendamento).
+						receita_confirmada: !!values.receita_confirmada,
 					},
 					params
 				),
@@ -799,6 +895,21 @@ function imun_montar_dialogo_agendamento(params, info, domiciliar_info, preset) 
 	// nos demais ramos, e o `if` dentro do auxiliar cobre essa ausência —
 	// reaproveita o mesmo auxiliar das tasks 2.1/2.2, sem duplicar lógica.
 	imun_ligar_conferencia_cpf(d.fields_dict.imun_cpf);
+
+	// Change venda-sob-receita, task 4.2 — limpa a marca de campo faltante
+	// assim que a pessoa marca a confirmação (sem precisar clicar Confirmar
+	// de novo pra ver o aviso sumir); `d.fields_dict.receita_confirmada` só
+	// existe quando `info.exige_receita` empurrou o campo (acima).
+	if (d.fields_dict.receita_confirmada) {
+		d.fields_dict.receita_confirmada.$input.on("change", function () {
+			var controle = d.fields_dict.receita_confirmada;
+			if (controle.get_value()) {
+				controle.df.invalid = false;
+				controle.set_invalid();
+				controle.set_description("");
+			}
+		});
+	}
 
 	d.show();
 	imun_registrar_modal_para_esc(d);
@@ -901,7 +1012,18 @@ function imun_passo_colisao_cpf(escolha, cpfDigitado) {
 		primary_action_label: __("Receber código"),
 		primary_action: function (v) {
 			var canalEfetivo = v.canal === __("WhatsApp") ? "whatsapp" : "email";
-			var dados = { cpf: cpfDigitado, email: v.email, celular: v.celular };
+			var dados = {
+				cpf: cpfDigitado,
+				email: v.email,
+				celular: v.celular,
+				// Change venda-sob-receita, task 4.2 (D7) — a confirmação foi
+				// marcada (ou não exigida) no diálogo de agendamento, ANTES da
+				// colisão de CPF surgir; viaja aqui dentro do payload do OTP
+				// (mesmo mecanismo do cache do Redis) para
+				// confirmar_codigo_e_vincular_logado repassar a
+				// criar_agendamento.
+				receita_confirmada: !!escolha.receita_confirmada,
+			};
 			frappe.call({
 				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
 				args: { canal: canalEfetivo, dados: dados },
@@ -1274,9 +1396,19 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 				// de verdade é o servidor.
 			}
 			var canalEfetivo = v.canal === __("WhatsApp") ? "whatsapp" : "email";
+			// Change venda-sob-receita, task 4.2 (D7) — a checkbox de confirmação
+			// vive no diálogo ANTERIOR (imun_montar_dialogo_agendamento, `values`
+			// aqui é o parâmetro desta função, não `v` deste diálogo de
+			// identificação) — precisa ser injetada explicitamente no payload do
+			// OTP, senão some entre um diálogo e o outro (regra fechada pela
+			// metade). O MESMO objeto alimenta o envio inicial e o reenvio de
+			// código, para o "Reenviar código" não perder a confirmação.
+			var dadosComReceita = Object.assign({}, v, {
+				receita_confirmada: !!values.receita_confirmada,
+			});
 			frappe.call({
 				method: "imunocare_ecommerce.conta.verificacao.solicitar_codigo",
-				args: { canal: canalEfetivo, dados: v },
+				args: { canal: canalEfetivo, dados: dadosComReceita },
 				freeze: true,
 				freeze_message: __("Enviando código..."),
 				callback: function (r) {
@@ -1285,7 +1417,7 @@ function imun_passo_identificacao(dialogo, params, info, values, domiciliar) {
 					}
 					avancouParaCodigo = true;
 					d2.hide();
-					imun_passo_codigo(escolha, r.message, { canal: canalEfetivo, dados: v });
+					imun_passo_codigo(escolha, r.message, { canal: canalEfetivo, dados: dadosComReceita });
 				},
 			});
 		},

@@ -159,6 +159,14 @@ _CUSTOM_SCSS = f"""
 	--imun-tinta: {_INK};
 	--imun-ink-soft: {_INK_2};
 	--imun-surface-2: {_CIANO_WASH};
+	// --error-border só existe no desk (css_variables.scss/dark.scss, valor
+	// --red-400 = #eb9091) — no site NÃO é definida, então a regra nativa
+	// `.frappe-control:not(...).has-error input {{ border: 1px solid
+	// var(--error-border); }}` (controls.scss) fica com valor inválido e o
+	// input (checkbox incluso: appearance:none + fundo transparente) some
+	// quando o campo entra em erro. Define aqui o MESMO valor do desk, sem
+	// depender de var(--red-400) (também ausente no site).
+	--error-border: #eb9091;
 }}
 
 body, h1, h2, h3, h4, h5, h6, .navbar, .btn, input, textarea, select, .navbar-brand {{
@@ -567,6 +575,20 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 	letter-spacing: .14em;
 	text-transform: uppercase;
 	color: var(--imun-ciano-ink);
+	margin: 0 0 8px;
+}}
+
+// ---- Badge "Venda sob prescrição médica" (change venda-sob-receita,
+//      task 5.1 — D8) — classe compartilhada card da listagem/página do
+//      produto, mesmo mecanismo de badge deste arquivo. -----------------
+.imun-badge-receita {{
+	display: inline-block;
+	font-size: .72rem;
+	font-weight: 700;
+	color: var(--imun-petroleo);
+	background: var(--imun-ciano-wash);
+	border-radius: 999px;
+	padding: 3px 10px;
 	margin: 0 0 8px;
 }}
 

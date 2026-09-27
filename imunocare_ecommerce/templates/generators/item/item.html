@@ -36,6 +36,10 @@
 	"Agendar" e o botão nativo do webshop, sem precisar recalcular a regra no
 	client. -#}
 {% set imun_sinal = imun_sinal_servico(doc) %}
+{#- Change venda-sob-receita, task 5.1 (D8): sinal "exige receita" exposto no
+	MESMO container, server-side (a página já tem o dado no HTML inicial, sem
+	esperar JS) — badge ao lado do imun-eyebrow existente. -#}
+{% set imun_receita = imun_exige_receita(doc) %}
 {#- Atividade 550 (fix): data-imun-item-code é a fonte de verdade do item_code
 	nesta página — NÃO usar o "[data-item-code]" do webshop
 	(item_add_to_cart.html, upstream) como primário. Aquele atributo só existe
@@ -46,8 +50,12 @@
 <div class="imun-product-page"
 	data-imun-servico="{{ 1 if imun_sinal.servico else 0 }}"
 	data-imun-appointment-type="{{ imun_sinal.appointment_type or '' }}"
+	data-imun-exige-receita="{{ 1 if imun_receita else 0 }}"
 	data-imun-item-code="{{ doc.item_code }}">
 	<span class="imun-eyebrow">Produto</span>
+	{% if imun_receita %}
+	<span class="imun-badge-receita">Venda sob prescrição médica</span>
+	{% endif %}
 	{#- H1 por produto (F2): visualmente oculto (mesmo texto do <title>) — o
 		título grande realmente exibido é o "product-title" nativo do webshop
 		(item_details.html, upstream), que é uma <div>, não uma <h1>. Em vez de

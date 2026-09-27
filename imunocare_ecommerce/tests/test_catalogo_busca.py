@@ -142,3 +142,92 @@ class TestBuscaMaisCategoriaCombinaComE(FrappeTestCase):
 		o termo "alfa" bate em item_A (grupo A) e item_B (grupo B), das duas
 		categorias."""
 		self.assertEqual(self._codigos(search=self._termo_alfa), {self._item_a, self._item_b})
+
+
+class TestGetProductFilterDataLojaExigeReceita(FrappeTestCase):
+	"""Change ``venda-sob-receita``, task 5.1 (D8) — ``get_product_filter_data_loja``
+	devolve ``imun_exige_receita`` (0/1) para cada item, mesmo mecanismo de
+	enriquecimento pós-query de ``imun_servico`` (``_enriquecer_com_sinal_servico``)
+	acima, cobrindo grid inicial e "Carregar mais" com a MESMA chamada.
+	``Item.imun_exige_receita`` é custom field de ``imunocare_clinic_ext`` — a
+	leitura é feita via ``agendamento.booking._item_exige_receita`` (task 4.1,
+	tolerante a campo ausente), fonte única também usada pelo jinja global da
+	página do produto (``catalogo.jinja_utils.imun_exige_receita``)."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		sufixo = frappe.generate_hash(length=6)
+		cls._sufixo = sufixo
+		cls._grupo = f"Teste Receita {sufixo}"
+		cls._website_item_names = []
+
+		frappe.get_doc(
+			{
+				"doctype": "Item Group",
+				"item_group_name": cls._grupo,
+				"is_group": 0,
+				"parent_item_group": "All Item Groups",
+			}
+		).insert(ignore_permissions=True)
+
+		cls._item_marcado = cls._novo_website_item("MARCADO", cls._grupo, f"Produto receita {sufixo}")
+		cls._item_livre = cls._novo_website_item("LIVRE", cls._grupo, f"Produto livre {sufixo}")
+
+		# Item de serviço (Contexto/D1): a marcação mora no Item, não no
+		# Website Item — mesmo campo lido por criar_agendamento/info_agendamento.
+		frappe.db.set_value("Item", cls._item_marcado, "imun_exige_receita", 1)
+
+	@classmethod
+	def _novo_website_item(cls, rotulo: str, item_group: str, nome: str) -> str:
+		item_code = f"TESTE-RECEITA-{rotulo}-{cls._sufixo}"
+		frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": item_code,
+				"item_name": nome,
+				"item_group": item_group,
+				"stock_uom": "Nos",
+				"is_stock_item": 0,
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		website_item = frappe.get_doc(
+			{
+				"doctype": "Website Item",
+				"item_code": item_code,
+				"web_item_name": nome,
+				"item_name": nome,
+				"item_group": item_group,
+				"published": 1,
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		cls._website_item_names.append(website_item.name)
+		return item_code
+
+	@classmethod
+	def tearDownClass(cls):
+		for website_item_name in cls._website_item_names:
+			_apagar_definitivamente("Website Item", website_item_name)
+		for item_code in (cls._item_marcado, cls._item_livre):
+			_apagar_definitivamente("Item", item_code)
+		_apagar_definitivamente("Item Group", cls._grupo)
+		super().tearDownClass()
+
+	def _por_item_code(self, item_group: str) -> dict:
+		resultado = get_product_filter_data_loja(
+			query_args={
+				"item_group": item_group,
+				"field_filters": {},
+				"attribute_filters": {},
+				"start": 0,
+			}
+		)
+		return {item["item_code"]: item["imun_exige_receita"] for item in resultado["items"]}
+
+	def test_item_marcado_devolve_exige_receita_1(self):
+		itens = self._por_item_code(self._grupo)
+		self.assertEqual(itens[self._item_marcado], 1)
+
+	def test_item_nao_marcado_devolve_exige_receita_0(self):
+		itens = self._por_item_code(self._grupo)
+		self.assertEqual(itens[self._item_livre], 0)
