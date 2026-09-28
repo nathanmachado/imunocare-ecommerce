@@ -1,0 +1,58 @@
+{% extends "templates/web.html" %}
+
+{% block title %}Área do Médico Parceiro{% endblock %}
+{% block breadcrumbs %}{% endblock %}
+
+{% block page_content %}
+<div class="imun-area-medico">
+	<h1 class="h3">Área do Médico Parceiro</h1>
+	<p class="text-muted">
+		Aplicações de produtos com receita feitas nos pacientes das vindas que você indicou.
+	</p>
+
+	<form method="GET" class="imun-area-medico-filtro form-inline" style="margin-bottom: 1.5rem;">
+		<div class="form-group" style="margin-right: 1rem;">
+			<label for="de" style="margin-right: 0.5rem;">De</label>
+			<input type="date" id="de" name="de" class="form-control" value="{{ de | e }}">
+		</div>
+		<div class="form-group" style="margin-right: 1rem;">
+			<label for="ate" style="margin-right: 0.5rem;">Até</label>
+			<input type="date" id="ate" name="ate" class="form-control" value="{{ ate | e }}">
+		</div>
+		<button type="submit" class="btn btn-primary">Filtrar</button>
+	</form>
+
+	{% if aviso %}
+	<div class="alert alert-warning">{{ aviso | e }}</div>
+	{% endif %}
+
+	{% if aplicacoes %}
+	<div class="table-responsive">
+	<table class="table table-bordered">
+		<thead>
+			<tr>
+				<th>Paciente</th>
+				<th>Produto</th>
+				<th>Dose</th>
+				<th>Data</th>
+			</tr>
+		</thead>
+		<tbody>
+			{% for aplicacao in aplicacoes %}
+			<tr>
+				<td>{{ aplicacao.paciente | e }}</td>
+				<td>{{ aplicacao.produto | e }}</td>
+				<td>{% if aplicacao.dose %}{{ aplicacao.dose | e }}ª dose{% else %}—{% endif %}</td>
+				<td>{{ frappe.utils.format_date(aplicacao.data, "dd/mm/yyyy") | e }}</td>
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+	</div>
+	{% else %}
+	{% if not aviso %}
+	<p>Nenhuma aplicação no período.</p>
+	{% endif %}
+	{% endif %}
+</div>
+{% endblock %}

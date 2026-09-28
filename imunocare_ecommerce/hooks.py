@@ -156,6 +156,34 @@ web_include_js = [
 # include app icons in desk
 # app_include_icons = "imunocare_ecommerce/public/icons.svg"
 
+# Change ``area-do-medico-parceiro``, task 3.1 (D6): link "Área do Médico" no
+# menu lateral do portal (/me), visível só para quem tem a role "Médico
+# Parceiro" (filtro nativo de ``get_portal_sidebar_items``,
+# ``frappe/website/utils.py``). A role NÃO é o controle de acesso — a página
+# ``www/area_do_medico.py`` confere o cadastro do médico no servidor; role
+# esquecida num User é, no pior caso, um link que dá "não permitido", nunca
+# vazamento. A Role é garantida (idempotente) pelo ``install.after_migrate``
+# do ``imunocare_clinic_ext`` (quem concede o acesso); o ``sync_menu`` nativo
+# do Portal Settings também a criaria se faltasse.
+#
+# ``reference_doctype`` é OBRIGATÓRIO aqui, apesar de nenhum outro campo do
+# hook depender dele: ``PortalSettings.sync_menu`` roda
+# ``remove_deleted_doctype_items`` a CADA migrate, que apaga (sem checar
+# ``dirty``) qualquer linha do menu cujo ``reference_doctype`` não esteja em
+# ``frappe.get_list("DocType", pluck="name")`` — inclui ``None`` (achado
+# durante o teste manual desta task: sem o campo, o item some no migrate
+# seguinte, mesmo tendo sido criado no primeiro). "Healthcare Practitioner" é
+# semanticamente correto (a página é do médico) e sempre existe (Healthcare é
+# ``required_apps``).
+standard_portal_menu_items = [
+	{
+		"title": "Área do Médico",
+		"route": "/area-do-medico",
+		"reference_doctype": "Healthcare Practitioner",
+		"role": "Médico Parceiro",
+	},
+]
+
 # Home Pages
 # ----------
 
