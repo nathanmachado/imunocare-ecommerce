@@ -58,6 +58,7 @@ def get_product_filter_data_loja(query_args=None) -> dict:
 	itens = resultado.get("items") or []
 	_enriquecer_com_sinal_servico(itens)
 	_enriquecer_com_exige_receita(itens)
+	_enriquecer_com_preco_loja(itens)
 	_ocultar_nome_do_erp(itens)
 	return resultado
 
@@ -194,6 +195,19 @@ def _enriquecer_com_exige_receita(items: list) -> None:
 			frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.catalogo.api")
 			exige = False
 		item["imun_exige_receita"] = 1 if exige else 0
+
+
+def _enriquecer_com_preco_loja(items: list) -> None:
+	"""`imun_preco` (Pix + parcelado) a partir do preço que o card já traz; None sem parâmetros/preço."""
+	from imunocare_ecommerce.catalogo.preco import _params_do_settings
+	from imunocare_ecommerce.catalogo.preco_jinja import preco_loja_exibicao
+
+	params = _params_do_settings()  # uma leitura por requisição
+	for item in items:
+		rate = item.get("price_list_rate")
+		item["imun_preco"] = (
+			preco_loja_exibicao(item.get("item_code"), preco=rate, params=params) if rate else None
+		)
 
 
 def _ocultar_nome_do_erp(items: list) -> None:

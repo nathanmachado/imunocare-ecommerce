@@ -825,6 +825,12 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 
 // ---- Pills (status/categoria) — SEM coral (REDESIGN 2026-09-04: o antigo
 //      "accent" laranja virou wash de ciano, mesma linguagem do resto). -----
+.imun-preco-pix {{
+	color: #003B49; font-weight: 600; font-size: 1.1rem;
+}}
+.imun-preco-parcelado {{
+	color: var(--text-muted, #6c757d); font-size: .85rem; font-weight: 400;
+}}
 .imun-pill {{
 	font-size: .72rem;
 	font-weight: 650;
