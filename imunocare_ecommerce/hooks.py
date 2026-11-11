@@ -282,6 +282,8 @@ jinja = {
 # (roda depois de context.boot já populado por get_website_settings).
 update_website_context = [
 	"imunocare_ecommerce.catalogo.jinja_utils.injetar_mensagens_loja",
+	# vitrine-sem-marca 1.3: meta description estável (depois do MetaTags/Route Meta).
+	"imunocare_ecommerce.catalogo.jinja_utils.meta_description_vitrine",
 ]
 
 # Installation

@@ -347,3 +347,48 @@ def injetar_mensagens_loja(context):
 			boot["__messages"] = imun_mensagens_loja()
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), _LOG_TITLE)
+
+
+_META_DESCRIPTION_MAX = 300
+
+
+def meta_description_vitrine(context):
+	"""Hook ``update_website_context`` (vitrine-sem-marca 1.3): fixa a meta
+	description do produto na descrição curta da vitrine (+ sufixo da loja).
+
+	Roda depois de ``MetaTags`` (que já aplicou Website Route Meta), então vence
+	o ``Item.description`` do ``set_metatags`` do webshop e qualquer Route Meta
+	velho. Restrito ao Website Item: o hook também roda no desk e em outras
+	páginas. Nunca lança."""
+	try:
+		if context.get("doctype") != "Website Item" or not context.get("name"):
+			return
+		tags = context.get("metatags")
+		if not isinstance(tags, dict):
+			return
+		curta, longa, desc_item = frappe.db.get_value(
+			"Website Item", context.name, ["short_description", "web_long_description", "description"]
+		) or (None, None, None)
+		texto = _texto_puro(curta)
+		if texto:
+			sufixo = frappe.db.get_single_value(
+				"Imunocare Ecommerce Settings", "meta_description_sufixo"
+			) or ""
+			texto = texto + sufixo
+		else:
+			texto = _texto_puro(longa or desc_item)
+		if not texto:
+			return
+		texto = texto[:_META_DESCRIPTION_MAX]
+		for chave in ("description", "og:description", "twitter:description"):
+			tags[chave] = texto
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "meta_description_vitrine")
+
+
+def _texto_puro(html):
+	import re
+
+	if not html:
+		return ""
+	return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
