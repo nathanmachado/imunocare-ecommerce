@@ -150,17 +150,18 @@
 			</div>
 			<div class="imun-grid">
 				{% for item in secao.itens %}
-				{#- REDESIGN 2026-09-04 — cards "Opção A" (protótipo aprovado):
-					SEM foto, tipográficos (categoria/nome/descrição/preço em
-					destaque/CTA "Agendar"). "Mais agendada" é curadoria manual
+				{#- REDESIGN 2026-09-04 — cards com foto (Opção A aposentada em
+					2026-11-10; sem foto, bloco neutro do mesmo tamanho) —
+					categoria/nome/descrição/preço/CTA "Agendar". "Mais agendada" é curadoria manual
 					do dono (item.destaque, catalogo.setup._mapa_destaque) —
 					nunca fabricada. -#}
-				<a href="/{{ item.route }}" class="imun-card{{ ' imun-card-feat' if item.destaque else '' }}">
+				<a href="/{{ item.route | e }}" class="imun-card{{ ' imun-card-feat' if item.destaque else '' }}">
 					{% if item.destaque %}
 					<span class="imun-card-tag">Mais agendada</span>
 					{% endif %}
+					<div class="imun-card-img">{% if item.imagem %}<img src="{{ item.imagem | e }}" alt="{{ item.nome | e }}" loading="lazy">{% endif %}</div>
 					<span class="imun-card-cat">{{ secao.nome }}</span>
-					<div class="imun-card-nm">{{ item.nome }}</div>
+					<div class="imun-card-nm">{{ item.nome | e }}</div>
 					{% if item.descricao %}
 					<div class="imun-card-ds">{{ item.descricao }}</div>
 					{% endif %}
@@ -306,9 +307,9 @@
 	</section>
 
 	<!-- Categorias (REDESIGN 2026-09-04, protótipo #cats/.cats) — grade quieta
-	     com TODAS as categorias de topo, mesmo as sem produto ainda
-	     (Nutracêuticos/Cuidado diário caem na página informativa "em breve",
-	     ver templates/generators/item_group.html + catalogo.jinja_utils). -->
+	     só com as categorias de topo que têm produto publicado
+	     (a vazia não ganha link; a página dela segue existindo, ver
+	     templates/generators/item_group.html). -->
 	{% if nav_categorias %}
 	<section class="imun-section" id="categorias">
 		<span class="imun-eyebrow">Explore</span>

@@ -53,9 +53,8 @@ def get_context(context):
 
 	# Taxonomia 2026-09-04: nav ÚNICA e flat com as 7 categorias de topo
 	# (a separação Imuno x Care em duas linhas, F7, foi descontinuada — ver
-	# catalogo.setup._consolidar_linha_care), mesmo as que ainda não têm
-	# produto publicado (essas caem na página informativa de categoria vazia
-	# — ver templates/generators/item_group.html + catalogo.jinja_utils).
+	# catalogo.setup._consolidar_linha_care), só as que têm produto
+	# publicado (a vazia não ganha link; sua página segue existindo).
 	# Diferente de `context.secoes` acima (só categorias COM produto, para o
 	# carrossel de cards da home).
 	try:

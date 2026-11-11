@@ -14,13 +14,8 @@ node_modules
 imunocare_ecommerce/public/dist/
 # catálogo real extraído de produção — contém PREÇOS (dado de negócio, nunca versionar)
 imunocare_ecommerce/catalogo/catalogo_prod.json
-# Imagens-FONTE de produtos (originais ~1MB cada, ~58MB no total). O site usa
-# as versões OTIMIZADAS em public/img/produtos/*.jpg (nomeadas por item_code,
-# ~50KB cada, essas SIM versionadas). Mantidas só localmente como material
-# bruto para regerar/otimizar no futuro (ver catalogo.setup._imagem_produto).
-imunocare_ecommerce/public/img/Vacinas Todas/
+# Imagens-FONTE (originais pesados), mantidas só localmente.
 imunocare_ecommerce/public/img/Vitaminas e Protocolos/
-imunocare_ecommerce/public/img/Planos/
 imunocare_ecommerce/public/img/Brincos/
 # Foto-fonte de médico (PNG original pesado; o site usa o .jpg otimizado)
 imunocare_ecommerce/public/img/Medicos/*.png

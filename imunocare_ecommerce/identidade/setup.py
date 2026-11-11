@@ -46,8 +46,9 @@ pelo dono (genéricos, fora da identidade, baixo contraste). Esta atividade:
   3. Fundo 100% branco (a versão anterior tinha hero e rodapé escuros,
      petróleo sólido) — texto em petróleo/tons de tinta sobre branco.
   4. Componentes fiéis ao protótipo: botões pill (ciano cheio = CTA, ghost =
-     secundário), cards de produto SEM foto ("Opção A" — nome, categoria,
-     descrição curta, preço em destaque, CTA "Agendar"), faixa de confiança
+     secundário), cards de produto COM foto (o dono aposentou a "Opção A", sem foto, em
+     2026-11-10; sem foto cadastrada o card mantém o espaço em fundo neutro)
+     — categoria, nome, descrição curta, preço em destaque, CTA "Agendar", faixa de confiança
      slim, seção "como funciona" com passos numerados, footer claro com
      colunas de link nativas (``Website Settings.footer_items``).
   5. Lexend ganha o peso Black (900) para o H1 do hero — hierarquia por peso,
@@ -708,8 +709,8 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 .imun-step h4 {{ font-size: 17px; font-weight: 700; color: var(--imun-petroleo); margin: 0; }}
 .imun-step p {{ color: var(--imun-muted); font-size: 13.5px; margin: 3px 0 0; }}
 
-// ---- Cards de produto — "Opção A": SEM foto, tipográficos (protótipo
-//      .card/.card.feat) --------------------------------------------------
+// ---- Cards de produto COM foto (2026-11-10: o dono aposentou o card
+//      sem foto; protótipo .card/.card.feat) --------------------------------
 .imun-grid {{
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -730,6 +731,16 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 	transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 }}
 .imun-card:hover {{ transform: translateY(-4px); box-shadow: var(--imun-shadow); border-color: transparent; }}
+// Foto no topo (sangra o padding do card); sem foto o bloco guarda o mesmo
+// espaço em fundo neutro, sem imagem quebrada nem letra.
+.imun-card .imun-card-img {{
+	height: 150px;
+	margin: -22px -20px 14px;
+	background: #F7F7F7;
+	border-radius: var(--imun-radius) var(--imun-radius) 0 0;
+	overflow: hidden;
+}}
+.imun-card .imun-card-img img {{ width: 100%; height: 150px; object-fit: cover; display: block; }}
 // "Mais agendada" — contorno ciano + selo (um card por seção, no máximo).
 .imun-card.imun-card-feat {{ border-color: var(--imun-ciano); box-shadow: var(--imun-shadow-cyan); }}
 .imun-card .imun-card-tag {{
@@ -814,6 +825,12 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 
 // ---- Pills (status/categoria) — SEM coral (REDESIGN 2026-09-04: o antigo
 //      "accent" laranja virou wash de ciano, mesma linguagem do resto). -----
+.imun-preco-pix {{
+	color: #003B49; font-weight: 600; font-size: 1.1rem;
+}}
+.imun-preco-parcelado {{
+	color: var(--text-muted, #6c757d); font-size: .85rem; font-weight: 400;
+}}
 .imun-pill {{
 	font-size: .72rem;
 	font-weight: 650;
@@ -837,10 +854,8 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 // ---- Grid/página nativa do webshop (categoria + all-products) -----------
 // Reestiliza o card JÁ renderizado pelo webshop (grid.js/list.js, upstream,
 // não alterado) — reuso total do markup/lógica de carrinho, só troca o
-// visual via seletores escopados às classes do próprio webshop. Mantém foto
-// (o "sem foto" da Opção A vale para os cards CURADOS da home/categoria
-// informativa, que são conteúdo 100% nosso — o grid nativo do webshop segue
-// como está, ver relatório da atividade).
+// visual via seletores escopados às classes do próprio webshop. Mantém foto;
+// sem foto, o espaço fica em fundo neutro (a letra do webshop é escondida).
 .item-card .card {{
 	border-radius: var(--imun-radius) !important;
 	border: 1px solid var(--imun-line) !important;
@@ -850,6 +865,12 @@ a:hover {{ color: var(--imun-ciano-ink); }}
 }}
 .item-card .card:hover {{ transform: translateY(-3px); }}
 .item-card .card-img-container img.card-img {{ height: 150px; object-fit: cover; }}
+.item-card .card-img-container .no-image {{
+	height: 150px;
+	background: #F7F7F7;
+	color: transparent;
+	font-size: 0;
+}}
 .item-card .product-title {{ font-weight: 700; font-size: 1rem; color: var(--imun-ink); margin-top: 2px; }}
 .item-card .product-category {{
 	display: inline-block;

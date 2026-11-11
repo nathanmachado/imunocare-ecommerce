@@ -38,8 +38,11 @@ def sinal_servico(item_code: str | None) -> dict:
 	if not item_code:
 		return {"servico": False, "appointment_type": None}
 	try:
+		from imunocare_ecommerce.catalogo.apresentacoes import pagina_da_apresentacao
+
+		pagina = pagina_da_apresentacao(item_code)
 		appointment_type = frappe.db.get_value(
-			"Website Item", {"item_code": item_code}, "imun_appointment_type"
+			"Website Item", pagina or {"item_code": item_code}, "imun_appointment_type"
 		)
 		is_stock_item = frappe.db.get_value("Item", item_code, "is_stock_item")
 	except Exception:

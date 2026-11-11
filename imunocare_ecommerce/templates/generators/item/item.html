@@ -7,7 +7,7 @@
 	DESIGN_ALVO_v1 (cartão arredondado, sombra suave, eyebrow) — ajuste do
 	dono 2026-07, item 1. -#}
 {% extends "templates/web.html" %}
-{% from "webshop/templates/includes/macros.html" import recommended_item_row %}
+{% from "webshop/templates/includes/macros.html" import recommended_item_row, product_image %}
 
 {#- F2 (catálogo v1): título por produto via custom field imun_meta_title
 	(Website Item) — cai para web_item_name/item_name se vazio. Fonte única
@@ -47,11 +47,14 @@
 	de condições (cart_settings.enabled, product_info.price, in_stock/allow_items_not_in_stock)
 	que pode ficar falsa mesmo com a página funcionando normalmente — nesse
 	caso "Agendar" sumia silenciosamente (ver public/js/agendamento.js). -#}
+{#- 4.1: com seletor, o item inicial é o da opção padrão (mesmo que o da página ou não). -#}
+{% set imun_apr = imun_apresentacoes(doc) %}
+{% set imun_sel = (imun_apr | selectattr("selecionado") | list | first) if imun_apr else None %}
 <div class="imun-product-page"
 	data-imun-servico="{{ 1 if imun_sinal.servico else 0 }}"
 	data-imun-appointment-type="{{ imun_sinal.appointment_type or '' }}"
 	data-imun-exige-receita="{{ 1 if imun_receita else 0 }}"
-	data-imun-item-code="{{ doc.item_code }}">
+	data-imun-item-code="{{ imun_sel.item_code if imun_sel else doc.item_code }}">
 	<span class="imun-eyebrow">Produto</span>
 	{% if imun_receita %}
 	<span class="imun-badge-receita">Venda sob prescrição médica</span>
@@ -121,7 +124,34 @@
 			<span class="recommendation-header">{{ _("Recommended") }}</span>
 			<div class="product-container mt-2 recommendation-container">
 				{% for item in recommended_items %}
-					{{ recommended_item_row(item) }}
+					{#- vitrine-sem-marca 2.2: mesma linha Pix/parcelado da página, no lugar do preço nativo. -#}
+					<div class="recommended-item mb-6 d-flex">
+						<div class="r-item-image">
+							{% if item.website_item_thumbnail %}
+								{{ product_image(item.website_item_thumbnail, css_class="r-product-image", alt="item.website_item_name", no_border=True) }}
+							{% else %}
+								<div class="no-image-r-item">{{ frappe.utils.get_abbr(item.website_item_name) or "NA" }}</div>
+							{% endif %}
+						</div>
+						<div class="r-item-info">
+							<a href="/{{ item.route or '#'}}" target="_blank">
+								{% set title = item.website_item_name %}
+								{{ title[:70] + "..." if title|len > 70 else title }}
+							</a>
+							{% if item.get('price_info') %}
+								{% set rp = item.price_info %}
+								{% set imun_rp = preco_loja_exibicao(item.item_code, rp.get('price_list_rate')) %}
+								<div class="mt-2">
+									{% if imun_rp %}
+										<span class="item-price imun-preco-pix">{{ imun_rp.texto_pix }}</span>
+										{% if imun_rp.texto_parcelado %}<br><small class="imun-preco-parcelado">{{ imun_rp.texto_parcelado }}</small>{% endif %}
+									{% else %}
+										<span class="item-price">{{ rp.get('formatted_price') or '' }}</span>
+									{% endif %}
+								</div>
+							{% endif %}
+						</div>
+					</div>
 				{% endfor %}
 			</div>
 		</div>

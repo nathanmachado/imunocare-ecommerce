@@ -103,6 +103,7 @@ fixtures = [
 # antes de imunocare_ecommerce), não pela ordem dentro desta lista.
 web_include_js = [
 	"agendamento.bundle.js",
+	"apresentacoes.bundle.js",
 	"seo_jsonld.bundle.js",
 	"rastreio.bundle.js",
 	"domiciliar_cart.bundle.js",
@@ -270,6 +271,10 @@ jinja = {
 		# corrige o breadcrumb do produto para a categoria CURADA em vez do
 		# Item.item_group bruto ("Aplicação de Vacinas").
 		"imunocare_ecommerce.catalogo.jinja_utils.imun_parents_corrigidos",
+		# vitrine-sem-marca 2.2: linhas "no Pix" / "em até N x" da página e relacionados.
+		"imunocare_ecommerce.catalogo.preco_jinja.preco_loja_exibicao",
+		# vitrine-sem-marca 4.1: seletor de apresentação (volume) da página única.
+		"imunocare_ecommerce.catalogo.apresentacoes.imun_apresentacoes",
 	]
 }
 
@@ -282,6 +287,8 @@ jinja = {
 # (roda depois de context.boot já populado por get_website_settings).
 update_website_context = [
 	"imunocare_ecommerce.catalogo.jinja_utils.injetar_mensagens_loja",
+	# vitrine-sem-marca 1.3: meta description estável (depois do MetaTags/Route Meta).
+	"imunocare_ecommerce.catalogo.jinja_utils.meta_description_vitrine",
 ]
 
 # Installation

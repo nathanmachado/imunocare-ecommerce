@@ -28,6 +28,17 @@
  * o `if` acima falhava silenciosamente e o patch nunca era aplicado.
  */
 
+// Pix em destaque + parcelado (vitrine-sem-marca 2.3); "" sem imun_preco.
+function imun_html_preco(p) {
+	if (!p || !p.texto_pix) return "";
+	const esc = (t) => (frappe.utils.escape_html ? frappe.utils.escape_html(t) : String(t));
+	let html = `<div class="product-price imun-preco"><div class="imun-preco-pix">${esc(p.texto_pix)}</div>`;
+	if (p.texto_parcelado) {
+		html += `<div class="imun-preco-parcelado">${esc(p.texto_parcelado)}</div>`;
+	}
+	return html + "</div>";
+}
+
 frappe.ready(function () {
 	if (typeof webshop === "undefined" || !webshop.ProductGrid) {
 		return;
@@ -86,7 +97,9 @@ frappe.ready(function () {
 			body_html += `<div class="imun-card-desc">${frappe.utils.escape_html(descricao)}</div>`;
 		}
 
-		if (item.formatted_price) {
+		if (item.imun_preco) {
+			body_html += imun_html_preco(item.imun_preco);
+		} else if (item.formatted_price) {
 			body_html += this.get_price_html(item);
 		}
 
@@ -96,4 +109,18 @@ frappe.ready(function () {
 
 		return body_html;
 	};
+
+	// Lista: o preço nativo é inline em get_item_details; troca o formatted_price sem duplicar o resto.
+	if (webshop.ProductList && !webshop.ProductList.prototype._imun_patched_preco) {
+		const original = webshop.ProductList.prototype.get_item_details;
+		webshop.ProductList.prototype.get_item_details = function (item, settings) {
+			if (!item.imun_preco) return original.call(this, item, settings);
+			const copia = Object.assign({}, item, {
+				formatted_price: imun_html_preco(item.imun_preco),
+				formatted_mrp: null,
+			});
+			return original.call(this, copia, settings);
+		};
+		webshop.ProductList.prototype._imun_patched_preco = true;
+	}
 });

@@ -231,3 +231,70 @@ class TestGetProductFilterDataLojaExigeReceita(FrappeTestCase):
 	def test_item_nao_marcado_devolve_exige_receita_0(self):
 		itens = self._por_item_code(self._grupo)
 		self.assertEqual(itens[self._item_livre], 0)
+
+
+class TestListagemSemNomeDoErp(FrappeTestCase):
+	"""Change ``vitrine-sem-marca``: a resposta da listagem não traz o
+	``item_name`` do ERP (com marca), só o ``web_item_name`` da vitrine."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		sufixo = frappe.generate_hash(length=6)
+		cls._sufixo = sufixo
+		cls._grupo = f"Teste Vitrine {sufixo}"
+		cls._termo = f"vitrinetst{sufixo}"
+		cls._nome_erp = f"Marcaxpto {cls._termo} ERP"
+		cls._nome_vitrine = f"Vitrine {cls._termo}"
+		cls._item_code = f"TESTE-VITRINE-{sufixo}"
+		frappe.get_doc(
+			{
+				"doctype": "Item Group",
+				"item_group_name": cls._grupo,
+				"is_group": 0,
+				"parent_item_group": "All Item Groups",
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": cls._item_code,
+				"item_name": cls._nome_erp,
+				"item_group": cls._grupo,
+				"stock_uom": "Nos",
+				"is_stock_item": 0,
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+		cls._wi = frappe.get_doc(
+			{
+				"doctype": "Website Item",
+				"item_code": cls._item_code,
+				"web_item_name": cls._nome_vitrine,
+				"item_group": cls._grupo,
+				"published": 1,
+			}
+		).insert(ignore_permissions=True, ignore_mandatory=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		_apagar_definitivamente("Website Item", cls._wi.name)
+		_apagar_definitivamente("Item", cls._item_code)
+		_apagar_definitivamente("Item Group", cls._grupo)
+		super().tearDownClass()
+
+	def _item(self, **query_args) -> dict:
+		query_args.update(field_filters={}, attribute_filters={}, start=0)
+		itens = get_product_filter_data_loja(query_args=query_args)["items"]
+		achados = [i for i in itens if i["item_code"] == self._item_code]
+		self.assertEqual(len(achados), 1)
+		return achados[0]
+
+	def _confere(self, item: dict):
+		self.assertNotIn("item_name", item)
+		self.assertEqual(item["web_item_name"], self._nome_vitrine)
+
+	def test_categoria_sem_nome_do_erp(self):
+		self._confere(self._item(item_group=self._grupo))
+
+	def test_busca_sem_nome_do_erp(self):
+		self._confere(self._item(search=self._termo))
