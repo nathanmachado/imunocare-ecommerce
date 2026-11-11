@@ -806,7 +806,7 @@ def secoes_para_home(limite_por_secao: int = 4) -> list[dict]:
 				"preco": precos.get(wi.item_code),
 				"imagem": wi.website_image or wi.thumbnail,
 				"descricao": wi.short_description,
-				# REDESIGN 2026-09-04 (cards "Opção A" — protótipo): selo "Mais
+				# REDESIGN 2026-09-04 (protótipo; cards com foto desde 2026-11-10): selo "Mais
 				# agendada" é uma curadoria MANUAL do dono (``destaque: true``
 				# em catalogo_loja.json, ver ``_mapa_destaque``) — nunca
 				# inferido/fabricado aqui (nenhum dado real de "mais agendado"
