@@ -1,0 +1,55 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-11-10 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["website_item", "item_code", "rotulo", "padrao"],
+ "fields": [
+  {
+   "description": "A página única da vitrine.",
+   "fieldname": "website_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Página (Website Item)",
+   "options": "Website Item",
+   "reqd": 1
+  },
+  {
+   "description": "Item que vai para o agendamento e o carrinho quando esta opção é escolhida.",
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Apresentação (Item)",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "rotulo",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Rótulo",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Marcada ao abrir a página; sem padrão, vale a primeira linha da página.",
+   "fieldname": "padrao",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Padrão"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-11-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Imunocare Ecommerce",
+ "name": "Imunocare Apresentacao Vitrine",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

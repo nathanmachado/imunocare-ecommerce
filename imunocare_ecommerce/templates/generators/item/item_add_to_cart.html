@@ -10,7 +10,28 @@
 			{% set price_info = product_info.price %}
 			{#- vitrine-sem-marca 2.2: Pix + parcelado; sem parâmetros cai no preço nativo. -#}
 			{% set imun_preco = preco_loja_exibicao(item_code, price_info.price_list_rate) %}
-			{% if imun_preco %}
+			{#- vitrine-sem-marca 4.1: página com apresentações; preço inicial é o da opção padrão. -#}
+			{% set imun_apr = imun_apresentacoes(doc) %}
+			{% if imun_apr %}
+			{% set imun_sel = (imun_apr | selectattr("selecionado") | list | first) %}
+			<fieldset class="imun-apresentacoes mb-3" role="radiogroup" aria-label="{{ _('Apresentação') }}">
+				<legend class="sr-only">{{ _("Apresentação") }}</legend>
+				{% for o in imun_apr %}
+				<label class="imun-apresentacao btn btn-light mr-2 mb-1">
+					<input type="radio" class="sr-only" name="imun-apresentacao" value="{{ o.item_code | e }}"
+						data-texto-pix="{{ o.texto_pix | e }}" data-texto-parcelado="{{ o.texto_parcelado | e }}"
+						data-pix="{{ o.pix }}" {% if o.selecionado %}checked{% endif %}>
+					<span>{{ o.rotulo | e }}</span>
+				</label>
+				{% endfor %}
+			</fieldset>
+			<div class="product-price imun-preco" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+				<meta itemprop="price" content="{{ imun_sel.pix }}">
+				<meta itemprop="priceCurrency" content="BRL">
+				<span class="imun-preco-pix">{{ imun_sel.texto_pix | e }}</span>
+				<small class="imun-preco-parcelado d-block"{% if not imun_sel.texto_parcelado %} hidden{% endif %}>{{ imun_sel.texto_parcelado | e }}</small>
+			</div>
+			{% elif imun_preco %}
 			<div class="product-price imun-preco" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
 				<meta itemprop="price" content="{{ imun_preco.pix }}">
 				<meta itemprop="priceCurrency" content="BRL">
@@ -140,7 +161,7 @@
 			// Bind action on add to cart button
 			const $btn = $(e.currentTarget);
 			$btn.prop('disabled', true);
-			const item_code = $btn.data('item-code');
+			const item_code = $btn.attr('data-item-code');
 			webshop.webshop.shopping_cart.update_cart({
 				item_code,
 				qty: 1,

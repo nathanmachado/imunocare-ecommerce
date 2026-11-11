@@ -151,8 +151,19 @@ def _boot_datas() -> dict:
 
 
 def _website_item(item_code: str) -> "frappe._dict | None":
-	"""Website Item pelo item_code ou pelo próprio nome do Website Item."""
+	"""Website Item pelo item_code ou pelo próprio nome do Website Item.
+
+	Item que é apresentação configurada de uma página única resolve pela página (que carrega
+	tipo de agendamento e profissional) e mantém o item escolhido, que decide a receita."""
+	from imunocare_ecommerce.catalogo.apresentacoes import pagina_da_apresentacao
+
 	fields = ["name", "item_code", "published", "web_item_name", "imun_appointment_type", "imun_practitioner"]
+	pagina = pagina_da_apresentacao(item_code)
+	if pagina:
+		wi = frappe.db.get_value("Website Item", pagina, fields, as_dict=True)
+		if wi:
+			wi.item_code = item_code
+			return wi
 	wi = frappe.db.get_value("Website Item", {"item_code": item_code}, fields, as_dict=True)
 	if not wi:
 		wi = frappe.db.get_value("Website Item", item_code, fields, as_dict=True)

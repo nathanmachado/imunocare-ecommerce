@@ -32,7 +32,9 @@
   "juros_vista",
   "juros_parcelado",
   "numero_parcelas",
-  "parcela_minima"
+  "parcela_minima",
+  "apresentacoes_section",
+  "apresentacoes_vitrine"
  ],
  "fields": [
   {
@@ -197,6 +199,18 @@
    "fieldtype": "Currency",
    "label": "Parcela mínima (R$)",
    "description": "Abaixo dela só o Pix é exibido."
+  },
+  {
+   "fieldname": "apresentacoes_section",
+   "fieldtype": "Section Break",
+   "label": "Apresentações da vitrine"
+  },
+  {
+   "description": "Páginas com 2 ou mais linhas ganham seletor de apresentação; a escolha troca o preço e o item enviado ao Agendar e ao carrinho. A ordem das linhas é a ordem do seletor.",
+   "fieldname": "apresentacoes_vitrine",
+   "fieldtype": "Table",
+   "label": "Apresentações da vitrine",
+   "options": "Imunocare Apresentacao Vitrine"
   }
  ],
  "links": [],

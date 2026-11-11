@@ -103,6 +103,7 @@ fixtures = [
 # antes de imunocare_ecommerce), não pela ordem dentro desta lista.
 web_include_js = [
 	"agendamento.bundle.js",
+	"apresentacoes.bundle.js",
 	"seo_jsonld.bundle.js",
 	"rastreio.bundle.js",
 	"domiciliar_cart.bundle.js",
@@ -272,6 +273,8 @@ jinja = {
 		"imunocare_ecommerce.catalogo.jinja_utils.imun_parents_corrigidos",
 		# vitrine-sem-marca 2.2: linhas "no Pix" / "em até N x" da página e relacionados.
 		"imunocare_ecommerce.catalogo.preco_jinja.preco_loja_exibicao",
+		# vitrine-sem-marca 4.1: seletor de apresentação (volume) da página única.
+		"imunocare_ecommerce.catalogo.apresentacoes.imun_apresentacoes",
 	]
 }
 

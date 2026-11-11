@@ -289,7 +289,9 @@ function imun_render_botao_agendar(item_code, info) {
 		// abre para qualquer um; quem não está logado é ramificado para a
 		// identificação/verificação dentro do próprio diálogo, no Confirmar
 		// (ver imun_montar_dialogo_agendamento/imun_passo_identificacao).
-		imun_abrir_dialogo_agendamento({ item_code: item_code }, info);
+		// Página com seletor de apresentação: vale o item escolhido, não o da carga.
+		var escolhido = $(".imun-product-page").first().attr("data-imun-item-code");
+		imun_abrir_dialogo_agendamento({ item_code: escolhido || item_code }, info);
 	});
 }
 
