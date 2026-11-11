@@ -47,11 +47,14 @@
 	de condições (cart_settings.enabled, product_info.price, in_stock/allow_items_not_in_stock)
 	que pode ficar falsa mesmo com a página funcionando normalmente — nesse
 	caso "Agendar" sumia silenciosamente (ver public/js/agendamento.js). -#}
+{#- 4.1: com seletor, o item inicial é o da opção padrão (mesmo que o da página ou não). -#}
+{% set imun_apr = imun_apresentacoes(doc) %}
+{% set imun_sel = (imun_apr | selectattr("selecionado") | list | first) if imun_apr else None %}
 <div class="imun-product-page"
 	data-imun-servico="{{ 1 if imun_sinal.servico else 0 }}"
 	data-imun-appointment-type="{{ imun_sinal.appointment_type or '' }}"
 	data-imun-exige-receita="{{ 1 if imun_receita else 0 }}"
-	data-imun-item-code="{{ doc.item_code }}">
+	data-imun-item-code="{{ imun_sel.item_code if imun_sel else doc.item_code }}">
 	<span class="imun-eyebrow">Produto</span>
 	{% if imun_receita %}
 	<span class="imun-badge-receita">Venda sob prescrição médica</span>

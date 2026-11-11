@@ -3,6 +3,8 @@
 {% set cart_settings = shopping_cart.cart_settings %}
 {% set product_info = shopping_cart.product_info %}
 
+{% set imun_apr = imun_apresentacoes(doc) %}
+{% set imun_sel = (imun_apr | selectattr("selecionado") | list | first) if imun_apr else None %}
 <div class="item-cart row mt-2" data-variant-item-code="{{ item_code }}">
 	<div class="col-md-12">
 		<!-- Price and Availability -->
@@ -11,9 +13,7 @@
 			{#- vitrine-sem-marca 2.2: Pix + parcelado; sem parâmetros cai no preço nativo. -#}
 			{% set imun_preco = preco_loja_exibicao(item_code, price_info.price_list_rate) %}
 			{#- vitrine-sem-marca 4.1: página com apresentações; preço inicial é o da opção padrão. -#}
-			{% set imun_apr = imun_apresentacoes(doc) %}
 			{% if imun_apr %}
-			{% set imun_sel = (imun_apr | selectattr("selecionado") | list | first) %}
 			<fieldset class="imun-apresentacoes mb-3" role="radiogroup" aria-label="{{ _('Apresentação') }}">
 				<legend class="sr-only">{{ _("Apresentação") }}</legend>
 				{% for o in imun_apr %}
@@ -134,7 +134,7 @@
 						{{  _("View in Cart") if cart_settings.enable_checkout else _("View in Quote") }}
 					</a>
 					<button
-						data-item-code="{{item_code}}"
+						data-item-code="{{ imun_sel.item_code if imun_sel else item_code }}"
 						class="btn btn-primary btn-add-to-cart mr-2 w-30-40"
 					>
 						<span class="mr-2">

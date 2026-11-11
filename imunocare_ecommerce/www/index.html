@@ -155,13 +155,13 @@
 					categoria/nome/descrição/preço/CTA "Agendar". "Mais agendada" é curadoria manual
 					do dono (item.destaque, catalogo.setup._mapa_destaque) —
 					nunca fabricada. -#}
-				<a href="/{{ item.route }}" class="imun-card{{ ' imun-card-feat' if item.destaque else '' }}">
+				<a href="/{{ item.route | e }}" class="imun-card{{ ' imun-card-feat' if item.destaque else '' }}">
 					{% if item.destaque %}
 					<span class="imun-card-tag">Mais agendada</span>
 					{% endif %}
-					<div class="imun-card-img">{% if item.imagem %}<img src="{{ item.imagem }}" alt="{{ item.nome }}" loading="lazy">{% endif %}</div>
+					<div class="imun-card-img">{% if item.imagem %}<img src="{{ item.imagem | e }}" alt="{{ item.nome | e }}" loading="lazy">{% endif %}</div>
 					<span class="imun-card-cat">{{ secao.nome }}</span>
-					<div class="imun-card-nm">{{ item.nome }}</div>
+					<div class="imun-card-nm">{{ item.nome | e }}</div>
 					{% if item.descricao %}
 					<div class="imun-card-ds">{{ item.descricao }}</div>
 					{% endif %}

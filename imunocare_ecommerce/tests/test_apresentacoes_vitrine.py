@@ -96,3 +96,9 @@ class TestApresentacoesVitrine(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			booking._resolver_agendavel(self._itens["OUTRO"].name, None)
 		self.assertFalse(booking.info_agendamento(self._itens["OUTRO"].name)["agendavel"])
+
+	def test_padrao_diferente_da_pagina_ja_sai_no_atributos(self):
+		html = self._html()  # padrão = GRANDE, a página é PADRAO
+		grande = self._itens["GRANDE"].name
+		self.assertIn(f'data-imun-item-code="{grande}"', html)
+		self.assertIn(f'data-item-code="{grande}"\n\t\t\t\t\t\tclass="btn btn-primary btn-add-to-cart', html)
