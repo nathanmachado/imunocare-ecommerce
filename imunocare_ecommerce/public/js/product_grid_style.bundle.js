@@ -114,13 +114,19 @@ frappe.ready(function () {
 	if (webshop.ProductList && !webshop.ProductList.prototype._imun_patched_preco) {
 		const original = webshop.ProductList.prototype.get_item_details;
 		webshop.ProductList.prototype.get_item_details = function (item, settings) {
-			if (!item.imun_preco) return original.call(this, item, settings);
-			const copia = Object.assign({}, item, {
-				formatted_price: imun_html_preco(item.imun_preco),
-				formatted_mrp: null,
-			});
-			return original.call(this, copia, settings);
+			const copia = item.imun_preco
+				? Object.assign({}, item, { formatted_price: imun_html_preco(item.imun_preco), formatted_mrp: null })
+				: item;
+			return imun_html_lista_sem_codigo(original.call(this, copia, settings), item);
 		};
 		webshop.ProductList.prototype._imun_patched_preco = true;
 	}
 });
+
+// Lista nativa imprime "grupo | Item Code : código"; código interno não é texto visível.
+function imun_html_lista_sem_codigo(html, item) {
+	return html.replace(
+		/<p class="product-code">[\s\S]*?<\/p>/,
+		'<p class="product-code">' + frappe.utils.escape_html(item.item_group || "") + "</p>"
+	);
+}

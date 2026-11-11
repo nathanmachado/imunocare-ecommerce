@@ -366,10 +366,21 @@ function imun_patch_card_receita() {
 		var original_list_row = webshop.ProductList.prototype.get_row_body_html;
 		webshop.ProductList.prototype.get_row_body_html = function (item, title, settings) {
 			var html = original_list_row.call(this, item, title, settings);
-			return item.imun_exige_receita ? imun_html_badge_receita() + html : html;
+			return item.imun_exige_receita ? imun_inserir_badge_receita(html) : html;
 		};
 		webshop.ProductList.prototype._imun_patched_receita = true;
 	}
+}
+
+// Badge dentro da coluna do corpo (topo); como filho direto do .row ele viraria coluna flex.
+function imun_inserir_badge_receita(html) {
+	var abertura = /^\s*<div class=['"]col-10 text-left['"]>/;
+	if (abertura.test(html)) {
+		return html.replace(abertura, function (m) {
+			return m + imun_html_badge_receita();
+		});
+	}
+	return "<div class='col-10 text-left'>" + imun_html_badge_receita() + "</div>" + html;
 }
 
 function imun_html_badge_receita() {
