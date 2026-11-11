@@ -109,36 +109,6 @@ _NOME_LOJA_OVERRIDE: dict[str, str] = {
 	"Aplicação Dose Tirzepatida": "Terapia Injetável para Controle de Peso",
 }
 
-# Item_codes que precisam ter a copy FORÇADAMENTE atualizada nesta rodada
-# (F2), mesmo já tendo short_description/web_long_description preenchidos
-# pela geração anterior (texto genérico de tema, não específico do produto —
-# ver BRIEF_LOJA.md / atividade F2). Fora desta lista, a regra de
-# idempotência normal vale (só preenche campo vazio, preserva edição
-# manual). Calculado a partir do slug ESTÁVEL (ver `_nome_loja_estavel`), não
-# muda entre execuções.
-_FORCAR_ATUALIZACAO_COPY: set[str] = {
-	"vit-coenzima-q10-5-100-mg",
-	"vit-colina-25-500-mg",
-	"vit-complexo-b-com-vitb1",
-	"vit-complexo-b-com-vitb12",
-	"vit-resveratrol-bioencapsulado-15",
-	"vit-vitamina-b1-tiamina-10",
-	"vit-vitamina-b12-metilcobalamina-025",
-	"vit-vitamina-c-acido-ascorbico-222",
-	"vit-vitamina-d3-colecalciferol-15-600000-uiml",
-	"vit-vitamina-dk2-d3-600000ui-k2mk7-13mg",
-	"bri-adulto",
-	"bri-infantil",
-	# item_code final APÓS o rename por compliance (ver
-	# `_item_code_sanitizado`/`_TERMOS_PROIBIDOS_PUBLICOS`) — o antigo
-	# "ter-tirzepatida" deixa de existir com esse nome.
-	"ter-terapia-injetavel-para-controle-de-peso",
-	# HPV — F2: cobertura de keyword "vacina hpv preço/idade" adicionada
-	# nesta atividade ao texto já existente (que era específico, só faltava
-	# a keyword) — força a atualização 1x.
-	"vac-vacina-hpv-nonavalente-9-valente",
-}
-
 # F9 (regra inegociável, ver relatório): termos que NUNCA podem aparecer em
 # NENHUM campo público do site (título, nome, descrição, e também o
 # "Item Code"/SKU exibido na página nativa do produto — webshop
@@ -155,43 +125,6 @@ _TERMOS_PROIBIDOS_PUBLICOS: tuple[str, ...] = (
 	"liraglutida",
 	"caneta emagrecedora",
 )
-
-# Imagens já staged em public/img/ — associação por palavra-chave do nome.
-# Só QDENGA tem foto específica (brief item 2). F6 (revisão de design,
-# inventário 2026-08-02) REVERTEU a ideia inicial de F2 de usar as fotos
-# genéricas (moco.jpg etc.) como fallback POR SEÇÃO no Website Item — a
-# crítica de design apontou "moco.jpg em 3 das 4 seções" como repetição
-# ruim. Produto sem foto própria fica com ``website_image`` vazio de
-# propósito: o fallback visual agora é o ÍCONE SVG de traço da seção
-# (templates/includes/imun_icons.html), não mais uma foto repetida.
-# Fotos de produto das vacinas (mão segurando o frasco + rótulo da marca),
-# fornecidas pelo dono 2026-08-09, otimizadas em public/img/vacinas/. Match por
-# substring no NOME DE LOJA do item; PRIMEIRA ocorrência vence (_imagem_para),
-# então a ORDEM importa — o mais específico vem antes do mais genérico:
-#   - "rotavirus" ANTES de "pentavalente" (senão "Rotavirus Pentavalente"
-#     casaria com a foto do Pentavalente puro).
-#   - "tetraxim" (DTPa+IPV) ANTES de "dtpa" (senão "DTPa + IPV - Tetraxim"
-#     casaria com a foto do DTPa puro).
-# Vacinas do catálogo sem foto no lote (HPV, Beyfortus, Febre Amarela, etc.)
-# ficam sem website_image de propósito → fallback é o ícone SVG da seção.
-# "pneumo-23.jpg" fica mapeado para uso futuro (não há item 23V hoje).
-_IMAGEM_POR_PALAVRA: list[tuple[str, str]] = [
-	("qdenga", "vacinas/qdenga.jpg"),
-	("rotavirus", "vacinas/rotavirus-pentavalente.jpg"),
-	("pentavalente", "vacinas/pentavalente.jpg"),
-	("influenza tetravalente", "vacinas/influenza-tetravalente.jpg"),
-	("acwy", "vacinas/meningo-acwy.jpg"),
-	("meningite b", "vacinas/meningo-b.jpg"),
-	("meningocócica b", "vacinas/meningo-b.jpg"),
-	("13v", "vacinas/pneumo-13.jpg"),
-	("15v", "vacinas/pneumo-15.jpg"),
-	("20v", "vacinas/pneumo-20.jpg"),
-	("23v", "vacinas/pneumo-23.jpg"),
-	("mmr", "vacinas/triplice-viral-mmr.jpg"),
-	("tetraxim", "vacinas/tetravalente.jpg"),
-	("dtpa", "vacinas/dtpa.jpg"),
-	("varicela", "vacinas/varivax.jpg"),
-]
 
 
 # ---------------------------------------------------------------------------
@@ -231,14 +164,14 @@ def _copy_vacina(nome: str) -> tuple[str, str]:
 			"de doses e intervalo do esquema vacinal — a vacina do HPV/vacina contra HPV "
 			"também está disponível para atendimento a domicílio.</p>",
 		)
-	if "influenza" in n or "efluelda" in n or "gripe" in n:
+	if "influenza" in n or "gripe" in n:
 		return (
 			f"Vacina da gripe / influenza ({nome}) — clínica de vacinas particulares. "
 			"Indicada anualmente conforme avaliação profissional.",
 			"<p>A vacina influenza (vacina da gripe) protege contra as cepas do vírus "
 			"influenza em circulação e é recomendada anualmente, especialmente para "
 			"grupos de maior risco. A Imunocare aplica a vacina tetravalente/quadrivalente "
-			"e a formulação para idosos (Efluelda), conforme indicação.</p>"
+			"e a formulação de alta dose para idosos, conforme indicação.</p>"
 			"<p>Fale com nossa equipe sobre a formulação mais indicada para sua idade e "
 			"histórico de saúde.</p>",
 		)
@@ -253,11 +186,11 @@ def _copy_vacina(nome: str) -> tuple[str, str]:
 			"<p>Consulte indicações, contraindicações e prazo de validade internacional "
 			"do certificado de vacinação.</p>",
 		)
-	if "qdenga" in n or "dengue" in n:
+	if "dengue" in n:
 		return (
-			"Vacina da dengue Qdenga (Takeda) — clínica de vacinas particulares na "
+			"Vacina da dengue — clínica de vacinas particulares na "
 			"Imunocare, com avaliação de profissional de saúde.",
-			"<p>A Qdenga (Takeda) é a vacina contra a dengue, indicada conforme avaliação "
+			"<p>A vacina da dengue é indicada conforme avaliação "
 			"médica e faixa etária recomendada pela bula. A Imunocare oferece a aplicação "
 			"em ambiente clínico particular, sem fila de espera.</p>"
 			"<p>Consulte nossa equipe sobre indicações, contraindicações e esquema de doses.</p>",
@@ -465,17 +398,6 @@ _COPY_POR_SECAO = {
 }
 
 
-def _imagem_para(nome: str, chave_secao: str) -> str | None:
-	"""Imagem específica por palavra-chave no nome, ou ``None`` (F6: sem
-	fallback de foto genérica por seção — o visual de fallback é o ícone SVG,
-	resolvido no template, não gravado no Website Item)."""
-	n = nome.lower()
-	for palavra, arquivo in _IMAGEM_POR_PALAVRA:
-		if palavra in n:
-			return f"/assets/imunocare_ecommerce/img/{arquivo}"
-	return None
-
-
 # ---------------------------------------------------------------------------
 # Import
 # ---------------------------------------------------------------------------
@@ -622,51 +544,19 @@ def _ensure_item_price(item_code: str, preco: float) -> None:
 
 
 def _preencher_copy_e_imagem(item_code: str, nome_loja: str, chave_secao: str) -> None:
-	"""Preenche web_item_name/short_description/web_long_description/imagem do
-	Website Item. Regra padrão: só quando ainda estão vazios (não sobrescreve
-	edição manual). Exceção (F2): ``item_code`` em ``_FORCAR_ATUALIZACAO_COPY``
-	tem a copy/nome SEMPRE ressincronizados com o gerador atual — são os
-	produtos que a atividade F2 identificou com texto genérico de tema (nunca
-	editados manualmente pelo Desk). Chamado ANTES de
-	catalogo.setup.setup_catalogo() publicar; se o Website Item ainda não
-	existir, cria o registro mínimo aqui mesmo (setup_catalogo depois só
-	ajusta published=1 e a seção)."""
-	forcar = item_code in _FORCAR_ATUALIZACAO_COPY
+	"""Cria o Website Item mínimo (nome + copy) só se ainda não existir.
+	Website Item existente é da vitrine do gestor (nome, descrições, foto,
+	published): nunca é tocado. Roda antes de setup_catalogo()."""
+	if frappe.db.exists("Website Item", {"item_code": item_code}):
+		return
 
-	existing_name = frappe.db.get_value("Website Item", {"item_code": item_code}, "name")
-	doc = frappe.get_doc("Website Item", existing_name) if existing_name else frappe.new_doc("Website Item")
-	if not existing_name:
-		doc.item_code = item_code
-
-	if not doc.web_item_name or forcar:
-		doc.web_item_name = nome_loja
-
-	gerador_copy = _COPY_POR_SECAO[chave_secao]
-	short_desc, long_desc = gerador_copy(nome_loja)
-	if not doc.short_description or forcar:
-		doc.short_description = short_desc[:140]
-	if not doc.web_long_description or forcar:
-		doc.web_long_description = long_desc
-
-	imagem = _imagem_para(nome_loja, chave_secao)
-	if imagem and not doc.website_image:
-		doc.website_image = imagem
-
-	# F2/F9: quando forçamos a atualização (nome/copy mudaram de verdade), a
-	# ROTA (URL pública) precisa acompanhar — "set_route()" nativo (Frappe
-	# WebsiteGenerator) só gera rota nova se ``route`` estiver vazio. Sem
-	# isso, o "ter-tirzepatida" continuaria publicado em uma URL contendo o
-	# nome do medicamento mesmo com o resto da página já sanitizado — o
-	# ambiente ainda é local/dev (sem link externo apontando pra essas
-	# rotas), então regenerar é seguro.
-	if forcar:
-		doc.route = None
-
-	doc.flags.ignore_permissions = True
-	if doc.is_new():
-		doc.insert(ignore_permissions=True)
-	else:
-		doc.save(ignore_permissions=True)
+	doc = frappe.new_doc("Website Item")
+	doc.item_code = item_code
+	doc.web_item_name = nome_loja
+	short_desc, long_desc = _COPY_POR_SECAO[chave_secao](nome_loja)
+	doc.short_description = short_desc[:140]
+	doc.web_long_description = long_desc
+	doc.insert(ignore_permissions=True)
 
 
 def importar_catalogo_prod() -> None:
@@ -730,7 +620,9 @@ def _processar_entrada(chave_secao: str, item_group: str, prefixo: str, entrada:
 	# o produto "renomeia" o item_code e vira um registro duplicado em vez
 	# de atualizar o existente).
 	nome_loja_original = entrada.get("nome_loja") or entrada["item_name"]
-	item_code_estavel = f"{prefixo}-{_slug(nome_loja_original)}"
+	# item_code explícito no JSON quando o nome de loja perdeu o nome comercial
+	# (o SKU não pode mudar, senão duplica o Item).
+	item_code_estavel = entrada.get("item_code") or f"{prefixo}-{_slug(nome_loja_original)}"
 
 	# nome_loja: o rótulo REALMENTE exibido na loja (título, H1, SKU
 	# visível, copy) — aplica o override amigável/compliance (F2/F9) sem

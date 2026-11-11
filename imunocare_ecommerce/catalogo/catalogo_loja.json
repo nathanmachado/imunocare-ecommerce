@@ -1,12 +1,11 @@
 [
  {
   "item_names": [
-   "Aplicação Vacina Qdenga – Takeda (Dengue)",
-   "Qdenga – Takeda (Dengue)"
+   "Aplicação Vacina Dengue",
+   "Vacina Dengue"
   ],
-  "web_name": "Qdenga – Takeda (Dengue)",
+  "web_name": "Vacina Dengue",
   "secao": "Vacinas",
-  "foto": "qdenga",
   "destaque": true
  },
  {
@@ -16,17 +15,15 @@
   ],
   "web_name": "Influenza Tetravalente",
   "secao": "Vacinas",
-  "foto": "influenza-tetravalente",
   "destaque": true
  },
  {
   "item_names": [
-   "Aplicação Vacina Efluelda (Influenza – Idosos)",
-   "Efluelda (Influenza – Idosos)"
+   "Aplicação Vacina Influenza Alta Dose (Idosos)",
+   "Vacina Influenza Alta Dose (Idosos)"
   ],
-  "web_name": "Efluelda (Influenza – Idosos)",
-  "secao": "Vacinas",
-  "foto": "efluelda"
+  "web_name": "Vacina Influenza Alta Dose (Idosos)",
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -34,8 +31,7 @@
    "Febre Amarela"
   ],
   "web_name": "Febre Amarela",
-  "secao": "Vacinas",
-  "foto": "febre-amarela"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -43,8 +39,7 @@
    "Hepatite A – Adulto"
   ],
   "web_name": "Hepatite A – Adulto",
-  "secao": "Vacinas",
-  "foto": "hepatite-a-adulto"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -52,17 +47,15 @@
    "Hepatite A – Infantil"
   ],
   "web_name": "Hepatite A – Infantil",
-  "secao": "Vacinas",
-  "foto": "hepatite-a-infantil"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
-   "Aplicação Vacina Shingrix – Herpes Zoster",
-   "Shingrix – Herpes Zoster"
+   "Aplicação Vacina Herpes-Zóster Recombinante",
+   "Vacina Herpes-Zóster Recombinante"
   ],
-  "web_name": "Shingrix – Herpes Zoster",
+  "web_name": "Vacina Herpes-Zóster Recombinante",
   "secao": "Vacinas",
-  "foto": "shingrix",
   "destaque": true
  },
  {
@@ -72,7 +65,6 @@
   ],
   "web_name": "Hexavalente",
   "secao": "Vacinas",
-  "foto": "hexavalente",
   "destaque": true
  },
  {
@@ -83,7 +75,6 @@
   ],
   "web_name": "Vacina HPV9 (Nonavalente)",
   "secao": "Vacinas",
-  "foto": "hpv9",
   "destaque": true
  },
  {
@@ -92,8 +83,7 @@
    "Meningite ACWY"
   ],
   "web_name": "Meningite ACWY",
-  "secao": "Vacinas",
-  "foto": "meningo-acwy"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -101,8 +91,7 @@
    "Meningite B"
   ],
   "web_name": "Meningite B",
-  "secao": "Vacinas",
-  "foto": "meningo-b"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -110,8 +99,7 @@
    "Pentavalente"
   ],
   "web_name": "Pentavalente",
-  "secao": "Vacinas",
-  "foto": "pentavalente"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -119,8 +107,7 @@
    "Pneumocócica 13V"
   ],
   "web_name": "Pneumocócica 13V",
-  "secao": "Vacinas",
-  "foto": "pneumo-13"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -128,8 +115,7 @@
    "Pneumocócica 15V"
   ],
   "web_name": "Pneumocócica 15V",
-  "secao": "Vacinas",
-  "foto": "pneumo-15"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -137,8 +123,7 @@
    "Pneumocócica 20V"
   ],
   "web_name": "Pneumocócica 20V",
-  "secao": "Vacinas",
-  "foto": "pneumo-20"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -146,8 +131,7 @@
    "Rotavirus Pentavalente"
   ],
   "web_name": "Rotavirus Pentavalente",
-  "secao": "Vacinas",
-  "foto": "rotavirus"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -155,8 +139,7 @@
    "Tríplice Viral (MMR)"
   ],
   "web_name": "Tríplice Viral (MMR)",
-  "secao": "Vacinas",
-  "foto": "triplice-viral"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -164,18 +147,15 @@
    "DTPa"
   ],
   "web_name": "DTPa",
-  "secao": "Vacinas",
-  "foto": "dtpa"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
-   "Aplicação Vacina DTPa + IPV - Tetraxim",
-   "DTPa + IPV - Tetraxim",
-   "DTPa + IPV (Tetraxim)"
+   "Aplicação Vacina DTPa + IPV",
+   "DTPa + IPV"
   ],
-  "web_name": "DTPa + IPV (Tetraxim)",
-  "secao": "Vacinas",
-  "foto": "tetravalente-dtpa-ipv"
+  "web_name": "DTPa + IPV",
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -183,8 +163,7 @@
    "Varicela"
   ],
   "web_name": "Varicela",
-  "secao": "Vacinas",
-  "foto": "varicela"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -192,44 +171,39 @@
    "Tetra Viral"
   ],
   "web_name": "Tetra Viral",
-  "secao": "Vacinas",
-  "foto": "tetra-viral"
+  "secao": "Vacinas"
  },
  {
   "item_names": [
-   "Aplicação Vacina Abrysvo (VSR)",
-   "Abrysvo (VSR)"
+   "Aplicação Vacina VSR (Vírus Sincicial Respiratório)",
+   "Vacina VSR (Vírus Sincicial Respiratório)"
   ],
-  "web_name": "Abrysvo (VSR)",
-  "secao": "Vacinas",
-  "foto": "abrysvo"
+  "web_name": "Vacina VSR (Vírus Sincicial Respiratório)",
+  "secao": "Vacinas"
  },
  {
   "item_names": [
-   "Aplicação Vacina Beyfortus (1 ML)",
-   "Beyfortus (1 ML)"
+   "Aplicação Vacina Anticorpo Monoclonal VSR (1 ML)",
+   "Anticorpo Monoclonal VSR (1 ML)"
   ],
-  "web_name": "Beyfortus (1 ML)",
-  "secao": "Vacinas",
-  "foto": "beyfortus-1ml"
+  "web_name": "Anticorpo Monoclonal VSR (1 ML)",
+  "secao": "Vacinas"
  },
  {
   "item_names": [
-   "Aplicação Vacina Beyfortus (0.5 ML)",
-   "Beyfortus (0.5 ML)"
+   "Aplicação Vacina Anticorpo Monoclonal VSR (0.5 ML)",
+   "Anticorpo Monoclonal VSR (0.5 ML)"
   ],
-  "web_name": "Beyfortus (0.5 ML)",
-  "secao": "Vacinas",
-  "foto": "beyfortus-05ml"
+  "web_name": "Anticorpo Monoclonal VSR (0.5 ML)",
+  "secao": "Vacinas"
  },
  {
   "item_names": [
-   "Aplicação Vacina Rhoplylac",
-   "Rhoplylac"
+   "Aplicação Vacina Imunoglobulina Anti-Rh (D)",
+   "Imunoglobulina Anti-Rh (D)"
   ],
-  "web_name": "Rhoplylac",
-  "secao": "Vacinas",
-  "foto": "rhoplylac"
+  "web_name": "Imunoglobulina Anti-Rh (D)",
+  "secao": "Vacinas"
  },
  {
   "item_names": [
@@ -239,8 +213,7 @@
    "Coenzima Q10 Injetável"
   ],
   "web_name": "Coenzima Q10 (100 mg)",
-  "secao": "Vitaminas",
-  "foto": "coenzima-q10"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -250,8 +223,7 @@
    "Colina Injetável"
   ],
   "web_name": "Colina (500 mg)",
-  "secao": "Vitaminas",
-  "foto": "colina"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -261,8 +233,7 @@
    "Complexo B Injetável (com B1)"
   ],
   "web_name": "Complexo B (com B1)",
-  "secao": "Vitaminas",
-  "foto": "complexo-b-b1"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -272,8 +243,7 @@
    "Complexo B Injetável (com B12)"
   ],
   "web_name": "Complexo B (com B12)",
-  "secao": "Vitaminas",
-  "foto": "complexo-b-b12"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -283,8 +253,7 @@
    "Resveratrol Injetável"
   ],
   "web_name": "Resveratrol Bioencapsulado",
-  "secao": "Vitaminas",
-  "foto": "resveratrol"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -294,8 +263,7 @@
    "Vitamina B1 Injetável (Tiamina)"
   ],
   "web_name": "Vitamina B1 (Tiamina)",
-  "secao": "Vitaminas",
-  "foto": "vitamina-b1"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -305,8 +273,7 @@
    "Vitamina B12 Injetável (Metilcobalamina)"
   ],
   "web_name": "Vitamina B12 (Metilcobalamina)",
-  "secao": "Vitaminas",
-  "foto": "vitamina-b12"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -316,8 +283,7 @@
    "Vitamina C Injetável (Ácido Ascórbico)"
   ],
   "web_name": "Vitamina C (Ácido Ascórbico)",
-  "secao": "Vitaminas",
-  "foto": "vitamina-c"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -327,8 +293,7 @@
    "Vitamina D3 Injetável (Colecalciferol)"
   ],
   "web_name": "Vitamina D3 (Colecalciferol)",
-  "secao": "Vitaminas",
-  "foto": "vitamina-d3"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -338,8 +303,7 @@
    "Vitamina D3 + K2 Injetável"
   ],
   "web_name": "Vitamina DK2 (D3 + K2)",
-  "secao": "Vitaminas",
-  "foto": "vitamina-dk2"
+  "secao": "Vitaminas"
  },
  {
   "item_names": [
@@ -349,8 +313,7 @@
    "Aplicação de Brinco Adulto"
   ],
   "web_name": "Brinco Adulto",
-  "secao": "Brincos",
-  "foto": "brinco-adulto"
+  "secao": "Brincos"
  },
  {
   "item_names": [
@@ -360,8 +323,7 @@
    "Aplicação de Brinco Infantil"
   ],
   "web_name": "Brinco Infantil",
-  "secao": "Brincos",
-  "foto": "brinco-infantil"
+  "secao": "Brincos"
  },
  {
   "item_names": [
@@ -369,7 +331,6 @@
    "Pacote HPV Nonavalente (3 doses)"
   ],
   "web_name": "Pacote HPV Nonavalente (3 doses)",
-  "secao": "Planos",
-  "foto": "pacote-hpv9"
+  "secao": "Planos"
  }
 ]

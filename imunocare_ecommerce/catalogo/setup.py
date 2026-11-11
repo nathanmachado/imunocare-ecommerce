@@ -43,7 +43,6 @@ Mapeamento Item → seção:
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 
@@ -138,7 +137,7 @@ _GROUP_COPY: dict[str, str] = {
 	"Vacinas": (
 		"Clínica de vacinas particulares e clínica de imunização em Uberlândia. Vacinação "
 		"para bebês, crianças, adolescentes, adultos e idosos — vacina da gripe, vacina do "
-		"HPV (preço e idade sob consulta), febre amarela, dengue (Qdenga) e mais, com "
+		"HPV (preço e idade sob consulta), febre amarela, dengue e mais, com "
 		"aplicação por profissional de saúde habilitado. Consulte preços de vacinas "
 		"particulares e disponibilidade de vacina a domicílio."
 	),
@@ -546,14 +545,13 @@ def _carregar_mapa_loja() -> dict:
 
 	CATÁLOGO CURADO da loja (2026-08-11), SEM preços (seguro versionar). Cada
 	entrada tem ``item_names`` (1+ variações do nome que identificam o MESMO
-	produto), ``web_name`` (nome de vitrine), ``secao`` (categoria da loja) e
-	``foto`` (slug do arquivo em ``public/img/produtos/<slug>.jpg``).
+	produto), ``web_name`` (nome de vitrine), ``secao`` (categoria da loja).
 
 	Por que múltiplos nomes por produto: dev e PROD divergem no ``item_code``
     E no ``item_name`` do mesmo produto (dev usa o nome de loja como
 	``item_name``; prod usa o nome clínico "Aplicação Vacina X"). Casar por
 	``item_name`` cobrindo AMBAS as grafias liga o produto certo à sua seção/
-	nome/foto nos dois ambientes, sem depender do ``item_code``."""
+	nome nos dois ambientes, sem depender do ``item_code``."""
 	try:
 		with open(_ARQUIVO_LOJA, encoding="utf-8") as f:
 			dados = json.load(f)
@@ -640,41 +638,11 @@ def _resolve_section(item_group: str) -> str | None:
 	return None
 
 
-_IMG_PRODUTOS_URL = "/assets/imunocare_ecommerce/img/produtos"
-_IMG_PRODUTOS_PREFIXO_GERIDO = "/assets/imunocare_ecommerce/img/"
-_IMG_PRODUTOS_EXTS = (".png", ".jpg", ".jpeg", ".webp")
-
-
-def _imagem_produto(slug: str | None) -> str | None:
-	"""Imagem do produto pelo SLUG do catálogo curado: se existir
-	``public/img/produtos/<slug>.<ext>`` (jpg/png/jpeg/webp), retorna a URL
-	``/assets`` correspondente; senão ``None``.
-
-	O slug (campo ``foto`` de ``catalogo_loja.json``) é estável e independente
-	do ``item_code`` — por isso a MESMA foto liga o produto em dev e em prod,
-	que têm ``item_code`` diferentes. Trocar a foto = substituir o arquivo do
-	slug; adicionar produto = novo slug no JSON + arquivo."""
-	if not slug:
-		return None
-	try:
-		base = frappe.get_app_path("imunocare_ecommerce", "public", "img", "produtos")
-	except Exception:
-		return None
-	for ext in _IMG_PRODUTOS_EXTS:
-		if os.path.exists(os.path.join(base, f"{slug}{ext}")):
-			return f"{_IMG_PRODUTOS_URL}/{slug}{ext}"
-	return None
-
-
 def _upsert_website_item(item: "frappe._dict", entrada: dict) -> None:
-	"""Cria ou atualiza o Website Item de um produto do catálogo curado.
-
-	``entrada`` vem de ``catalogo_loja.json`` (web_name/secao/foto). O nome de
-	vitrine e a seção são AUTORITATIVOS (curados) — a seção é gravada como a
-	ÚNICA de ``website_item_groups`` (corrige a classificação errada quando o
-	``item_group`` nativo do Item é genérico, ex.: "Aplicação de Vacinas" em
-	prod). A ``short_description`` só é preenchida se vazia."""
-	web_name = entrada.get("web_name") or item.item_name
+	"""Cria o Website Item do produto curado (``catalogo_loja.json``) só se
+	ainda não existir. Website Item existente é da vitrine do gestor (nome,
+	descrições, foto, published): nunca é sobrescrito — só ganha a seção
+	curada quando ainda não tem nenhuma."""
 	secao = entrada.get("secao")
 
 	existing_name: str | None = frappe.db.get_value(
@@ -682,43 +650,34 @@ def _upsert_website_item(item: "frappe._dict", entrada: dict) -> None:
 	)
 
 	if existing_name:
-		doc = frappe.get_doc("Website Item", existing_name)
-	else:
-		doc = frappe.new_doc("Website Item")
-		doc.item_code = item.item_code
+		# Insere a linha filha direto: doc.save() do Website Item zera a foto
+		# (validate_website_image só aceita File público).
+		if secao and not frappe.db.exists("Website Item Group", {"parent": existing_name}):
+			frappe.get_doc(
+				{
+					"doctype": "Website Item Group",
+					"parent": existing_name,
+					"parenttype": "Website Item",
+					"parentfield": "website_item_groups",
+					"item_group": secao,
+				}
+			).insert(ignore_permissions=True)
+		return
 
+	doc = frappe.new_doc("Website Item")
+	doc.item_code = item.item_code
 	doc.published = 1
-	doc.web_item_name = web_name  # nome de vitrine curado (autoritativo)
+	doc.web_item_name = entrada.get("web_name") or item.item_name
 
-	# short_description: texto plano (sem HTML), máx 140 chars — só se vazia
-	if not doc.short_description and item.description:
+	# short_description: texto plano (sem HTML), máx 140 chars
+	if item.description:
 		plain = re.sub(r"<[^>]+>", "", item.description or "").strip()
 		doc.short_description = plain[:140] if plain else ""
 
-	# Seção curada = única categoria de navegação (substitui as anteriores que
-	# este módulo gerencia; evita item aparecer na seção errada).
 	if secao:
 		doc.set("website_item_groups", [{"item_group": secao}])
 
 	doc.save(ignore_permissions=True)
-
-	# Foto do produto (slug curado). Gravada DIRETO no banco DEPOIS do save: o
-	# webshop (``WebsiteItem.validate_website_image``, upstream, não tocado)
-	# ZERA qualquer ``website_image`` que não seja um doc File público — e um
-	# asset estático ``/assets/.../img/`` não tem File associado.
-	# ``frappe.db.set_value`` contorna essa validação sem tocar upstream.
-	# Respeita upload manual do operador (``/files/...``); sobrescreve só quando
-	# vazio ou quando é uma imagem NOSSA (``/assets/``).
-	img = _imagem_produto(entrada.get("foto"))
-	if img:
-		atual = frappe.db.get_value("Website Item", doc.name, "website_image")
-		if not atual or str(atual).startswith(_IMG_PRODUTOS_PREFIXO_GERIDO):
-			frappe.db.set_value(
-				"Website Item",
-				doc.name,
-				{"website_image": img, "thumbnail": img},
-				update_modified=False,
-			)
 
 
 def _ensure_website_item_section(doc: "frappe.Document", section: str) -> None:
@@ -941,9 +900,9 @@ def _setup_custom_fields_catalogo() -> None:
 # ``set_default``): depois disso o gestor manda, marca/desmarca o que
 # quiser pelo Desk sem que um migrate futuro desfaça a escolha dele.
 _SEED_PRODUTOS_DESTAQUE: tuple[str, ...] = (
-	"Qdenga – Takeda (Dengue)",
+	"Vacina Dengue",
 	"Influenza Tetravalente",
-	"Shingrix – Herpes Zoster",
+	"Vacina Herpes-Zóster Recombinante",
 	"Hexavalente",
 	"Vacina HPV9 (Nonavalente)",
 )

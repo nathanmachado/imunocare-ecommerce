@@ -141,7 +141,7 @@ class TestAreaDoMedicoGetContext(FrappeTestCase):
 		practitioner, email = self._novo_medico_com_acesso("comacesso")
 		frappe.set_user(email)
 
-		linhas = [{"paciente": "Maria", "produto": "Shingrix", "dose": "1ª dose", "data": getdate(nowdate())}]
+		linhas = [{"paciente": "Maria", "produto": "Vacina Teste", "dose": "1ª dose", "data": getdate(nowdate())}]
 		frappe.local.form_dict = frappe._dict({"practitioner": "Outro Doutor Qualquer"})
 
 		with patch("imunocare_clinic_ext.area_medico.aplicacoes_do_medico") as mock_aplicacoes:
@@ -233,8 +233,8 @@ class TestTemplateAreaDoMedicoEscapaEFormata(FrappeTestCase):
 		html = _render_page_content(
 			self._contexto_base(
 				aplicacoes=[
-					{"paciente": "Maria", "produto": "Shingrix", "dose": 2, "data": getdate("2026-05-01")},
-					{"paciente": "João", "produto": "Shingrix", "dose": None, "data": getdate("2026-05-02")},
+					{"paciente": "Maria", "produto": "Vacina Teste", "dose": 2, "data": getdate("2026-05-01")},
+					{"paciente": "João", "produto": "Vacina Teste", "dose": None, "data": getdate("2026-05-02")},
 				]
 			)
 		)
@@ -246,7 +246,7 @@ class TestTemplateAreaDoMedicoEscapaEFormata(FrappeTestCase):
 		html = _render_page_content(
 			self._contexto_base(
 				aplicacoes=[
-					{"paciente": "Maria", "produto": "Shingrix", "dose": 1, "data": getdate("2026-05-01")}
+					{"paciente": "Maria", "produto": "Vacina Teste", "dose": 1, "data": getdate("2026-05-01")}
 				]
 			)
 		)
