@@ -1013,9 +1013,8 @@ def hero_carrossel(limite: int = 12) -> list[dict]:
 
 def nav_categorias(grupo_pai: str) -> list[dict]:
 	"""Categorias de navegação da loja (taxonomia 2026-09-04: lista flat
-	única, ``_NAV_ORDEM_IMUNO``) — TODAS, mesmo as sem produto publicado
-	ainda (essas caem na página de categoria informativa, ver
-	templates/generators/item_group.html). Cada item: {"nome", "route"}.
+	única, ``_NAV_ORDEM_IMUNO``) — só as com produto publicado (a página
+	da categoria vazia continua existindo, mas sem link). Cada item: {"nome", "route"}.
 
 	``grupo_pai="Cuidado Pessoal"`` (linha Care, F7) sempre devolve ``[]`` —
 	descontinuada, consolidada em "Cuidado diário" na lista flat (ver
@@ -1041,10 +1040,13 @@ def nav_categorias(grupo_pai: str) -> list[dict]:
 	)
 	por_nome = {g.item_group_name: g.route for g in grupos}
 
+	# Categoria sem Website Item publicado não vira link (beco); a página dela segue existindo.
+	from imunocare_ecommerce.catalogo.jinja_utils import contagem_produtos_publicados
+
 	return [
 		{"nome": nome, "route": por_nome[nome]}
 		for nome in ordem
-		if por_nome.get(nome)
+		if por_nome.get(nome) and contagem_produtos_publicados(nome) > 0
 	]
 
 

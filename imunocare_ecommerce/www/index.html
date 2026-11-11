@@ -307,9 +307,9 @@
 	</section>
 
 	<!-- Categorias (REDESIGN 2026-09-04, protótipo #cats/.cats) — grade quieta
-	     com TODAS as categorias de topo, mesmo as sem produto ainda
-	     (Nutracêuticos/Cuidado diário caem na página informativa "em breve",
-	     ver templates/generators/item_group.html + catalogo.jinja_utils). -->
+	     só com as categorias de topo que têm produto publicado
+	     (a vazia não ganha link; a página dela segue existindo, ver
+	     templates/generators/item_group.html). -->
 	{% if nav_categorias %}
 	<section class="imun-section" id="categorias">
 		<span class="imun-eyebrow">Explore</span>
