@@ -26,7 +26,13 @@
   "landing_pages_section",
   "protocolo_emagrecimento_appointment_type",
   "verificacao_section",
-  "whatsapp_otp_ativo"
+  "whatsapp_otp_ativo",
+  "preco_loja_section",
+  "desconto_pix",
+  "juros_vista",
+  "juros_parcelado",
+  "numero_parcelas",
+  "parcela_minima"
  ],
  "fields": [
   {
@@ -158,6 +164,39 @@
    "fieldname": "whatsapp_otp_ativo",
    "fieldtype": "Check",
    "label": "Oferecer verificação por WhatsApp"
+  },
+  {
+   "fieldname": "preco_loja_section",
+   "fieldtype": "Section Break",
+   "label": "Preço na loja"
+  },
+  {
+   "fieldname": "desconto_pix",
+   "fieldtype": "Percent",
+   "label": "Desconto Pix (%)",
+   "description": "Aplicado sobre o preço do ERP. Vazio em qualquer campo desta seção: a loja mostra só o preço do ERP."
+  },
+  {
+   "fieldname": "juros_vista",
+   "fieldtype": "Percent",
+   "label": "Juros à vista (%)",
+   "description": "Embutido no preço do ERP; é descontado antes de aplicar os juros do parcelado."
+  },
+  {
+   "fieldname": "juros_parcelado",
+   "fieldtype": "Percent",
+   "label": "Juros do parcelado (%)"
+  },
+  {
+   "fieldname": "numero_parcelas",
+   "fieldtype": "Int",
+   "label": "Número de parcelas"
+  },
+  {
+   "fieldname": "parcela_minima",
+   "fieldtype": "Currency",
+   "label": "Parcela mínima (R$)",
+   "description": "Abaixo dela só o Pix é exibido."
   }
  ],
  "links": [],
