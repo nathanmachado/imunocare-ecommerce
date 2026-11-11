@@ -58,6 +58,7 @@ def get_product_filter_data_loja(query_args=None) -> dict:
 	itens = resultado.get("items") or []
 	_enriquecer_com_sinal_servico(itens)
 	_enriquecer_com_exige_receita(itens)
+	_ocultar_nome_do_erp(itens)
 	return resultado
 
 
@@ -193,3 +194,13 @@ def _enriquecer_com_exige_receita(items: list) -> None:
 			frappe.log_error(frappe.get_traceback(), "imunocare_ecommerce.catalogo.api")
 			exige = False
 		item["imun_exige_receita"] = 1 if exige else 0
+
+
+def _ocultar_nome_do_erp(items: list) -> None:
+	"""O nome do ERP (com marca) não sai na listagem: o JS nativo do webshop usa
+	``web_item_name || item_name || item_code``, então sem ``item_name`` o card
+	mostra o nome da vitrine; se faltar, cai no código, nunca no nome do ERP."""
+	for item in items:
+		item.pop("item_name", None)
+		if not item.get("web_item_name"):
+			item["web_item_name"] = item.get("item_code")
