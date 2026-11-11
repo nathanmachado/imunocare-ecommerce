@@ -270,6 +270,8 @@ jinja = {
 		# corrige o breadcrumb do produto para a categoria CURADA em vez do
 		# Item.item_group bruto ("Aplicação de Vacinas").
 		"imunocare_ecommerce.catalogo.jinja_utils.imun_parents_corrigidos",
+		# vitrine-sem-marca 2.2: linhas "no Pix" / "em até N x" da página e relacionados.
+		"imunocare_ecommerce.catalogo.preco_jinja.preco_loja_exibicao",
 	]
 }
 
