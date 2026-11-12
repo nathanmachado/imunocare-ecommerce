@@ -199,14 +199,14 @@ def _enriquecer_com_exige_receita(items: list) -> None:
 
 def _enriquecer_com_preco_loja(items: list) -> None:
 	"""`imun_preco` (Pix + parcelado) a partir do preço que o card já traz; None sem parâmetros/preço."""
-	from imunocare_ecommerce.catalogo.preco import _params_do_settings
+	from imunocare_ecommerce.catalogo.preco import parametros_do_fiscal
 	from imunocare_ecommerce.catalogo.preco_jinja import preco_loja_exibicao
 
-	params = _params_do_settings()  # uma leitura por requisição
+	params = parametros_do_fiscal()  # uma leitura por requisição
 	for item in items:
 		rate = item.get("price_list_rate")
 		item["imun_preco"] = (
-			preco_loja_exibicao(item.get("item_code"), preco=rate, params=params) if rate else None
+			preco_loja_exibicao(item.get("item_code"), preco=rate, params=params) if rate and params else None
 		)
 
 

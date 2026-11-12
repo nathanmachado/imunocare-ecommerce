@@ -1,41 +1,35 @@
-"""Preço exibido na loja: Pix e parcelado derivados do preço do ERP (vitrine-sem-marca)."""
+"""Preço exibido na loja: Pix e parcelado vêm das condições de pagamento do fiscal."""
 
 import frappe
 from frappe.utils import flt
 
-_CAMPOS = {
-	"desconto_pix": "desconto_pix",
-	"juros_vista": "juros_vista",
-	"juros_parcelado": "juros_parcelado",
-	"parcelas": "numero_parcelas",
-	"parcela_minima": "parcela_minima",
-}
+_PARAMETROS = "imunocare_fiscal.condicoes_pagamento.parametros"
+_CONDICOES = "imunocare_fiscal.condicoes_pagamento.condicoes"
 
 
-def _params_do_settings() -> dict:
-	# get_singles_dict lê tabSingles cru: campo novo sem valor vem ausente, não 0.
-	d = frappe.db.get_singles_dict("Imunocare Ecommerce Settings")
-	return {k: d.get(f) for k, f in _CAMPOS.items()}
-
-
-def _vazio(v) -> bool:
-	return v is None or v == ""
+def parametros_do_fiscal() -> dict | None:
+	# App fiscal ausente ou com erro = não configurado; a loja nunca cai por isso.
+	try:
+		return frappe.get_attr(_PARAMETROS)()
+	except Exception:
+		return None
 
 
 def preco_loja(preco, params=None) -> dict | None:
-	"""{"pix", "parcelas", "parcela"} | {"pix"} se parcela < mínima | None sem parâmetros/preço."""
-	p = params if params is not None else _params_do_settings()
-	if _vazio(preco) or flt(preco) <= 0 or any(_vazio(p.get(k)) for k in _CAMPOS):
+	"""{"pix", "parcelas", "parcela"} | {"pix"} sem 2x oferecido | None sem parâmetros/preço."""
+	if preco is None or preco == "" or flt(preco) <= 0:
 		return None
-	preco = flt(preco)
-	n = int(flt(p["parcelas"]))
-	minima = flt(p["parcela_minima"])
-	if n <= 0 or minima <= 0:
+	params = params or parametros_do_fiscal()
+	if not params:
 		return None
-
-	pix = flt(preco * (1 - flt(p["desconto_pix"]) / 100), 2)
-	total = preco / (1 + flt(p["juros_vista"]) / 100) * (1 + flt(p["juros_parcelado"]) / 100)
-	parcela = flt(total / n, 2)
-	if parcela < minima:
-		return {"pix": pix}
-	return {"pix": pix, "parcelas": n, "parcela": parcela}
+	try:
+		cond = frappe.get_attr(_CONDICOES)(flt(preco), params)
+	except Exception:
+		return None
+	if not cond.get("configurado"):
+		return None
+	r = {"pix": cond["avista"]}
+	ultima = cond["parcelas"][-1] if cond["parcelas"] else None
+	if ultima and ultima["n"] >= 2:
+		r.update(parcelas=ultima["n"], parcela=ultima["parcela"])
+	return r
